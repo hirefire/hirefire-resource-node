@@ -23,10 +23,7 @@
     "lint": "ts-standard src && tsc --noEmit",
     "format": "ts-standard src --fix",
     "test": "jest --silent",
-    "build": "rm -rf ./dist && tsc",
-    "prepublishOnly": "npm run build",
-    "preversion": "npm run lint && npm run test",
-    "release": "npm publish --access public && git push && git push --tags"
+    "build": "rm -rf ./dist && tsc"
   },
   "devDependencies": {
     "@tsconfig/node16-strictest": "^1.0.4",
