@@ -21,9 +21,12 @@ test("unsupported platform", () => {
 
 test("dispatch web", () => {
   const agent = new Agent(PLATFORM).dispatch(TOKEN);
-  const dispatcher = agent.webDispatchers.queueTime;
-  expect(dispatcher).toBeInstanceOf(WebDispatcher);
-  expect(agent.webDispatchers["dispatchers"].length).toBe(1);
+  expect(agent.webDispatcher).toBeInstanceOf(WebDispatcher);
+});
+
+test("dispatch web twice", () => {
+  const agent = new Agent(PLATFORM).dispatch(TOKEN)
+  expect(() => agent.dispatch(TOKEN)).toThrow('web dispatcher is already set');
 });
 
 test("dispatch worker", () => {

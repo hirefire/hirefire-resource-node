@@ -59,7 +59,7 @@ async function serve (
 }
 
 function recordQueueTime (agent: Agent, params: RequestParams): void {
-  const dispatcher = agent.webDispatchers.queueTime
+  const dispatcher = agent.webDispatcher
 
   if (dispatcher == null || params.start == null) {
     return

@@ -64,9 +64,8 @@ test("call record queue time on render", async () => {
       })
     ).toBe(null);
   }
-  const dispatcher = agent.webDispatchers.queueTime;
-  if (!dispatcher) throw "expected dispatcher to exist";
-  expect(dispatcher["buffer"]).toStrictEqual(
+  if (!agent.webDispatcher) throw "expected dispatcher to exist";
+  expect(agent.webDispatcher["buffer"]).toStrictEqual(
     new Map(
       Object.entries({
         "946684800": 1000,

@@ -8,6 +8,7 @@ export class WebDispatcher {
   readonly token: string
   private buffer: Buffer = new Map()
   private readonly ttl = 30
+  private readonly interval = 15_000
 
   constructor (token: string) {
     this.id = token.slice(0, 7)
@@ -90,5 +91,29 @@ export class WebDispatcher {
     for (const [timestamp, values] of payload) {
       this.add(values, timestamp)
     }
+  }
+
+  async run (): Promise<void> {
+    try {
+      this.prune()
+    } catch (err) {
+      console.log(
+        'Unexpected exception occurred in WebDispatchers#prune():',
+        err
+      )
+    }
+
+    try {
+      await this.dispatch()
+    } catch (err) {
+      console.log(
+        'Unexpected exception occurred in WebDispatchers#dispatch():',
+        err
+      )
+    }
+
+    setTimeout(() => {
+      void this.run()
+    }, this.interval)
   }
 }

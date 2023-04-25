@@ -1,4 +1,3 @@
-import { WebDispatchers } from './web_dispatchers'
 import { WebDispatcher } from './web_dispatcher'
 import { WorkerDispatchers } from './worker_dispatchers'
 import { WorkerDispatcher } from './worker_dispatcher'
@@ -10,11 +9,11 @@ type Platform = 'render'
 
 export class Agent {
   readonly platform: Platform
-  readonly webDispatchers = new WebDispatchers()
   readonly workerDispatchers = new WorkerDispatchers()
   readonly workerServers = new WorkerServers()
+  webDispatcher: WebDispatcher | null = null
 
-  constructor(platform: string) {
+  constructor (platform: string) {
     this.platform = this.validatePlatform(platform)
   }
 
@@ -35,7 +34,11 @@ export class Agent {
   }
 
   private dispatchWeb (token: string): void {
-    this.webDispatchers.setQueueTime(new WebDispatcher(token))
+    if (this.webDispatcher != null) {
+      throw new Error('web dispatcher is already set')
+    }
+
+    this.webDispatcher = new WebDispatcher(token)
   }
 
   private dispatchWorker (token: string, fn: WorkerFunction): void {
