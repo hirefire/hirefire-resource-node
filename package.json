@@ -1,6 +1,6 @@
 {
   "name": "@autoscale/agent",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Provides Autoscale.app with the necessary metrics for autoscaling web and worker processes",
   "keywords": [
     "autoscale",
