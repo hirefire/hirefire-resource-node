@@ -4,11 +4,10 @@ import { WebDispatcher } from "../src/web_dispatcher";
 import { WorkerDispatcher } from "../src/worker_dispatcher";
 
 const PLATFORM = "render";
-const OPTIONS = { run: false };
 
 test("supported platform", () => {
   for (const platform of ["render"]) {
-    const agent = new Agent(platform, OPTIONS);
+    const agent = new Agent(platform);
     expect(agent.platform).toBe(platform);
   }
 });
@@ -21,14 +20,14 @@ test("unsupported platform", () => {
 });
 
 test("dispatch web", () => {
-  const agent = new Agent(PLATFORM, OPTIONS).dispatch(TOKEN);
+  const agent = new Agent(PLATFORM).dispatch(TOKEN);
   const dispatcher = agent.webDispatchers.queueTime;
   expect(dispatcher).toBeInstanceOf(WebDispatcher);
   expect(agent.webDispatchers["dispatchers"].length).toBe(1);
 });
 
 test("dispatch worker", () => {
-  const agent = new Agent(PLATFORM, OPTIONS).dispatch(
+  const agent = new Agent(PLATFORM).dispatch(
     TOKEN,
     async () => 1.23
   );
@@ -38,7 +37,7 @@ test("dispatch worker", () => {
 });
 
 test("serve worker", () => {
-  const agent = new Agent(PLATFORM, OPTIONS).dispatch(
+  const agent = new Agent(PLATFORM).dispatch(
     TOKEN,
     async () => 1.23
   );

@@ -8,23 +8,14 @@ import type { WorkerFunction } from './worker'
 
 type Platform = 'render'
 
-interface Options {
-  run: boolean
-}
-
 export class Agent {
   readonly platform: Platform
   readonly webDispatchers = new WebDispatchers()
   readonly workerDispatchers = new WorkerDispatchers()
   readonly workerServers = new WorkerServers()
 
-  constructor (platform: string, options: Options = { run: true }) {
+  constructor(platform: string) {
     this.platform = this.validatePlatform(platform)
-
-    if (options.run) {
-      void this.webDispatchers.run()
-      void this.workerDispatchers.run()
-    }
   }
 
   dispatch (token: string, fn?: WorkerFunction): Agent {

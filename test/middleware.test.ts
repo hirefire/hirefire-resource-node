@@ -1,17 +1,17 @@
-import { PLATFORM, OPTIONS, TOKEN, setup, travel } from "./helpers";
+import { PLATFORM, TOKEN, setup, travel } from "./helpers";
 import { Agent } from "../src/agent";
 import { handle } from "../src/middleware";
 
 beforeEach(setup);
 
 test("default", async () => {
-  const agent = new Agent(PLATFORM, OPTIONS);
+  const agent = new Agent(PLATFORM);
   const params = await handle(agent, { method: "GET", path: "/" });
   expect(params).toBe(null);
 });
 
 test("serve", async () => {
-  const agent = new Agent(PLATFORM, OPTIONS).serve(
+  const agent = new Agent(PLATFORM).serve(
     TOKEN,
     async () => 1.23
   );
@@ -32,7 +32,7 @@ test("serve", async () => {
 });
 
 test("serve 404", async () => {
-  const agent = new Agent(PLATFORM, OPTIONS).serve(
+  const agent = new Agent(PLATFORM).serve(
     TOKEN,
     async () => 1.23
   );
@@ -49,7 +49,7 @@ test("serve 404", async () => {
 });
 
 test("call record queue time on render", async () => {
-  const agent = new Agent("render", OPTIONS).dispatch(TOKEN);
+  const agent = new Agent("render").dispatch(TOKEN);
   for (const [distance, start] of [
     [0, 500_000],
     [0, 1_000_000],
