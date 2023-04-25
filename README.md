@@ -43,6 +43,12 @@ See npm for relevant tasks:
 
     npm run
 
+## Release
+
+1. Update `CHANGELOG.md`
+2. Run `npm version major | minor | patch`
+3. Push the new tag
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/autoscale-app/node-agent
