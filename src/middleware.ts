@@ -25,7 +25,7 @@ export async function handle (
     return await serve(agent, params)
   }
 
-  recordQueueTime(agent, params)
+  await recordQueueTime(agent, params)
 
   return null
 }
@@ -58,7 +58,7 @@ async function serve (
   }
 }
 
-function recordQueueTime (agent: Agent, params: RequestParams): void {
+async function recordQueueTime (agent: Agent, params: RequestParams): Promise<void> {
   const dispatcher = agent.webDispatcher
 
   if (dispatcher == null || params.start == null) {
@@ -74,10 +74,12 @@ function recordQueueTime (agent: Agent, params: RequestParams): void {
   const elapsed = Date.now() - ms(agent, start)
 
   if (elapsed > 0) {
-    dispatcher.add(elapsed)
+    await dispatcher.add(elapsed)
   } else {
-    dispatcher.add(0)
+    await dispatcher.add(0)
   }
+
+  void dispatcher.run()
 }
 
 function ms (agent: Agent, start: number): number {

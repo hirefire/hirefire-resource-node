@@ -50,6 +50,8 @@ test("serve 404", async () => {
 
 test("call record queue time on render", async () => {
   const agent = new Agent("render").dispatch(TOKEN);
+  const dispatcher = agent.webDispatcher!;
+  const runSpy = jest.spyOn(dispatcher, "run").mockImplementation(undefined)
   for (const [distance, start] of [
     [0, 500_000],
     [0, 1_000_000],
@@ -64,8 +66,7 @@ test("call record queue time on render", async () => {
       })
     ).toBe(null);
   }
-  if (!agent.webDispatcher) throw "expected dispatcher to exist";
-  expect(agent.webDispatcher["buffer"]).toStrictEqual(
+  expect(dispatcher["buffer"]).toStrictEqual(
     new Map(
       Object.entries({
         "946684800": 1000,
@@ -73,4 +74,5 @@ test("call record queue time on render", async () => {
       })
     )
   );
+  expect(runSpy).toHaveBeenCalled();
 });

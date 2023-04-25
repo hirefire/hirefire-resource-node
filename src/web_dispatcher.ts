@@ -1,5 +1,6 @@
 import { dispatch } from './request'
 import { debug } from './log'
+import { Mutex } from './mutex'
 
 type Buffer = Map<string, number>
 
@@ -9,44 +10,52 @@ export class WebDispatcher {
   private buffer: Buffer = new Map()
   private readonly ttl = 30
   private readonly interval = 15_000
+  private running: boolean
+  private readonly mutex: Mutex
 
   constructor (token: string) {
     this.id = token.slice(0, 7)
     this.token = token
+    this.running = false
+    this.mutex = new Mutex()
   }
 
-  add (
+  async add (
     value: number,
     timestamp: string | number = (Date.now() / 1000).toFixed()
-  ): void {
-    timestamp = String(timestamp)
-    let next = this.buffer.get(timestamp)
+  ): Promise<void> {
+    await this.mutex.synchronize(async () => {
+      timestamp = String(timestamp)
+      let next = this.buffer.get(timestamp)
 
-    if (next == null || (value > next)) {
-      next = value
-    }
+      if (next == null || (value > next)) {
+        next = value
+      }
 
-    this.buffer.set(timestamp, next)
+      this.buffer.set(timestamp, next)
+    })
   }
 
-  prune (): void {
-    const retained: Buffer = new Map()
-    const maxAge = Math.round(Date.now() / 1000) - this.ttl
+  async prune (): Promise<void> {
+    void this.mutex.synchronize(async () => {
+      const retained: Buffer = new Map()
+      const maxAge = Math.round(Date.now() / 1000) - this.ttl
 
-    for (const [timestamp, values] of this.buffer) {
-      if (parseInt(timestamp) > maxAge) {
-        retained.set(timestamp, values)
+      for (const [timestamp, values] of this.buffer) {
+        if (parseInt(timestamp) > maxAge) {
+          retained.set(timestamp, values)
+        }
       }
-    }
 
-    debug(`WebDispatcher[${this.id}] buffer:`, this.buffer)
-    debug(`WebDispatcher[${this.id}] retain:`, retained)
+      debug(`WebDispatcher[${this.id}] buffer:`, this.buffer)
+      debug(`WebDispatcher[${this.id}] retain:`, retained)
 
-    this.buffer = retained
+      this.buffer = retained
+    })
   }
 
   async dispatch (): Promise<void> {
-    const payload = this.buildPayload()
+    const payload = await this.buildPayload()
 
     if (payload.keys().next().done === true) {
       return
@@ -58,44 +67,58 @@ export class WebDispatcher {
       debug(await dispatch(body, this.token))
       await this.dispatch()
     } catch (err) {
-      this.revertPayload(payload)
+      await this.revertPayload(payload)
       console.log(`WebDispatcher[${this.id}]: Failed to dispatch`)
       debug(`WebDispatcher[${this.id}]:`, err)
     }
   }
 
-  buildPayload (): Buffer {
-    const payload = new Map()
-    const keys = []
-    const now = Math.floor(Date.now() / 1000)
+  async buildPayload (): Promise<Buffer> {
+    return await this.mutex.synchronize(async () => {
+      const payload = new Map()
+      const keys = []
+      const now = Math.floor(Date.now() / 1000)
 
-    for (const [timestamp] of this.buffer) {
-      if (timestamp !== '' && Number(timestamp) < now) {
-        keys.push(timestamp)
+      for (const [timestamp] of this.buffer) {
+        if (timestamp !== '' && Number(timestamp) < now) {
+          keys.push(timestamp)
+        }
       }
-    }
 
-    for (const key of keys) {
-      const value = this.buffer.get(key)
+      for (const key of keys) {
+        const value = this.buffer.get(key)
 
-      if (value != null) {
-        payload.set(key, value)
-        this.buffer.delete(key)
+        if (value != null) {
+          payload.set(key, value)
+          this.buffer.delete(key)
+        }
       }
-    }
 
-    return payload
+      return payload
+    })
   }
 
-  revertPayload (payload: Buffer): void {
+  async revertPayload (payload: Buffer): Promise<void> {
     for (const [timestamp, values] of payload) {
-      this.add(values, timestamp)
+      await this.add(values, timestamp)
     }
   }
 
   async run (): Promise<void> {
+    await this.mutex.synchronize(async () => {
+      if (this.running) {
+        return
+      }
+
+      this.running = true
+
+      void this.runLoop()
+    })
+  }
+
+  private async runLoop (): Promise<void> {
     try {
-      this.prune()
+      await this.prune()
     } catch (err) {
       console.log(
         'Unexpected exception occurred in WebDispatchers#prune():',
@@ -113,7 +136,7 @@ export class WebDispatcher {
     }
 
     setTimeout(() => {
-      void this.run()
+      void this.runLoop()
     }, this.interval)
   }
 }

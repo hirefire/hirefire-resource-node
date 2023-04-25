@@ -15,7 +15,7 @@ test("dispatch", async () => {
   for (const i in metrics) {
     travel(1000)
     for (const metric of metrics[i] as number[]) {
-      dispatcher.add(metric)
+      await dispatcher.add(metric)
     }
   }
   const request = nock("https://metrics.autoscale.app", {
@@ -43,7 +43,7 @@ test("dispatch", async () => {
 test("dispatch 500", async () => {
   const dispatcher = new WebDispatcher(TOKEN);
   const request = nock("https://metrics.autoscale.app").post("/").reply(500, "");
-  dispatcher.add(1);
+  await dispatcher.add(1);
   travel(1000)
   await dispatcher.dispatch();
   expect(request.isDone()).toBe(true);
@@ -57,11 +57,11 @@ test("dispatch 500", async () => {
 
 test("prune", async () => {
   const dispatcher = new WebDispatcher(TOKEN);
-  dispatcher.add(1);
+  await dispatcher.add(1);
   travel(30_000)
-  dispatcher.add(1);
+  await dispatcher.add(1);
   travel(10_000)
-  dispatcher.prune();
+  await dispatcher.prune();
   expect(dispatcher["buffer"]).toStrictEqual(
     new Map(Object.entries({ "946684830": 1 }))
   );
