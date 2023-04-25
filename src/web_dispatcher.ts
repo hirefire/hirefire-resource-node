@@ -1,5 +1,4 @@
 import { dispatch } from './request'
-import { debug } from './log'
 import { Mutex } from './mutex'
 
 type Buffer = Map<string, number>
@@ -20,88 +19,10 @@ export class WebDispatcher {
     this.mutex = new Mutex()
   }
 
-  async add (
-    value: number,
-    timestamp: string | number = (Date.now() / 1000).toFixed()
-  ): Promise<void> {
+  async add (value: number, timestamp: string | number = (Date.now() / 1000).toFixed()): Promise<void> {
     await this.mutex.synchronize(async () => {
-      timestamp = String(timestamp)
-      let next = this.buffer.get(timestamp)
-
-      if (next == null || (value > next)) {
-        next = value
-      }
-
-      this.buffer.set(timestamp, next)
+      await this.addUnsafe(value, timestamp)
     })
-  }
-
-  async prune (): Promise<void> {
-    void this.mutex.synchronize(async () => {
-      const retained: Buffer = new Map()
-      const maxAge = Math.round(Date.now() / 1000) - this.ttl
-
-      for (const [timestamp, values] of this.buffer) {
-        if (parseInt(timestamp) > maxAge) {
-          retained.set(timestamp, values)
-        }
-      }
-
-      debug(`WebDispatcher[${this.id}] buffer:`, this.buffer)
-      debug(`WebDispatcher[${this.id}] retain:`, retained)
-
-      this.buffer = retained
-    })
-  }
-
-  async dispatch (): Promise<void> {
-    const payload = await this.buildPayload()
-
-    if (payload.keys().next().done === true) {
-      return
-    }
-
-    const body = JSON.stringify(Object.fromEntries(payload))
-
-    try {
-      debug(await dispatch(body, this.token))
-      await this.dispatch()
-    } catch (err) {
-      await this.revertPayload(payload)
-      console.log(`WebDispatcher[${this.id}]: Failed to dispatch`)
-      debug(`WebDispatcher[${this.id}]:`, err)
-    }
-  }
-
-  async buildPayload (): Promise<Buffer> {
-    return await this.mutex.synchronize(async () => {
-      const payload = new Map()
-      const keys = []
-      const now = Math.floor(Date.now() / 1000)
-
-      for (const [timestamp] of this.buffer) {
-        if (timestamp !== '' && Number(timestamp) < now) {
-          keys.push(timestamp)
-        }
-      }
-
-      for (const key of keys) {
-        const value = this.buffer.get(key)
-
-        if (value != null) {
-          payload.set(key, value)
-          this.buffer.delete(key)
-        }
-      }
-
-      return payload
-    })
-  }
-
-  async revertPayload (payload: Buffer): Promise<void> {
-    for (const [timestamp, values] of payload) {
-      await this.add(values, timestamp)
-    }
   }
 
   async run (): Promise<void> {
@@ -118,19 +39,10 @@ export class WebDispatcher {
 
   private async runLoop (): Promise<void> {
     try {
-      await this.prune()
-    } catch (err) {
-      console.log(
-        'Unexpected exception occurred in WebDispatchers#prune():',
-        err
-      )
-    }
-
-    try {
       await this.dispatch()
     } catch (err) {
       console.log(
-        'Unexpected exception occurred in WebDispatchers#dispatch():',
+        'Unexpected exception occurred in WebDispatcher#dispatch():',
         err
       )
     }
@@ -138,5 +50,56 @@ export class WebDispatcher {
     setTimeout(() => {
       void this.runLoop()
     }, this.interval)
+  }
+
+  private async addUnsafe (value: number, timestamp: string | number = (Date.now() / 1000).toFixed()): Promise<void> {
+    const ts = Number(timestamp)
+    const tsString = String(timestamp)
+    const now = Date.now() / 1000
+
+    if (ts < now - this.ttl) {
+      return
+    }
+
+    const existing = this.buffer.get(tsString)
+
+    if (existing === undefined || value > existing) {
+      this.buffer.set(tsString, value)
+    }
+  }
+
+  private async flush (): Promise<Buffer> {
+    return await this.mutex.synchronize(async () => {
+      const buffer = this.buffer
+
+      this.buffer = new Map()
+
+      return buffer
+    })
+  }
+
+  private async revert (buffer: Buffer): Promise<void> {
+    await this.mutex.synchronize(async () => {
+      for (const [timestamp, value] of buffer) {
+        await this.addUnsafe(value, timestamp)
+      }
+    })
+  }
+
+  private async dispatch (): Promise<void> {
+    const buffer = await this.flush()
+
+    if (buffer.size === 0) {
+      return
+    }
+
+    const payload = JSON.stringify(Object.fromEntries(buffer))
+
+    try {
+      await dispatch(payload, this.token)
+    } catch (err) {
+      await this.revert(buffer)
+      console.log(`WebDispatcher[${this.id}]: Failed to dispatch`)
+    }
   }
 }
