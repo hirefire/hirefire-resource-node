@@ -23,14 +23,10 @@ class Web {
     this.buffer = {};
     this.mutex = new Mutex();
     this.running = false;
+    this.logger = console;
     this.DISPATCH_INTERVAL = 5; // in seconds
     this.DISPATCH_TIMEOUT = 5; // in seconds
     this.BUFFER_TTL = 60; // in seconds
-    this.logger = console; // replace with your preferred logging library
-  }
-
-  get token() {
-    return process.env.HIREFIRE_TOKEN;
   }
 
   /**
@@ -137,7 +133,9 @@ class Web {
    * @param {object} buffer - The buffer to be sent to the server.
    */
   async submitBuffer(buffer) {
-    if (!this.token) {
+    const token = process.env.HIREFIRE_TOKEN;
+
+    if (!token) {
       throw new Error("HIREFIRE_TOKEN environment variable is not set.");
     }
 
@@ -149,7 +147,7 @@ class Web {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'HireFire-Token': this.token,
+        'HireFire-Token': token,
         'Content-Length': data.length
       }
     };
