@@ -108,26 +108,20 @@ describe('Web', () => {
   });
 
   test('buffer TTL discards old entries', async () => {
-    // Force a dispatch failure
     nock('https://logdrain.hirefire.io').post('/').reply(500);
 
-    // Mock Date.now to return a fixed timestamp
     const now = Date.now();
-    const expired = now - (web.TTL + 10) * 1000;
-    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const expired = now - (web.BUFFER_TTL + 10) * 1000;
 
-    // Add a new entry to the buffer
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
     await web.addToBuffer(7);
 
-    // Advance time beyond the TTL and add another entry
     Date.now.mockImplementation(() => expired);
     await web.addToBuffer(8);
 
-    // Revert back to the original Date.now implementation and dispatch
     Date.now.mockImplementation(() => now);
     await web.dispatch();
 
-    // Flush the buffer and check its contents
     const bufferContentsAfterFail = await web.flush();
     const timestamp = Math.floor(now/1000);
     expect(bufferContentsAfterFail).toEqual({[timestamp]: [7]});

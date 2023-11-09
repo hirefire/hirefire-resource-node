@@ -23,9 +23,9 @@ class Web {
     this.buffer = {};
     this.mutex = new Mutex();
     this.running = false;
-    this.DISPATCH_INTERVAL = 5000; // in milliseconds
-    this.TIMEOUT = 5000; // in milliseconds
-    this.TTL = 60; // in seconds
+    this.DISPATCH_INTERVAL = 5; // in seconds
+    this.DISPATCH_TIMEOUT = 5; // in seconds
+    this.BUFFER_TTL = 60; // in seconds
     this.logger = console; // replace with your preferred logging library
   }
 
@@ -47,7 +47,7 @@ class Web {
       release();
     }
 
-    this.dispatcher = setInterval(() => this.dispatch(), this.DISPATCH_INTERVAL);
+    this.dispatcher = setInterval(() => this.dispatch(), this.DISPATCH_INTERVAL*1000);
   }
 
   /**
@@ -114,6 +114,25 @@ class Web {
   }
 
   /**
+   * Repopulates the buffer with the contents from the failed dispatch attempt.
+   * @param {object} buffer - The buffer to repopulate.
+   */
+  async repopulateBuffer(buffer) {
+    const release = await this.mutex.acquire();
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      Object.entries(buffer).forEach(([timestamp, values]) => {
+        if (parseInt(timestamp) >= now - this.BUFFER_TTL) {
+          this.buffer[timestamp] = this.buffer[timestamp] || [];
+          this.buffer[timestamp].push(...values);
+        }
+      });
+    } finally {
+      release();
+    }
+  }
+
+  /**
    * Sends the buffer contents to the HireFire server.
    * @param {object} buffer - The buffer to be sent to the server.
    */
@@ -159,29 +178,10 @@ class Web {
         reject(new Error("Request timed out."));
       });
 
-      req.setTimeout(this.TIMEOUT);
+      req.setTimeout(this.DISPATCH_TIMEOUT*1000);
       req.write(data);
       req.end();
     });
-  }
-
-  /**
-   * Repopulates the buffer with the contents from the failed dispatch attempt.
-   * @param {object} buffer - The buffer to repopulate.
-   */
-  async repopulateBuffer(buffer) {
-    const release = await this.mutex.acquire();
-    try {
-      const now = Math.floor(Date.now() / 1000);
-      Object.entries(buffer).forEach(([timestamp, values]) => {
-        if (parseInt(timestamp) >= now - this.TTL) {
-          this.buffer[timestamp] = this.buffer[timestamp] || [];
-          this.buffer[timestamp].push(...values);
-        }
-      });
-    } finally {
-      release();
-    }
   }
 }
 
