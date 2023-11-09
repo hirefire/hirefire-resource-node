@@ -109,19 +109,14 @@ describe('Web', () => {
 
   test('buffer TTL discards old entries', async () => {
     nock('https://logdrain.hirefire.io').post('/').reply(500);
-
     const now = Date.now();
     const expired = now - (Web.BUFFER_TTL + 10) * 1000;
-
     jest.spyOn(Date, 'now').mockImplementation(() => now);
     await web.addToBuffer(7);
-
     Date.now.mockImplementation(() => expired);
     await web.addToBuffer(8);
-
     Date.now.mockImplementation(() => now);
     await web.dispatch();
-
     const bufferContentsAfterFail = await web.flush();
     const timestamp = Math.floor(now/1000);
     expect(bufferContentsAfterFail).toEqual({[timestamp]: [7]});
