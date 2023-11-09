@@ -111,7 +111,7 @@ describe('Web', () => {
     nock('https://logdrain.hirefire.io').post('/').reply(500);
 
     const now = Date.now();
-    const expired = now - (web.BUFFER_TTL + 10) * 1000;
+    const expired = now - (Web.BUFFER_TTL + 10) * 1000;
 
     jest.spyOn(Date, 'now').mockImplementation(() => now);
     await web.addToBuffer(7);

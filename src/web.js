@@ -16,6 +16,10 @@ const { Mutex } = require('async-mutex');
  * event loop model.
  */
 class Web {
+  static DISPATCH_INTERVAL = 5; // in seconds
+  static DISPATCH_TIMEOUT = 5; // in seconds
+  static BUFFER_TTL = 60; // in seconds
+
   /**
    * Constructs the Web metric dispatcher.
    */
@@ -24,9 +28,6 @@ class Web {
     this.mutex = new Mutex();
     this.running = false;
     this.logger = console;
-    this.DISPATCH_INTERVAL = 5; // in seconds
-    this.DISPATCH_TIMEOUT = 5; // in seconds
-    this.BUFFER_TTL = 60; // in seconds
   }
 
   /**
@@ -43,7 +44,7 @@ class Web {
       release();
     }
 
-    this.dispatcher = setInterval(() => this.dispatch(), this.DISPATCH_INTERVAL*1000);
+    this.dispatcher = setInterval(() => this.dispatch(), Web.DISPATCH_INTERVAL * 1000);
   }
 
   /**
@@ -118,7 +119,7 @@ class Web {
     try {
       const now = Math.floor(Date.now() / 1000);
       Object.entries(buffer).forEach(([timestamp, values]) => {
-        if (parseInt(timestamp) >= now - this.BUFFER_TTL) {
+        if (parseInt(timestamp) >= now - Web.BUFFER_TTL) {
           this.buffer[timestamp] = this.buffer[timestamp] || [];
           this.buffer[timestamp].push(...values);
         }
@@ -176,7 +177,7 @@ class Web {
         reject(new Error("Request timed out."));
       });
 
-      req.setTimeout(this.DISPATCH_TIMEOUT*1000);
+      req.setTimeout(Web.DISPATCH_TIMEOUT*1000);
       req.write(data);
       req.end();
     });
