@@ -13,7 +13,7 @@ describe('HireFireMiddlewareKoa', () => {
   beforeEach(() => {
     app = new Koa()
     app.use(HireFireMiddlewareKoa)
-    app.use(ctx => ctx.body = 'Hello')
+    app.use(ctx => { ctx.body = 'Hello' })
     Resource.configuration = new Configuration()
   })
 

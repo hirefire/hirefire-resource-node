@@ -24,7 +24,7 @@ describe('HireFireMiddlewareConnect', () => {
   })
 
   test('passthrough and handle request queue time process', async () => {
-    process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+    process.env.HIREFIRE_TOKEN = 'SOME_TOKEN'
     const now = Date.now()
     const nowTimestamp = Math.floor(now / 1000)
     const requestStartTime = String(now - 1234)

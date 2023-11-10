@@ -31,8 +31,8 @@ async function request (reqInfo) {
     return {
       status: 200,
       headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "must-revalidate, private, max-age=0",
+        'Content-Type': 'application/json',
+        'Cache-Control': 'must-revalidate, private, max-age=0'
       },
       body: await Promise.all(
         Resource.configuration.workers.map(async (worker) => ({
@@ -89,6 +89,5 @@ function calculateRequestQueueTime (requestStartTime) {
   const ms = Date.now() - parseInt(requestStartTime, 10)
   return ms < 0 ? 0 : ms
 }
-
 
 module.exports = { request }
