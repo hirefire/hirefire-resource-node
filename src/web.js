@@ -75,6 +75,7 @@ class Web {
    */
   async start () {
     const release = await this.mutex.acquire()
+
     try {
       if (this.running) return
       this.running = true
@@ -101,6 +102,7 @@ class Web {
    */
   async stop () {
     const release = await this.mutex.acquire()
+
     try {
       if (!this.running) return
       this.running = false
@@ -118,6 +120,7 @@ class Web {
    */
   async addToBuffer (value) {
     const release = await this.mutex.acquire()
+
     try {
       const timestamp = Math.floor(Date.now() / 1000)
       this.buffer[timestamp] = this.buffer[timestamp] || []
@@ -136,6 +139,7 @@ class Web {
    */
   async flush () {
     const release = await this.mutex.acquire()
+
     try {
       const currentBuffer = this.buffer
       this.buffer = {}
@@ -152,6 +156,7 @@ class Web {
    */
   async dispatch () {
     let buffer
+
     try {
       buffer = await this.flush()
       if (Object.keys(buffer).length === 0) return
@@ -172,6 +177,7 @@ class Web {
    */
   async repopulateBuffer (buffer) {
     const release = await this.mutex.acquire()
+
     try {
       const now = Math.floor(Date.now() / 1000)
       Object.entries(buffer).forEach(([timestamp, values]) => {

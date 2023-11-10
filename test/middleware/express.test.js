@@ -12,8 +12,7 @@ describe('HireFireMiddlewareExpress', () => {
 
   beforeEach(() => {
     app = express()
-    const middleware = new HireFireMiddlewareExpress(app)
-    app.use(middleware.handle)
+    app.use(HireFireMiddlewareExpress)
     app.use((req, res) => res.status(200).send('Hello'))
     Resource.configuration = new Configuration()
   })
@@ -24,28 +23,8 @@ describe('HireFireMiddlewareExpress', () => {
     delete process.env.HIREFIRE_TOKEN
   })
 
-  test('info path for development', async () => {
-    Resource.configuration.dyno('worker', () => 5)
-    const response = await request(app).get('/hirefire/development/info')
-    expect(response.status).toBe(200)
-    expect(response.body).toEqual([{ name: 'worker', value: 5 }])
-  })
-
-  test('info path for token', async () => {
-    process.env.HIREFIRE_TOKEN = 'SOME_TOKEN'
-    Resource.configuration.dyno('worker', () => 5)
-    const response = await request(app).get('/hirefire/SOME_TOKEN/info')
-    expect(response.status).toBe(200)
-    expect(response.body).toEqual([{ name: 'worker', value: 5 }])
-  })
-
-  test('non-intercepted path', async () => {
-    const response = await request(app).get('/some/other/path')
-    expect(response.status).toBe(200)
-    expect(response.text).toBe('Hello')
-  })
-
-  test('process request queue time with dyno web', async () => {
+  test('pass through and handle request queue time process', async () => {
+    process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
     const now = Date.now()
     const nowTimestamp = parseInt(now / 1000)
     const requestStartTime = String(now - 1234)
@@ -59,5 +38,13 @@ describe('HireFireMiddlewareExpress', () => {
     expect(response.text).toBe('Hello')
     expect(start).toHaveBeenCalled()
     expect(Resource.configuration.web.buffer).toEqual({ [nowTimestamp]: [1234] })
+  })
+
+  test('intercept and return job queue information', async () => {
+    process.env.HIREFIRE_TOKEN = 'SOME_TOKEN'
+    Resource.configuration.dyno('worker', () => 5)
+    const response = await request(app).get('/hirefire/SOME_TOKEN/info')
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual([{ name: 'worker', value: 5 }])
   })
 })

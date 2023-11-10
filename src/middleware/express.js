@@ -1,4 +1,4 @@
-const Resource = require('../Resource')
+const middleware = require('../middleware')
 
 /**
  * HireFireMiddleware provides an Express middleware for capturing and providing metrics required
@@ -12,81 +12,24 @@ const Resource = require('../Resource')
  * The middleware intercepts requests to the HireFire info endpoints and allows all other requests
  * to pass through unaffected. The `X-Request-Start` header, set by the Heroku router, provides the
  * data for measuring request queue times.
+ *
+ * Middleware function to process incoming requests. Analyzes the request queue time, if present,
+ * and then determines whether to respond with queue metrics or pass the request along the stack.
+ *
+ * @param {express.Request} req - The Express request object.
+ * @param {express.Response} res - The Express response object.
+ * @param {Function} next - The next middleware function in the stack.
  */
-class HireFireMiddlewareExpress {
-  /**
-   * Creates a new `HireFireMiddleware` instance.
-   * @param {express.Application} app - The Express application or router.
-   */
-  constructor (app) {
-    this.app = app
-    this.handle = this.handle.bind(this)
-  }
+async function HireFireMiddlewareExpress (req, res, next) {
+  const response = await middleware.request({
+    path: req.path,
+    requestStartTime: req.get('X-Request-Start')
+  })
 
-  /**
-   * Middleware function to process incoming requests. Analyzes the request queue time, if present,
-   * and then determines whether to respond with queue metrics or pass the request along the stack.
-   *
-   * @param {express.Request} req - The Express request object.
-   * @param {express.Response} res - The Express response object.
-   * @param {Function} next - The next middleware function in the stack.
-   */
-  handle (req, res, next) {
-    this.processRequestQueueTime(req)
-
-    if (this.matchesInfoPath(req)) {
-      const infoResponse = this.constructInfoResponse()
-      res.status(200).json(infoResponse)
-    } else {
-      next()
-    }
-  }
-
-  /**
-   * Determines if the given request path aligns with the info path.
-   * @param {express.Request} req - The Express request object.
-   * @return {boolean} True if paths align, otherwise false.
-   */
-  matchesInfoPath (req) {
-    const token = process.env.HIREFIRE_TOKEN || 'development'
-    return req.path === `/hirefire/${token}/info`
-  }
-
-  /**
-   * Creates the HTTP response for the info path, containing worker
-   * queue metrics based on `Resource.configuration.workers` configuration.
-   * @return {Object[]} An array of worker metrics.
-   */
-  constructInfoResponse () {
-    return Resource.configuration.workers.map((worker) => ({
-      name: worker.name,
-      value: worker.fn()
-    }))
-  }
-
-  /**
-   * Analyzes the request queue time based on the `X-Request-Start` header
-   * and performs actions based on the configuration settings in `Resource.configuration`.
-   * @param {express.Request} req - The Express request object.
-   */
-  processRequestQueueTime (req) {
-    const requestStartTime = req.get('X-Request-Start')
-    if (requestStartTime && Resource.configuration.web) {
-      const requestQueueTime = this.calculateRequestQueueTime(requestStartTime)
-      Resource.configuration.web.start()
-      Resource.configuration.web.addToBuffer(requestQueueTime)
-    }
-  }
-
-  /**
-   * Calculates the time gap (in milliseconds) between the given
-   * `X-Request-Start` timestamp and the present time.
-   * @param {string} timestamp - Timestamp from the `X-Request-Start` header.
-   * @return {number} The computed queue time in milliseconds.
-   */
-  calculateRequestQueueTime (timestamp) {
-    const ms = Date.now() - parseInt(timestamp, 10)
-    return ms < 0 ? 0 : ms
+  if (response) {
+    res.status(response.status).set(response.headers).json(response.body)
+  } else {
+    next()
   }
 }
 
