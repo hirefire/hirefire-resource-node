@@ -15,9 +15,9 @@ class Worker {
    * @param {string} name - The name of the worker, corresponding to the Procfile's dyno name.
    * @param {function} fn - A function that returns a number representing the queue metric.
    */
-  constructor(name, fn) {
-    this.name = name;
-    this.fn = fn;
+  constructor (name, fn) {
+    this.name = name
+    this.fn = fn
   }
 
   /**
@@ -27,9 +27,9 @@ class Worker {
    *
    * @return {number} The queue metric result from the executed function.
    */
-  async call() {
-    return this.fn();
+  async call () {
+    return this.fn()
   }
 }
 
-module.exports = { Worker };
+module.exports = { Worker }

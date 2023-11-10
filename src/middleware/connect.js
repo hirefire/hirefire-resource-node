@@ -1,5 +1,4 @@
-const http = require("http");
-const Resource = require("../Resource");
+const Resource = require('../Resource')
 
 /**
  * HireFireMiddleware provides a Connect middleware for capturing and providing metrics required
@@ -23,15 +22,15 @@ class HireFireMiddlewareConnect {
    * @param {http.ServerResponse} res - The HTTP response object.
    * @param {Function} next - The next middleware function in the stack.
    */
-  handle(req, res, next) {
-    this.processRequestQueueTime(req);
+  handle (req, res, next) {
+    this.processRequestQueueTime(req)
 
     if (this.matchesInfoPath(req)) {
-      const infoResponse = this.constructInfoResponse();
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(infoResponse));
+      const infoResponse = this.constructInfoResponse()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(infoResponse))
     } else {
-      next();
+      next()
     }
   }
 
@@ -40,10 +39,10 @@ class HireFireMiddlewareConnect {
    * @param {http.IncomingMessage} req - The HTTP request object.
    * @return {boolean} True if paths align, otherwise false.
    */
-  matchesInfoPath(req) {
-    const token = process.env.HIREFIRE_TOKEN || "development";
-    const url = req.url || "";
-    return url === `/hirefire/${token}/info`;
+  matchesInfoPath (req) {
+    const token = process.env.HIREFIRE_TOKEN || 'development'
+    const url = req.url || ''
+    return url === `/hirefire/${token}/info`
   }
 
   /**
@@ -51,11 +50,11 @@ class HireFireMiddlewareConnect {
    * queue metrics based on `Resource.configuration.workers` configuration.
    * @return {Object[]} An array of worker metrics.
    */
-  constructInfoResponse() {
+  constructInfoResponse () {
     return Resource.configuration.workers.map((worker) => ({
       name: worker.name,
-      value: worker.fn(),
-    }));
+      value: worker.fn()
+    }))
   }
 
   /**
@@ -63,12 +62,12 @@ class HireFireMiddlewareConnect {
    * and performs actions based on the configuration settings in `Resource.configuration`.
    * @param {http.IncomingMessage} req - The HTTP request object.
    */
-  processRequestQueueTime(req) {
-    const requestStartTime = req.headers["x-request-start"];
+  processRequestQueueTime (req) {
+    const requestStartTime = req.headers['x-request-start']
     if (requestStartTime && Resource.configuration.web) {
-      const requestQueueTime = this.calculateRequestQueueTime(requestStartTime);
-      Resource.configuration.web.start();
-      Resource.configuration.web.addToBuffer(requestQueueTime);
+      const requestQueueTime = this.calculateRequestQueueTime(requestStartTime)
+      Resource.configuration.web.start()
+      Resource.configuration.web.addToBuffer(requestQueueTime)
     }
   }
 
@@ -78,10 +77,10 @@ class HireFireMiddlewareConnect {
    * @param {string} timestamp - Timestamp from the `X-Request-Start` header.
    * @return {number} The computed queue time in milliseconds.
    */
-  calculateRequestQueueTime(timestamp) {
-    const ms = Date.now() - parseInt(timestamp, 10);
-    return ms < 0 ? 0 : ms;
+  calculateRequestQueueTime (timestamp) {
+    const ms = Date.now() - parseInt(timestamp, 10)
+    return ms < 0 ? 0 : ms
   }
 }
 
-module.exports = HireFireMiddlewareConnect;
+module.exports = HireFireMiddlewareConnect

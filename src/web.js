@@ -1,5 +1,5 @@
-const https = require("https");
-const { Mutex } = require("async-mutex");
+const https = require('https')
+const { Mutex } = require('async-mutex')
 
 /**
  * The Web class is responsible for collecting and dispatching web metrics to the HireFire
@@ -17,24 +17,24 @@ class Web {
    * The interval between dispatch attempts in seconds.
    * @type {number}
    */
-  static DISPATCH_INTERVAL = 5;
+  static DISPATCH_INTERVAL = 5
 
   /**
    * The timeout for HTTP requests in seconds.
    * @type {number}
    */
-  static DISPATCH_TIMEOUT = 5;
+  static DISPATCH_TIMEOUT = 5
 
   /**
    * Buffer's TTL in seconds. Metrics older than this value will be discarded.
    * @type {number}
    */
-  static BUFFER_TTL = 60;
+  static BUFFER_TTL = 60
 
   /**
    * Constructs the Web metric dispatcher.
    */
-  constructor() {
+  constructor () {
     /**
      * @private
      * The buffer is a hash where the keys are timestamps (in seconds since the Epoch) and the
@@ -43,26 +43,26 @@ class Web {
      * automatically discarded, ensuring the buffer contains only recent and relevant data and that
      * memory usage remains minimal.
      */
-    this.buffer = {};
+    this.buffer = {}
 
     /**
      * Mutex to ensure thread safety across asynchronous operations.
      * @type {Mutex}
      */
-    this.mutex = new Mutex();
+    this.mutex = new Mutex()
 
     /**
      * Indicates whether the dispatcher is currently running.
      * @type {boolean}
      */
-    this.running = false;
+    this.running = false
 
     /**
      * Logger for logging informational messages and errors.  Defaults to console but can be
      * replaced with any logger implementing the log method.
      * @type {Console}
      */
-    this.logger = console;
+    this.logger = console
   }
 
   /**
@@ -73,20 +73,20 @@ class Web {
    * const web = new Web();
    * await web.start();
    */
-  async start() {
-    const release = await this.mutex.acquire();
+  async start () {
+    const release = await this.mutex.acquire()
     try {
-      if (this.running) return;
-      this.running = true;
-      this.logger.info("[HireFire] Starting web metrics dispatcher.");
+      if (this.running) return
+      this.running = true
+      this.logger.info('[HireFire] Starting web metrics dispatcher.')
     } finally {
-      release();
+      release()
     }
 
     this.dispatcher = setInterval(
       () => this.dispatch(),
-      Web.DISPATCH_INTERVAL * 1000,
-    );
+      Web.DISPATCH_INTERVAL * 1000
+    )
   }
 
   /**
@@ -99,15 +99,15 @@ class Web {
    * // ... some time later ...
    * await web.stop();
    */
-  async stop() {
-    const release = await this.mutex.acquire();
+  async stop () {
+    const release = await this.mutex.acquire()
     try {
-      if (!this.running) return;
-      this.running = false;
-      clearInterval(this.dispatcher);
-      this.logger.info("[HireFire] Web metrics dispatcher stopped.");
+      if (!this.running) return
+      this.running = false
+      clearInterval(this.dispatcher)
+      this.logger.info('[HireFire] Web metrics dispatcher stopped.')
     } finally {
-      release();
+      release()
     }
   }
 
@@ -116,14 +116,14 @@ class Web {
    * @async
    * @param {number} value - The request queue time in milliseconds to be added to the buffer.
    */
-  async addToBuffer(value) {
-    const release = await this.mutex.acquire();
+  async addToBuffer (value) {
+    const release = await this.mutex.acquire()
     try {
-      const timestamp = Math.floor(Date.now() / 1000);
-      this.buffer[timestamp] = this.buffer[timestamp] || [];
-      this.buffer[timestamp].push(value);
+      const timestamp = Math.floor(Date.now() / 1000)
+      this.buffer[timestamp] = this.buffer[timestamp] || []
+      this.buffer[timestamp].push(value)
     } finally {
-      release();
+      release()
     }
   }
 
@@ -134,14 +134,14 @@ class Web {
    * @async
    * @return {object} The contents of the buffer before it was cleared.
    */
-  async flush() {
-    const release = await this.mutex.acquire();
+  async flush () {
+    const release = await this.mutex.acquire()
     try {
-      const currentBuffer = this.buffer;
-      this.buffer = {};
-      return currentBuffer;
+      const currentBuffer = this.buffer
+      this.buffer = {}
+      return currentBuffer
     } finally {
-      release();
+      release()
     }
   }
 
@@ -150,17 +150,17 @@ class Web {
    * taken.
    * @async
    */
-  async dispatch() {
-    let buffer;
+  async dispatch () {
+    let buffer
     try {
-      buffer = await this.flush();
-      if (Object.keys(buffer).length === 0) return;
-      await this.submitBuffer(buffer);
+      buffer = await this.flush()
+      if (Object.keys(buffer).length === 0) return
+      await this.submitBuffer(buffer)
     } catch (error) {
-      await this.repopulateBuffer(buffer);
+      await this.repopulateBuffer(buffer)
       this.logger.warn(
-        `[HireFire] Error while dispatching web metrics: ${error.message}`,
-      );
+        `[HireFire] Error while dispatching web metrics: ${error.message}`
+      )
     }
   }
 
@@ -170,18 +170,18 @@ class Web {
    * @async
    * @param {object} buffer - The buffer to repopulate.
    */
-  async repopulateBuffer(buffer) {
-    const release = await this.mutex.acquire();
+  async repopulateBuffer (buffer) {
+    const release = await this.mutex.acquire()
     try {
-      const now = Math.floor(Date.now() / 1000);
+      const now = Math.floor(Date.now() / 1000)
       Object.entries(buffer).forEach(([timestamp, values]) => {
         if (parseInt(timestamp) >= now - Web.BUFFER_TTL) {
-          this.buffer[timestamp] = this.buffer[timestamp] || [];
-          this.buffer[timestamp].push(...values);
+          this.buffer[timestamp] = this.buffer[timestamp] || []
+          this.buffer[timestamp].push(...values)
         }
-      });
+      })
     } finally {
-      release();
+      release()
     }
   }
 
@@ -194,55 +194,55 @@ class Web {
    * @throws {Error} Throws an error if the HIREFIRE_TOKEN is not set or if there's a network-related issue.
    * @return {Promise<void>}
    */
-  async submitBuffer(buffer) {
-    const token = process.env.HIREFIRE_TOKEN;
+  async submitBuffer (buffer) {
+    const token = process.env.HIREFIRE_TOKEN
 
     if (!token) {
-      throw new Error("HIREFIRE_TOKEN environment variable is not set.");
+      throw new Error('HIREFIRE_TOKEN environment variable is not set.')
     }
 
-    const data = JSON.stringify(buffer);
+    const data = JSON.stringify(buffer)
     const options = {
-      hostname: "logdrain.hirefire.io",
+      hostname: 'logdrain.hirefire.io',
       port: 443,
-      path: "/",
-      method: "POST",
+      path: '/',
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "HireFire-Token": token,
-        "Content-Length": data.length,
-      },
-    };
+        'Content-Type': 'application/json',
+        'HireFire-Token': token,
+        'Content-Length': data.length
+      }
+    }
 
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
         if (res.statusCode === 200) {
-          resolve();
+          resolve()
         } else if (res.statusCode >= 500) {
-          reject(new Error(`Server responded with ${res.statusCode} status.`));
+          reject(new Error(`Server responded with ${res.statusCode} status.`))
         } else {
-          reject(new Error(`Unexpected response code ${res.statusCode}.`));
+          reject(new Error(`Unexpected response code ${res.statusCode}.`))
         }
-      });
+      })
 
-      req.on("error", (e) => {
-        if (e.code === "ETIMEDOUT" || e.code === "ESOCKETTIMEDOUT") {
-          reject(new Error("Request timed out."));
+      req.on('error', (e) => {
+        if (e.code === 'ETIMEDOUT' || e.code === 'ESOCKETTIMEDOUT') {
+          reject(new Error('Request timed out.'))
         } else {
-          reject(new Error(`Network error occurred (${e.message}).`));
+          reject(new Error(`Network error occurred (${e.message}).`))
         }
-      });
+      })
 
-      req.on("timeout", () => {
-        req.abort();
-        reject(new Error("Request timed out."));
-      });
+      req.on('timeout', () => {
+        req.abort()
+        reject(new Error('Request timed out.'))
+      })
 
-      req.setTimeout(Web.DISPATCH_TIMEOUT * 1000);
-      req.write(data);
-      req.end();
-    });
+      req.setTimeout(Web.DISPATCH_TIMEOUT * 1000)
+      req.write(data)
+      req.end()
+    })
   }
 }
 
-module.exports = { Web };
+module.exports = { Web }

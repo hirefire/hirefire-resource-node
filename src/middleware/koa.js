@@ -1,4 +1,4 @@
-const Resource = require("../Resource");
+const Resource = require('../Resource')
 
 /**
  * HireFireMiddleware provides a Koa middleware for capturing and providing metrics required
@@ -14,8 +14,8 @@ const Resource = require("../Resource");
  * data for measuring request queue times.
  */
 class HireFireMiddlewareKoa {
-  constructor() {
-    this.handle = this.handle.bind(this);
+  constructor () {
+    this.handle = this.handle.bind(this)
   }
 
   /**
@@ -25,15 +25,15 @@ class HireFireMiddlewareKoa {
    * @param {Object} ctx - The Koa context object.
    * @param {Function} next - The next middleware function in the stack.
    */
-  async handle(ctx, next) {
-    this.processRequestQueueTime(ctx);
+  async handle (ctx, next) {
+    this.processRequestQueueTime(ctx)
 
     if (this.matchesInfoPath(ctx)) {
-      const infoResponse = this.constructInfoResponse();
-      ctx.status = 200;
-      ctx.body = infoResponse;
+      const infoResponse = this.constructInfoResponse()
+      ctx.status = 200
+      ctx.body = infoResponse
     } else {
-      await next();
+      await next()
     }
   }
 
@@ -42,9 +42,9 @@ class HireFireMiddlewareKoa {
    * @param {Object} ctx - The Koa context object.
    * @return {boolean} True if paths align, otherwise false.
    */
-  matchesInfoPath(ctx) {
-    const token = process.env.HIREFIRE_TOKEN || "development";
-    return ctx.path === `/hirefire/${token}/info`;
+  matchesInfoPath (ctx) {
+    const token = process.env.HIREFIRE_TOKEN || 'development'
+    return ctx.path === `/hirefire/${token}/info`
   }
 
   /**
@@ -52,11 +52,11 @@ class HireFireMiddlewareKoa {
    * queue metrics based on `Resource.configuration.workers` configuration.
    * @return {Object[]} An array of worker metrics.
    */
-  constructInfoResponse() {
+  constructInfoResponse () {
     return Resource.configuration.workers.map((worker) => ({
       name: worker.name,
-      value: worker.fn(),
-    }));
+      value: worker.fn()
+    }))
   }
 
   /**
@@ -64,12 +64,12 @@ class HireFireMiddlewareKoa {
    * and performs actions based on the configuration settings in `Resource.configuration`.
    * @param {Object} ctx - The Koa context object.
    */
-  processRequestQueueTime(ctx) {
-    const requestStartTime = ctx.get("X-Request-Start");
+  processRequestQueueTime (ctx) {
+    const requestStartTime = ctx.get('X-Request-Start')
     if (requestStartTime && Resource.configuration.web) {
-      const requestQueueTime = this.calculateRequestQueueTime(requestStartTime);
-      Resource.configuration.web.start();
-      Resource.configuration.web.addToBuffer(requestQueueTime);
+      const requestQueueTime = this.calculateRequestQueueTime(requestStartTime)
+      Resource.configuration.web.start()
+      Resource.configuration.web.addToBuffer(requestQueueTime)
     }
   }
 
@@ -79,10 +79,10 @@ class HireFireMiddlewareKoa {
    * @param {string} timestamp - Timestamp from the `X-Request-Start` header.
    * @return {number} The computed queue time in milliseconds.
    */
-  calculateRequestQueueTime(timestamp) {
-    const ms = Date.now() - parseInt(timestamp, 10);
-    return ms < 0 ? 0 : ms;
+  calculateRequestQueueTime (timestamp) {
+    const ms = Date.now() - parseInt(timestamp, 10)
+    return ms < 0 ? 0 : ms
   }
 }
 
-module.exports = HireFireMiddlewareKoa;
+module.exports = HireFireMiddlewareKoa

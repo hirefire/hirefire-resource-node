@@ -1,5 +1,4 @@
-const express = require("express");
-const Resource = require("../Resource");
+const Resource = require('../Resource')
 
 /**
  * HireFireMiddleware provides an Express middleware for capturing and providing metrics required
@@ -19,9 +18,9 @@ class HireFireMiddlewareExpress {
    * Creates a new `HireFireMiddleware` instance.
    * @param {express.Application} app - The Express application or router.
    */
-  constructor(app) {
-    this.app = app;
-    this.handle = this.handle.bind(this);
+  constructor (app) {
+    this.app = app
+    this.handle = this.handle.bind(this)
   }
 
   /**
@@ -32,14 +31,14 @@ class HireFireMiddlewareExpress {
    * @param {express.Response} res - The Express response object.
    * @param {Function} next - The next middleware function in the stack.
    */
-  handle(req, res, next) {
-    this.processRequestQueueTime(req);
+  handle (req, res, next) {
+    this.processRequestQueueTime(req)
 
     if (this.matchesInfoPath(req)) {
-      const infoResponse = this.constructInfoResponse();
-      res.status(200).json(infoResponse);
+      const infoResponse = this.constructInfoResponse()
+      res.status(200).json(infoResponse)
     } else {
-      next();
+      next()
     }
   }
 
@@ -48,9 +47,9 @@ class HireFireMiddlewareExpress {
    * @param {express.Request} req - The Express request object.
    * @return {boolean} True if paths align, otherwise false.
    */
-  matchesInfoPath(req) {
-    const token = process.env.HIREFIRE_TOKEN || "development";
-    return req.path === `/hirefire/${token}/info`;
+  matchesInfoPath (req) {
+    const token = process.env.HIREFIRE_TOKEN || 'development'
+    return req.path === `/hirefire/${token}/info`
   }
 
   /**
@@ -58,11 +57,11 @@ class HireFireMiddlewareExpress {
    * queue metrics based on `Resource.configuration.workers` configuration.
    * @return {Object[]} An array of worker metrics.
    */
-  constructInfoResponse() {
+  constructInfoResponse () {
     return Resource.configuration.workers.map((worker) => ({
       name: worker.name,
-      value: worker.fn(),
-    }));
+      value: worker.fn()
+    }))
   }
 
   /**
@@ -70,12 +69,12 @@ class HireFireMiddlewareExpress {
    * and performs actions based on the configuration settings in `Resource.configuration`.
    * @param {express.Request} req - The Express request object.
    */
-  processRequestQueueTime(req) {
-    const requestStartTime = req.get("X-Request-Start");
+  processRequestQueueTime (req) {
+    const requestStartTime = req.get('X-Request-Start')
     if (requestStartTime && Resource.configuration.web) {
-      const requestQueueTime = this.calculateRequestQueueTime(requestStartTime);
-      Resource.configuration.web.start();
-      Resource.configuration.web.addToBuffer(requestQueueTime);
+      const requestQueueTime = this.calculateRequestQueueTime(requestStartTime)
+      Resource.configuration.web.start()
+      Resource.configuration.web.addToBuffer(requestQueueTime)
     }
   }
 
@@ -85,10 +84,10 @@ class HireFireMiddlewareExpress {
    * @param {string} timestamp - Timestamp from the `X-Request-Start` header.
    * @return {number} The computed queue time in milliseconds.
    */
-  calculateRequestQueueTime(timestamp) {
-    const ms = Date.now() - parseInt(timestamp, 10);
-    return ms < 0 ? 0 : ms;
+  calculateRequestQueueTime (timestamp) {
+    const ms = Date.now() - parseInt(timestamp, 10)
+    return ms < 0 ? 0 : ms
   }
 }
 
-module.exports = HireFireMiddlewareExpress;
+module.exports = HireFireMiddlewareExpress

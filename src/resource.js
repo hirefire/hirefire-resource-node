@@ -1,4 +1,4 @@
-const { Configuration } = require("./configuration");
+const { Configuration } = require('./configuration')
 
 /**
  * The `Resource` class is the main entry point for integrating the `hirefire-resource`
@@ -34,9 +34,9 @@ const { Configuration } = require("./configuration");
  * });
  */
 class Resource {
-  constructor() {
+  constructor () {
     /** @type {Configuration} The current configuration instance. */
-    this.configuration = new Configuration();
+    this.configuration = new Configuration()
   }
 
   /**
@@ -46,9 +46,9 @@ class Resource {
    *
    * @param {function(Configuration): void} configureFn - The function to configure HireFire.
    */
-  configure(configureFn) {
-    configureFn(this.configuration);
+  configure (configureFn) {
+    configureFn(this.configuration)
   }
 }
 
-module.exports = new Resource();
+module.exports = new Resource()
