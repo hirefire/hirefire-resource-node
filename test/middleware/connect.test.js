@@ -14,13 +14,13 @@ describe('HireFireMiddlewareConnect', () => {
     app = connect()
     app.use(HireFireMiddlewareConnect)
     app.use((req, res) => res.end('Hello'))
-    Resource.configuration = new Configuration()
   })
 
   afterEach(() => {
+    Resource.configuration = new Configuration()
+    delete process.env.HIREFIRE_TOKEN
     jest.restoreAllMocks()
     sinon.restore()
-    delete process.env.HIREFIRE_TOKEN
   })
 
   test('passthrough and handle request queue time process', async () => {

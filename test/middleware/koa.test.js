@@ -14,13 +14,13 @@ describe('HireFireMiddlewareKoa', () => {
     app = new Koa()
     app.use(HireFireMiddlewareKoa)
     app.use(ctx => { ctx.body = 'Hello' })
-    Resource.configuration = new Configuration()
   })
 
   afterEach(() => {
+    Resource.configuration = new Configuration()
+    delete process.env.HIREFIRE_TOKEN
     jest.restoreAllMocks()
     sinon.restore()
-    delete process.env.HIREFIRE_TOKEN
   })
 
   test('pass through and handle request queue time process', async () => {
