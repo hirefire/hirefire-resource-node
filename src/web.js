@@ -1,5 +1,5 @@
-const https = require('https');
-const { Mutex } = require('async-mutex');
+const https = require("https");
+const { Mutex } = require("async-mutex");
 
 /**
  * The Web class is responsible for collecting and dispatching web metrics to the HireFire
@@ -83,7 +83,10 @@ class Web {
       release();
     }
 
-    this.dispatcher = setInterval(() => this.dispatch(), Web.DISPATCH_INTERVAL * 1000);
+    this.dispatcher = setInterval(
+      () => this.dispatch(),
+      Web.DISPATCH_INTERVAL * 1000,
+    );
   }
 
   /**
@@ -155,7 +158,9 @@ class Web {
       await this.submitBuffer(buffer);
     } catch (error) {
       await this.repopulateBuffer(buffer);
-      this.logger.warn(`[HireFire] Error while dispatching web metrics: ${error.message}`);
+      this.logger.warn(
+        `[HireFire] Error while dispatching web metrics: ${error.message}`,
+      );
     }
   }
 
@@ -198,15 +203,15 @@ class Web {
 
     const data = JSON.stringify(buffer);
     const options = {
-      hostname: 'logdrain.hirefire.io',
+      hostname: "logdrain.hirefire.io",
       port: 443,
-      path: '/',
-      method: 'POST',
+      path: "/",
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'HireFire-Token': token,
-        'Content-Length': data.length
-      }
+        "Content-Type": "application/json",
+        "HireFire-Token": token,
+        "Content-Length": data.length,
+      },
     };
 
     return new Promise((resolve, reject) => {
@@ -220,20 +225,20 @@ class Web {
         }
       });
 
-      req.on('error', (e) => {
-        if (e.code === 'ETIMEDOUT' || e.code === 'ESOCKETTIMEDOUT') {
+      req.on("error", (e) => {
+        if (e.code === "ETIMEDOUT" || e.code === "ESOCKETTIMEDOUT") {
           reject(new Error("Request timed out."));
         } else {
           reject(new Error(`Network error occurred (${e.message}).`));
         }
       });
 
-      req.on('timeout', () => {
+      req.on("timeout", () => {
         req.abort();
         reject(new Error("Request timed out."));
       });
 
-      req.setTimeout(Web.DISPATCH_TIMEOUT*1000);
+      req.setTimeout(Web.DISPATCH_TIMEOUT * 1000);
       req.write(data);
       req.end();
     });

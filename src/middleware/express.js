@@ -1,5 +1,5 @@
-const express = require('express');
-const Resource = require('../Resource');
+const express = require("express");
+const Resource = require("../Resource");
 
 /**
  * HireFireMiddleware provides an Express middleware for capturing and providing metrics required
@@ -49,7 +49,7 @@ class HireFireMiddlewareExpress {
    * @return {boolean} True if paths align, otherwise false.
    */
   matchesInfoPath(req) {
-    const token = process.env.HIREFIRE_TOKEN || 'development';
+    const token = process.env.HIREFIRE_TOKEN || "development";
     return req.path === `/hirefire/${token}/info`;
   }
 
@@ -59,9 +59,9 @@ class HireFireMiddlewareExpress {
    * @return {Object[]} An array of worker metrics.
    */
   constructInfoResponse() {
-    return Resource.configuration.workers.map(worker => ({
+    return Resource.configuration.workers.map((worker) => ({
       name: worker.name,
-      value: worker.fn()
+      value: worker.fn(),
     }));
   }
 
@@ -71,7 +71,7 @@ class HireFireMiddlewareExpress {
    * @param {express.Request} req - The Express request object.
    */
   processRequestQueueTime(req) {
-    const requestStartTime = req.get('X-Request-Start');
+    const requestStartTime = req.get("X-Request-Start");
     if (requestStartTime && Resource.configuration.web) {
       const requestQueueTime = this.calculateRequestQueueTime(requestStartTime);
       Resource.configuration.web.start();

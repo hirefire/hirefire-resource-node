@@ -1,4 +1,4 @@
-const Resource = require('../Resource');
+const Resource = require("../Resource");
 
 /**
  * HireFireMiddleware provides a Koa middleware for capturing and providing metrics required
@@ -43,7 +43,7 @@ class HireFireMiddlewareKoa {
    * @return {boolean} True if paths align, otherwise false.
    */
   matchesInfoPath(ctx) {
-    const token = process.env.HIREFIRE_TOKEN || 'development';
+    const token = process.env.HIREFIRE_TOKEN || "development";
     return ctx.path === `/hirefire/${token}/info`;
   }
 
@@ -53,9 +53,9 @@ class HireFireMiddlewareKoa {
    * @return {Object[]} An array of worker metrics.
    */
   constructInfoResponse() {
-    return Resource.configuration.workers.map(worker => ({
+    return Resource.configuration.workers.map((worker) => ({
       name: worker.name,
-      value: worker.fn()
+      value: worker.fn(),
     }));
   }
 
@@ -65,7 +65,7 @@ class HireFireMiddlewareKoa {
    * @param {Object} ctx - The Koa context object.
    */
   processRequestQueueTime(ctx) {
-    const requestStartTime = ctx.get('X-Request-Start');
+    const requestStartTime = ctx.get("X-Request-Start");
     if (requestStartTime && Resource.configuration.web) {
       const requestQueueTime = this.calculateRequestQueueTime(requestStartTime);
       Resource.configuration.web.start();

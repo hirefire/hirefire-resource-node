@@ -1,4 +1,4 @@
-const { Configuration } = require('./configuration');
+const { Configuration } = require("./configuration");
 
 /**
  * The `Resource` class is the main entry point for integrating the `hirefire-resource`

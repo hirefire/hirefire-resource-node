@@ -70,13 +70,13 @@ class Configuration {
       } else {
         throw new MissingDynoFnError(
           `Missing fn for Configuration#dyno(${name}). ` +
-            `Ensure that you provide a fn that returns the queue metric.`
+            `Ensure that you provide a fn that returns the queue metric.`,
         );
       }
     } else {
       throw new InvalidDynoNameError(
         `Invalid name for Configuration#dyno(${name}). ` +
-          `Ensure it matches the Procfile process name (i.e. web, worker).`
+          `Ensure it matches the Procfile process name (i.e. web, worker).`,
       );
     }
   }
