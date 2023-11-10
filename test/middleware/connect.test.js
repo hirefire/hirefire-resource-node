@@ -1,20 +1,19 @@
 const request = require('supertest');
-const express = require('express');
+const connect = require('connect');
 const sinon = require('sinon');
-const HireFireMiddlewareExpress = require('../../src/middleware/express');
+const HireFireMiddlewareConnect = require('../../src/middleware/connect');
 const Resource = require('../../src/resource');
-const {Configuration} = require('../../src/configuration');
+const { Configuration } = require('../../src/configuration');
 
-describe('HireFireMiddlewareExpress', () => {
+describe('HireFireMiddlewareConnect', () => {
   let app;
 
   beforeEach(() => {
-    app = express();
-    const middleware = new HireFireMiddlewareExpress(app);
-    app.use(middleware.handle);
-    app.use((req, res) => res.status(200).send('Hello'));
-    Resource.configuration = new Configuration()
-
+    app = connect();
+    const middleware = new HireFireMiddlewareConnect(app);
+    app.use(middleware.handle.bind(middleware));
+    app.use((req, res) => res.end('Hello'));
+    Resource.configuration = new Configuration();
   });
 
   afterEach(() => {
@@ -45,18 +44,18 @@ describe('HireFireMiddlewareExpress', () => {
   });
 
   test('process request queue time with dyno web', async () => {
-    const now = Date.now()
-    const nowTimestamp = parseInt(now/1000)
-    const requestStartTime = String(now-1234);
-    sinon.useFakeTimers({now: now});
+    const now = Date.now();
+    const nowTimestamp = Math.floor(now / 1000);
+    const requestStartTime = String(now - 1234);
+    sinon.useFakeTimers(now);
     Resource.configuration.dyno('web');
     const start = jest.spyOn(Resource.configuration.web, 'start');
     const response = await request(app)
-          .get('/some/other/path')
-          .set('X-Request-Start', requestStartTime);
+      .get('/some/other/path')
+      .set('X-Request-Start', requestStartTime);
     expect(response.status).toBe(200);
     expect(response.text).toBe('Hello');
     expect(start).toHaveBeenCalled();
-    expect(Resource.configuration.web.buffer).toEqual({[nowTimestamp]: [1234]});
+    expect(Resource.configuration.web.buffer).toEqual({ [nowTimestamp]: [1234] });
   });
 });
