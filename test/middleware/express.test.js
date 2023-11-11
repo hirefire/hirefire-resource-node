@@ -17,10 +17,23 @@ describe('HireFireMiddlewareExpress', () => {
   })
 
   afterEach(() => {
-    Resource.configuration = new Configuration()
     delete process.env.HIREFIRE_TOKEN
+    Resource.configuration = new Configuration()
     jest.restoreAllMocks()
     sinon.restore()
+  })
+
+  test('ignore middleware when HIREFIRE_TOKEN is not set', async () => {
+    Resource.configuration.dyno('web')
+    Resource.configuration.dyno('worker', () => 5)
+    const start = jest.spyOn(Resource.configuration.web, 'start')
+    const response = await request(app)
+      .get('/')
+      .set('X-Request-Start', 1)
+    expect(response.status).toBe(200)
+    expect(response.text).toBe('Hello')
+    expect(start).not.toHaveBeenCalled()
+    expect(Resource.configuration.web.buffer).toEqual({})
   })
 
   test('pass through and handle request queue time process', async () => {
