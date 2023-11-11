@@ -49,13 +49,13 @@ class Configuration {
    * @throws {MissingDynoFnError} If a required fn is not provided for a worker dyno.
    * @example
    * // Configuring HireFire to dispatch web dyno metrics
-   * Resource.configure(config => {
+   * HireFire.configure(config => {
    *   config.dyno('web');
    * });
    *
    * @example
    * // Configuring HireFire to measure and provide job queue metrics for a worker dyno
-   * Resource.configure(config => {
+   * HireFire.configure(config => {
    *   config.dyno('worker', () => {
    *     // Implement the logic to measure the job queue metric
    *   });

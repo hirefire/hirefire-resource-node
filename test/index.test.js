@@ -1,15 +1,13 @@
 /* global describe, expect, test */
 
-const Resource = require('../src/resource')
+const HireFire = require('../src')
 const { Configuration } = require('../src/configuration')
 
-describe('Resource', () => {
+describe('HireFire', () => {
   test('configure yields configuration', () => {
     let receivedConfig
-    Resource.configure(config => {
-      receivedConfig = config
-    })
+    HireFire.configure(config => { receivedConfig = config })
     expect(receivedConfig).toBeInstanceOf(Configuration)
-    expect(receivedConfig).toBe(Resource.configuration)
+    expect(receivedConfig).toBe(HireFire.configuration)
   })
 })

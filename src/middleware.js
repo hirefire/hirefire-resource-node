@@ -1,4 +1,4 @@
-const Resource = require('./resource')
+const HireFire = require('.')
 
 /**
  * HireFireMiddlewareCore provides a framework-agnostic middleware for capturing and providing
@@ -35,7 +35,7 @@ async function request (reqInfo) {
         'Cache-Control': 'must-revalidate, private, max-age=0'
       },
       body: await Promise.all(
-        Resource.configuration.workers.map(async (worker) => ({
+        HireFire.configuration.workers.map(async (worker) => ({
           name: worker.name,
           value: await worker.call()
         }))
@@ -70,9 +70,9 @@ function matchesInfoPath (reqInfo) {
  *                           - requestStartTime (string | null): The start time of the request, or null if not available.
  */
 async function processRequestQueueTime (reqInfo) {
-  if (reqInfo.requestStartTime && Resource.configuration.web) {
-    await Resource.configuration.web.start()
-    await Resource.configuration.web.addToBuffer(
+  if (reqInfo.requestStartTime && HireFire.configuration.web) {
+    await HireFire.configuration.web.start()
+    await HireFire.configuration.web.addToBuffer(
       calculateRequestQueueTime(reqInfo.requestStartTime)
     )
   }
