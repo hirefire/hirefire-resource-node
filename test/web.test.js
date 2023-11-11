@@ -30,8 +30,10 @@ describe('Web', () => {
     await web.start()
     expect(web.running).toBeTruthy()
     expect(infoSpy).toHaveBeenCalledWith('[HireFire] Starting web metrics dispatcher.')
+    web.addToBuffer(1)
     await web.stop()
     expect(web.running).toBeFalsy()
+    expect(web.buffer).toEqual({})
     expect(infoSpy).toHaveBeenCalledWith('[HireFire] Web metrics dispatcher stopped.')
   })
 

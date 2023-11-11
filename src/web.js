@@ -93,6 +93,9 @@ class Web {
   /**
    * Stops the dispatcher, ensuring that no further metrics are dispatched to the HireFire servers.
    * If the dispatcher is not running, this method will have no effect.
+   *
+   * The buffer will be cleared after stopping the dispatcher.
+   *
    * @async
    * @example
    * const web = new Web();
@@ -111,6 +114,8 @@ class Web {
     } finally {
       release()
     }
+
+    await this.flush()
   }
 
   /**
