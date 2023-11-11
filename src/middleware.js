@@ -23,8 +23,6 @@ const HireFire = require('.')
  * @returns {Object|null} Response object if the request matches the info path, otherwise null.
  */
 async function request (reqInfo) {
-  if (!process.env.HIREFIRE_TOKEN) { return null }
-
   await processRequestQueueTime(reqInfo)
 
   if (matchesInfoPath(reqInfo)) {
@@ -55,7 +53,7 @@ async function request (reqInfo) {
  * @return {boolean} True if the request path aligns with the info path, otherwise false.
  */
 function matchesInfoPath (reqInfo) {
-  return reqInfo.path === `/hirefire/${process.env.HIREFIRE_TOKEN}/info`
+  return process.env.HIREFIRE_TOKEN && reqInfo.path === `/hirefire/${process.env.HIREFIRE_TOKEN}/info`
 }
 
 /**
@@ -70,7 +68,7 @@ function matchesInfoPath (reqInfo) {
  *                           - requestStartTime (string | null): The start time of the request, or null if not available.
  */
 async function processRequestQueueTime (reqInfo) {
-  if (reqInfo.requestStartTime && HireFire.configuration.web) {
+  if (process.env.HIREFIRE_TOKEN && HireFire.configuration.web && reqInfo.requestStartTime) {
     await HireFire.configuration.web.start()
     await HireFire.configuration.web.addToBuffer(
       calculateRequestQueueTime(reqInfo.requestStartTime)
@@ -86,8 +84,7 @@ async function processRequestQueueTime (reqInfo) {
  * @return {number} The computed queue time in milliseconds.
  */
 function calculateRequestQueueTime (requestStartTime) {
-  const ms = Date.now() - parseInt(requestStartTime, 10)
-  return ms < 0 ? 0 : ms
+  return Math.max(Date.now() - parseInt(requestStartTime, 10), 0)
 }
 
 module.exports = { request }
