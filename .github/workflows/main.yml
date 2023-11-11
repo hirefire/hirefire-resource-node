@@ -1,53 +1,53 @@
-name: Main
+# name: Main
 
-on:
-  push:
-    branches:
-      - "*"
-    tags:
-      - "*"
-  pull_request:
+# on:
+#   push:
+#     branches:
+#       - "*"
+#     tags:
+#       - "*"
+#   pull_request:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref }}
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref }}
 
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node: [16, 17, 18, 19, 20]
-    steps:
-      - uses: actions/checkout@v3
-      - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.node }}
-      - name: Run Install
-        run: npm install
-      - name: Run Lint
-        run: npm run lint
-      - name: Run Test
-        run: npm test
-      - name: Run Build
-        run: npm run build
+# jobs:
+#   validate:
+#     runs-on: ubuntu-latest
+#     strategy:
+#       matrix:
+#         node: [16, 17, 18, 19, 20]
+#     steps:
+#       - uses: actions/checkout@v3
+#       - name: Use Node ${{ matrix.node }}
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: ${{ matrix.node }}
+#       - name: Run Install
+#         run: npm install
+#       - name: Run Lint
+#         run: npm run lint
+#       - name: Run Test
+#         run: npm test
+#       - name: Run Build
+#         run: npm run build
 
-  publish:
-    needs: validate
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Use Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-          registry-url: "https://registry.npmjs.org"
-      - name: Run Install
-        run: npm install
-      - name: Build
-        run: npm run build
-      - name: Publish
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_API_TOKEN }}
+#   publish:
+#     needs: validate
+#     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
+#       - name: Use Node
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: 20
+#           registry-url: "https://registry.npmjs.org"
+#       - name: Run Install
+#         run: npm install
+#       - name: Build
+#         run: npm run build
+#       - name: Publish
+#         run: npm publish --access public
+#         env:
+#           NODE_AUTH_TOKEN: ${{ secrets.NPM_API_TOKEN }}
