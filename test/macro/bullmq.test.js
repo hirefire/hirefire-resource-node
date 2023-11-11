@@ -19,12 +19,10 @@ describe('jobQueueSize Tests', () => {
 
   afterEach(async () => {
     clock.restore();
-
     // if (worker) {
     //   await worker.close();
     //   worker = null;
     // }
-
     await defaultQueue.close();
     await mailerQueue.close();
   });
