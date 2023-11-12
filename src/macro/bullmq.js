@@ -1,95 +1,62 @@
-const { Queue } = require('bullmq');
-const IORedis = require('ioredis');
+const IORedis = require('ioredis')
 
-/**
- * Counts the total number of jobs in the specified queues that are ready for processing or scheduled to run now.
- *
- * @param {string[]} queueNames - An array of queue names.
- * @param {string} [redisURL] - The Redis connection URL.
- * @returns {Promise<number>} The total number of ready or imminently scheduled jobs across all specified queues.
- */
-async function jobQueueSize(queueNames, redisURL) {
-  redisURL = redisURL || process.env.REDIS_TLS_URL || process.env.REDIS_URL || 'redis://localhost:6379';
-  const redis = new IORedis(redisURL);
-  let totalCount = 0;
+async function jobQueueSize(...args) {
+  const { queues, options } = unpack(args);
+  const redis = new IORedis(
+    options.connection ||
+      process.env.REDIS_TLS_URL ||
+      process.env.REDIS_URL ||
+      'redis://localhost:6379'
+  )
+  let totalCount = 0
 
   try {
-    const pipeline = redis.pipeline();
+    const pipeline = redis.pipeline()
+    const now = Date.now() * 0x1000 // Adjust 'now' to match BullMQ's delayed job timestamp score encoding
 
-    for (const queueName of queueNames) {
-      const queue = new Queue(queueName, { connection: redis });
-
-      // Get counts for 'waiting' and 'active' jobs
-      const counts = await queue.getJobCounts('wait', 'active');
-      totalCount += counts.wait + counts.active;
-
-      // Adjust 'now' to match BullMQ's delayed job timestamp encoding
-      const now = Date.now() * 0x1000;
-
-      // Enqueue command to count 'delayed' jobs scheduled to run now or in the past
-      pipeline.zcount(`bull:${queueName}:delayed`, '-inf', now);
-
-      // Clean up queue resources
-      await queue.close();
+    for (const queue of queues) {
+      pipeline.lindex(`bull:${queue}:wait`, -1)
+      pipeline.llen(`bull:${queue}:wait`)
+      pipeline.llen(`bull:${queue}:active`)
+      pipeline.zcount(`bull:${queue}:delayed`, '-inf', now)
     }
 
-    // Execute all commands in the pipeline
-    const results = await pipeline.exec();
+    const results = await pipeline.exec()
 
-    results.forEach(result => {
-      // Each result is an array: [err, response]
-      totalCount += result[1] || 0; // Increment by delayed count or 0 if error
-    });
+    for (let i = 0; i < results.length; i += 4) {
+      const lastWaitJob = results[i][1]
+      const waitCount = results[i + 1][1] || 0
+      const activeCount = results[i + 2][1] || 0
+      const delayedCount = results[i + 3][1] || 0
+
+      totalCount = totalCount + waitCount + activeCount + delayedCount
+
+      if (lastWaitJob && lastWaitJob.startsWith('0:')) {
+        totalCount = totalCount - 1 // 0:timestamp in bull:<queue>:wait is not a job
+      }
+    }
   } finally {
-    // Ensure Redis connection is closed even if an error occurs
-    await redis.quit();
+    await redis.quit()
   }
 
-  return totalCount;
+  return totalCount
 }
 
-module.exports = { jobQueueSize };
+function unpack(args) {
+  const lastArg = args[args.length - 1];
+  let queues = [];
+  let options = {};
 
+  if (typeof lastArg === 'object' && lastArg !== null && !Array.isArray(lastArg)) {
+    queues = args.slice(0, -1);
+    options = lastArg;
+  } else {
+    queues = args;
+  }
 
-// const { Queue } = require('bullmq');
-// const IORedis = require('ioredis');
+  queues = queues.flat();
 
-// /**
-//  * Counts the total number of jobs in the specified queues that are ready for processing or scheduled to run now.
-//  *
-//  * @param {string[]} queueNames - An array of queue names.
-//  * @param {string} [redisURL] - The Redis connection URL.
-//  * @returns {Promise<number>} The total number of ready or imminently scheduled jobs across all specified queues.
-//  */
-// async function jobQueueSize(queueNames, redisURL) {
-//   redisURL = redisURL || process.env.REDIS_TLS_URL || process.env.REDISURL || 'redis://localhost:6379';
-//   const redis = new IORedis(redisURL);
-//   let totalCount = 0;
+  return { queues, options };
+}
 
-//   try {
-//     for (const queueName of queueNames) {
-//       const queue = new Queue(queueName, { connection: redis });
-
-//       // Count 'waiting' and 'active' jobs
-//       const counts = await queue.getJobCounts('wait', 'active');
-//       totalCount += counts.wait + counts.active;
-
-//       // Adjust 'now' to match BullMQ's delayed job timestamp encoding
-//       const now = Date.now() * 0x1000;
-
-//       // Count 'delayed' jobs that are scheduled to run now or in the past
-//       const delayedCount = await redis.zcount(`bull:${queueName}:delayed`, '-inf', now);
-//       totalCount += delayedCount;
-
-//       // Clean up queue resources
-//       await queue.close();
-//     }
-//   } finally {
-//     // Ensure Redis connection is closed even if an error occurs
-//     await redis.quit();
-//   }
-
-//   return totalCount;
-// }
-
-// module.exports = { jobQueueSize };
+module.exports = { jobQueueSize }
