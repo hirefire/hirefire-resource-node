@@ -91,7 +91,7 @@ Install this package on your local machine using `npm link`.
 
 ### Releases
 
-1. Bump the `package.json` version using `npm version`.
+1. Bump the `package.json` version using `npm version <patch|minor|major>`.
 2. Update `CHANGELOG.md` for the bumped version.
 3. Commit your changes with `git commit`.
 4. Create a new git tag matching the bumped version (e.g., `v1.0.0`) with `git tag`.
