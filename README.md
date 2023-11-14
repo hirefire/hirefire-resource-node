@@ -67,6 +67,7 @@ HireFire.configure(config => {
 });
 
 const app = express();
+// To add the middleware to make the web and worker metrics available:
 app.use(HireFireMiddlewareExpress)
 ```
 
