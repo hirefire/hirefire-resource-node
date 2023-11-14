@@ -1,59 +1,115 @@
-# Node Agent (Autoscale.app)
+## HireFire: Advanced Autoscaling for Heroku Applications
 
-Provides [Autoscale.app] with the necessary metrics for autoscaling web and worker processes.
+[HireFire] is the oldest and a leading autoscaling service for applications hosted on [Heroku]. Since 2011, we've assisted more than 1,000 companies in autoscaling upwards of 5,000 applications, involving over 10,000 dynos.
 
-## Installation
+This gem streamlines the integration of HireFire with Node applications running on Heroku, offering companies substantial cost savings while maintaining optimal performance.
 
-Add the package to your `package.json`:
+---
 
-    npm install @autoscale/agent@^0
+### Supported Node Versions:
 
-## Usage
+|    | Node |
+|----|------|
+| ✅ | 16   |
+| ✅ | 17   |
+| ✅ | 18   |
+| ✅ | 19   |
 
-This package may be used as a stand-alone agent, or as middleware that integrates with [Express], [Koa] or any Express/Koa-based frameworks, or frameworks with a Express/Koa-compatible middleware interface.
+---
 
-Installation instructions are provided during the autoscaler setup process on [Autoscale.app].
+### Supported Node Web Frameworks:
 
-## Related Packages
+HireFire comes with the following middleware integration:
 
-The following packages are currently available.
+|    | Node Middleware |
+|----|-----------------|
+| ✅ | Express         |
+| ✅ | Connect         |
+| ✅ | Koa             |
 
-#### Agents (Web Framework Middleware)
+This makes it compatible with a broad range of Node web frameworks, as many of them are built on top of Express, Connect or Koa.
 
-| Web Framework | Repository                                          |
-|---------------|-----------------------------------------------------|
-| Express       | https://github.com/autoscale-app/node-agent-express |
-| Koa           | https://github.com/autoscale-app/node-agent-koa     |
+---
 
-#### Queues (Worker Metric Functions)
+### Supported Node Worker Libraries:
 
-| Worker Library | Repository                                         |
-|----------------|----------------------------------------------------|
-| BullMQ         | https://github.com/autoscale-app/node-queue-bullmq |
+Some libraries lack the requisite structure to measure latency. If your preferred library isn't listed, or if you need further support, please contact us.
 
-Let us know if your preferred web framework or worker library isn't available and we'll see if we can add support.
+| Ruby Worker Library | Job Queue Latency | Job Queue Size |
+|---------------------|:-----------------:|:--------------:|
+| BullMQ              | ❌                | ✅             |
+
+---
+
+### Integration Demonstration
+
+To easily integrate HireFire with an existing Node application (i.e. Express and BullMQ):
+
+1. Install the Node package:
+
+```js
+npm install hirefire-resource
+```
+
+2. Configure HireFire in your application and add the middleware:
+
+```js
+const express = require('express');
+const HireFire = require('hirefire-resource')
+const HireFireMiddlewareExpress = require('hirefire-resource/middleware/express')
+const HireFireMacroBullMQ = require('hirefire-resource/macro/bullmq')
+
+HireFire.configure(config => {
+  // To collect Request Queue Time metrics for autoscaling `web` dynos:
+  config.dyno('web');
+  // To collect Job Queue Size metrics for autoscaling `worker` dynos:
+  config.dyno('worker', async () => HireFireMacroBullMQ.jobQueueSize('default'));
+});
+
+const app = express();
+app.use(HireFireMiddlewareExpress)
+```
+
+
+After completing these steps, deploy your application to Heroku. Then, [sign into HireFire] to complete your autoscaling setup by adding the web and worker dyno managers.
+
+---
 
 ## Development
 
-Prepare environment:
+### Setup
 
-    npm install
+Run `bin/setup` to prepare the environment by installing dependencies.
 
-See npm for relevant tasks:
+### Tasks
 
-    npm run
+Use `npm run <script>` to perform common tasks (i.e. format, test). See scripts in `package.json`.
 
-## Release
+### Installation
 
-1. Update `CHANGELOG.md`
-2. Run `npm version major | minor | patch`
-3. Push the new tag
+Install this package on your local machine using `npm link`.
 
-## Contributing
+### Releases
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/autoscale-app/node-agent
+1. Bump the `package.json` version using `npm version`.
+2. Update `CHANGELOG.md` for the bumped version.
+3. Commit your changes with `git commit`.
+4. Create a new git tag matching the bumped version (e.g., `v1.0.0`) with `git tag`.
+5. Push the new tag. GitHub Actions will handle the release process from there.
 
-[Autoscale.app]: https://autoscale.app
-[BullMQ]: https://github.com/taskforcesh/bullmq
-[Express]: https://expressjs.com
-[Koa]: https://koajs.com
+---
+
+### Questions?
+
+Feel free to [contact us] for support and inquiries.
+
+---
+
+### License
+
+`hirefire-resource` is licensed under the MIT license. See LICENSE.
+
+[HireFire]: https://www.hirefire.io/
+[Heroku]: https://www.heroku.com/
+[sign into HireFire]: https://manager.hirefire.io/login
+[contact us]: mailto:support@hirefire.io

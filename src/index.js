@@ -13,7 +13,7 @@ const { Configuration } = require('./configuration')
  * boot.
  *
  * @example
- * // Configuring HireFire to collect metrics for web (i.e. Express) and worker (i.e. Bull)
+ * // Configuring HireFire to collect metrics for web (i.e. Express) and worker (i.e. BullMQ)
  * const HireFire = require('hirefire-resource')
  *
  * HireFire.configure(config => {
@@ -25,11 +25,11 @@ const { Configuration } = require('./configuration')
  *   // in the Procfile.
  *   config.dyno('web');
  *
- *   // Configure HireFire to measure Bull job queue latency across
+ *   // Configure HireFire to measure BullMQ job queue latency across
  *   // different priority queues, and make these metrics available
  *   // to HireFire. This matches the worker dyno entry in the Procfile.
  *   config.dyno('worker', () => {
- *     // Logic to measure Bull job queue latency
+ *     // Logic to measure BullMQ job queue latency
  *   });
  * });
  */
