@@ -35,7 +35,7 @@ This makes it compatible with a broad range of Node web frameworks, as many of t
 
 Some libraries lack the requisite structure to measure latency. If your preferred library isn't listed, or if you need further support, please contact us.
 
-| Ruby Worker Library | Job Queue Latency | Job Queue Size |
+| Node Worker Library | Job Queue Latency | Job Queue Size |
 |---------------------|:-----------------:|:--------------:|
 | BullMQ              | ❌                | ✅             |
 
