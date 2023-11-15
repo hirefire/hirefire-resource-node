@@ -50,16 +50,14 @@ class Configuration {
    * @example
    * // Configuring HireFire to dispatch web dyno metrics
    * HireFire.configure(config => {
-   *   config.dyno('web');
-   * });
+   *   config.dyno('web')
+   * })
    *
    * @example
    * // Configuring HireFire to measure and provide job queue metrics for a worker dyno
    * HireFire.configure(config => {
-   *   config.dyno('worker', () => {
-   *     // Implement the logic to measure the job queue metric
-   *   });
-   * });
+   *   config.dyno('worker', async () => HireFireBullMQ.jobQueueSize('default'))
+   * })
    */
   dyno (name, fn) {
     if (name === 'web') {
