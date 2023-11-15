@@ -31,7 +31,9 @@ class Configuration {
     /** @type {Web|null} The Web instance responsible for collecting and dispatching web metrics. */
     this.web = null
 
-    /** @type {Worker[]} An array of Worker instances, each configured with a dyno name and a fn defining its metric measurement logic. */
+    /** @type {Worker[]} An array of Worker instances, each configured with a dyno name and a fn
+     *                   defining its metric measurement logic.
+     */
     this.workers = []
 
     /** @type {Console} The logger instance, defaulting to console if not otherwise configured. */
@@ -49,14 +51,18 @@ class Configuration {
    * @throws {MissingDynoFnError} If a required fn is not provided for a worker dyno.
    * @example
    * // Configuring HireFire to dispatch web dyno metrics
+   * const HireFire = require('hirefire-resource')
    * HireFire.configure(config => {
    *   config.dyno('web')
    * })
-   *
    * @example
    * // Configuring HireFire to measure and provide job queue metrics for a worker dyno
+   * const HireFire = require('hirefire-resource')
+   * const HireFireBullMQ = require('hirefire-resource/macro/bullmq')
    * HireFire.configure(config => {
-   *   config.dyno('worker', async () => HireFireBullMQ.jobQueueSize('default'))
+   *   config.dyno('worker', async () => {
+   *     return HireFireBullMQ.jobQueueSize('default')
+   *   })
    * })
    */
   dyno (name, fn) {

@@ -17,6 +17,7 @@ async function jobQueueLatency (...args) {
 /**
  * Calculates the total job queue size across the specified queues.
  *
+ * @async
  * @param {...string | object} args - Queue names followed by an optional options object.  The
  *                                    options object can include a 'connection' property, which is
  *                                    passed to IORedis and is compatible with its connection
