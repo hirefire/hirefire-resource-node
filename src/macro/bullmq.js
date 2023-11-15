@@ -1,4 +1,5 @@
 const IORedis = require('ioredis')
+const { unpack } = require('../utility')
 const { MissingQueueError, jobQueueLatencyUnsupported } = require('../errors')
 
 /**
@@ -79,29 +80,6 @@ async function jobQueueSize (...args) {
   }
 
   return totalCount
-}
-
-/**
- * Unpacks the arguments provided to jobQueueSize function.
- *
- * @param {Array} args - Arguments array.
- * @returns {object} An object containing queues and an options object.
- */
-function unpack (args) {
-  const lastArg = args[args.length - 1]
-  let queues = []
-  let options = {}
-
-  if (typeof lastArg === 'object' && lastArg !== null && !Array.isArray(lastArg)) {
-    queues = args.slice(0, -1)
-    options = lastArg
-  } else {
-    queues = args
-  }
-
-  queues = queues.flat()
-
-  return { queues, options }
 }
 
 module.exports = { jobQueueLatency, jobQueueSize }
