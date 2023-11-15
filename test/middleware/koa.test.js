@@ -7,7 +7,7 @@ const HireFireMiddlewareKoa = require('../../src/middleware/koa')
 const HireFire = require('../../src')
 const { Configuration } = require('../../src/configuration')
 
-describe('HireFireMiddlewareKoa', () => {
+describe('Koa', () => {
   let app
 
   beforeEach(() => {

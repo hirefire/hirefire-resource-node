@@ -8,7 +8,7 @@ const IORedis = require('ioredis')
 
 const redisURL = 'redis://127.0.0.1:6379'
 
-describe('jobQueueSize Tests', () => {
+describe('BullMQ', () => {
   let defaultQueue, mailerQueue, clock, redis
 
   beforeAll(async () => {

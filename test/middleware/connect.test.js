@@ -7,7 +7,7 @@ const HireFireMiddlewareConnect = require('../../src/middleware/connect')
 const HireFire = require('../../src')
 const { Configuration } = require('../../src/configuration')
 
-describe('HireFireMiddlewareConnect', () => {
+describe('Connect', () => {
   let app
 
   beforeEach(() => {
