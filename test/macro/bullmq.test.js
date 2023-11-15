@@ -2,8 +2,8 @@
 
 const sinon = require('sinon')
 const { Queue } = require('bullmq')
-const { jobQueueSize } = require('../../src/macro/bullmq')
-const { MissingQueueError } = require('../../src/errors')
+const { jobQueueLatency, jobQueueSize } = require('../../src/macro/bullmq')
+const { MissingQueueError, JobQueueLatencyUnsupportedError } = require('../../src/errors')
 const IORedis = require('ioredis')
 
 const redisURL = 'redis://127.0.0.1:6379'
@@ -30,6 +30,10 @@ describe('jobQueueSize Tests', () => {
     clock.restore()
     await defaultQueue.close()
     await mailerQueue.close()
+  })
+
+  test('jobQueueLatency is unsupported', async () => {
+    await expect(jobQueueLatency()).rejects.toThrow(JobQueueLatencyUnsupportedError)
   })
 
   test('jobQueueSize missing queue raises error', async () => {

@@ -1,5 +1,17 @@
 const IORedis = require('ioredis')
-const { MissingQueueError } = require('../errors')
+const { MissingQueueError, jobQueueLatencyUnsupported } = require('../errors')
+
+/**
+ * BullMQ macro for measuring job queue latency is currently not supported.
+ *
+ * @async
+ * @param {...any} args - Any number of arguments (ignored in function).
+ * @throws {JobQueueLatencyUnsupportedError} - Indicates that the module does not support job queue latency measurements.
+ * @returns {Promise<void>} - The function is asynchronous, but its return value is not used.
+ */
+async function jobQueueLatency (...args) {
+  jobQueueLatencyUnsupported('BullMQ')
+}
 
 /**
  * Calculates the total job queue size across the specified queues.
@@ -92,4 +104,4 @@ function unpack (args) {
   return { queues, options }
 }
 
-module.exports = { jobQueueSize }
+module.exports = { jobQueueLatency, jobQueueSize }
