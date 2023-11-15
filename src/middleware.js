@@ -1,31 +1,30 @@
 const HireFire = require('.')
 
 /**
- * HireFireMiddlewareCore provides a framework-agnostic middleware for capturing and providing
- * metrics required for autoscaling Heroku web and worker dynos. This core middleware operates on
- * normalized request and response data, allowing it to be used across different server frameworks
- * like Express, Koa, and Connect.
+ * Framework-agnostic middleware integration function for autoscaling Heroku web and worker dynos.
+ * Works with normalized request data. It performs two key operations:
  *
- * It primarily:
- * 1. Responds to specific HTTP requests with JSON-formatted queue metrics.
- * 2. Captures and processes request queue time data, forwarding it to `Web` for further handling.
+ * 1. Capturing and processing request queue time data and forwarding it to the `Web` instance.
+ * 2. Responding to specific HTTP requests with JSON-formatted job queue metrics from `Worker` instances.
  *
- * Processes the incoming request. It abstractly handles request queue time analysis and determines
- * the appropriate response, if any. This method operates on a normalized request information object
- * (`reqInfo`), making it framework-agnostic. The framework's middleware must convert the request
- * object into the normalized request information object, and then pass it to this method.
+ * The caller (frameworks-specific middleware) is responsible for extracting the request path and
+ * request start time from the request object and normalizing them into the `requestInfo` object.
  *
- * Won't process the request if the `HIREFIRE_TOKEN` environment variable is not set.
+ * The function either returns a response object or null. If a response object is returned, the
+ * caller is responsible for writing the response to the client. If null is returned, the caller
+ * should proceed to the next middleware in the stack.
  *
- * @param {Object} reqInfo - An object containing normalized request information with the following properties:
- *                           - path (string): The path of the request.
- *                           - requestStartTime (string | null): The start time of the request, or null if not available.
- * @returns {Object|null} Response object if the request matches the info path, otherwise null.
+ * Note that the 'HIREFIRE_TOKEN' environment variable is required to perform the above-mentioned operations.
+ *
+ * @param {Object} requestInfo - Normalized request information containing:
+ *                               - path (string): The request path.
+ *                               - requestStartTime (string | null): The request's start time, or null if unavailable.
+ * @returns {Object|null} - Response object for matching info path requests; otherwise, null.
  */
-async function request (reqInfo) {
-  await processRequestQueueTime(reqInfo)
+async function request (requestInfo) {
+  await processRequestQueueTime(requestInfo)
 
-  if (matchesInfoPath(reqInfo)) {
+  if (matchesInfoPath(requestInfo)) {
     return {
       status: 200,
       headers: {
@@ -45,43 +44,37 @@ async function request (reqInfo) {
 }
 
 /**
- * Determines if the given request path aligns with the info path.
+ * Checks if a request's path matches the predefined info path.
  *
- * @param {Object} reqInfo - An object containing normalized request information with the following properties:
- *                           - path (string): The path of the request.
- *                           - requestStartTime (string | null): The start time of the request, or null if not available.
- * @return {boolean} True if the request path aligns with the info path, otherwise false.
+ * @param {Object} requestInfo - Normalized request information containing:
+ *                               - path (string): The request path.
+ * @returns {boolean} - True if paths match, false otherwise.
  */
-function matchesInfoPath (reqInfo) {
-  return process.env.HIREFIRE_TOKEN && reqInfo.path === `/hirefire/${process.env.HIREFIRE_TOKEN}/info`
+function matchesInfoPath (requestInfo) {
+  return process.env.HIREFIRE_TOKEN && requestInfo.path === `/hirefire/${process.env.HIREFIRE_TOKEN}/info`
 }
 
 /**
- * Calculate the request queue time from the `X-Request-Start` header and add it to the HireFire
- * web instance's buffer for processing.
+ * Processes the request queue time and adds it to the HireFire Web instance's buffer.
+ * Ensures that the web instance is running to dispatch the queue time data to HireFire's servers.
  *
- * It also ensures that the Web instance is running, so that the request queue time information
- * can be periodically dispatched to HireFire's servers.
- *
- * @param {Object} reqInfo - An object containing normalized request information with the following properties:
- *                           - path (string): The path of the request.
- *                           - requestStartTime (string | null): The start time of the request, or null if not available.
+ * @param {Object} requestInfo - Normalized request information containing:
+ *                               - requestStartTime (string | null): The request's start time, or null if unavailable.
  */
-async function processRequestQueueTime (reqInfo) {
-  if (process.env.HIREFIRE_TOKEN && HireFire.configuration.web && reqInfo.requestStartTime) {
+async function processRequestQueueTime (requestInfo) {
+  if (process.env.HIREFIRE_TOKEN && HireFire.configuration.web && requestInfo.requestStartTime) {
     await HireFire.configuration.web.start()
     await HireFire.configuration.web.addToBuffer(
-      calculateRequestQueueTime(reqInfo.requestStartTime)
+      calculateRequestQueueTime(requestInfo.requestStartTime)
     )
   }
 }
 
 /**
- * Calculates the time gap (in milliseconds) between the given `X-Request-Start` timestamp and the
- * present time.
+ * Calculates the request queue time in milliseconds.
  *
- * @param {string} timestamp - Timestamp from the `X-Request-Start` header.
- * @return {number} The computed queue time in milliseconds.
+ * @param {string} requestStartTime - The request start time from the 'X-Request-Start' header.
+ * @returns {number} - The queue time in milliseconds.
  */
 function calculateRequestQueueTime (requestStartTime) {
   return Math.max(Date.now() - parseInt(requestStartTime, 10), 0)
