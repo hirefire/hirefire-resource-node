@@ -1,53 +1,54 @@
 const { Configuration } = require('./configuration')
 
 /**
- * The `HireFire` class is the main entry point for integrating the `hirefire-resource`
- * functionality into your application. It provides a configuration interface to define how HireFire
- * should collect, serve, and dispatch metrics required for Heroku autoscaling decisions made by
- * your dyno managers on HireFire. This class allows you to configure which metrics to collect for
- * web and worker dynos, and how these metrics should be gathered. You can also specify a custom
- * logger.
+ * The `HireFire` class serves as the primary interface for integrating the `hirefire-resource`
+ * functionality into a JavaScript application. It provides a comprehensive configuration interface
+ * for defining how HireFire collects, serves, and dispatches metrics, which are crucial for Heroku
+ * autoscaling decisions made by dyno managers on HireFire. This class facilitates the configuration
+ * of metric collection for both web and worker dynos and the customization of logging mechanisms.
  *
- * This setup is typically done during the initialization phase of your application. The
- * configuration should be placed in a part of your codebase that is executed during application
- * boot.
+ * This setup is typically performed during the initialization phase of your application. Ensure
+ * that the configuration is executed as part of the application boot process.
  *
  * @example
- * // Configuring HireFire to collect metrics for web (i.e. Express) and worker (i.e. BullMQ)
+ * // Example: Configuring HireFire for web (i.e., Express) and worker (i.e., BullMQ) dynos
  * const HireFire = require('hirefire-resource')
+ * const HireFireBullMQ = require('hirefire-resource/macro/bullmq')
  *
  * HireFire.configure(config => {
- *   // Configure HireFire to use a custom logger
- *   config.logger = customLogger
+ *   // Set a custom logger for HireFire
+ *   config.logger = console
  *
- *   // Configure HireFire to collect request queue time metrics and
- *   // periodically dispatch them. This matches the web dyno entry
- *   // in the Procfile.
- *   config.dyno('web');
+ *   // Configure HireFire to collect request queue time metrics and periodically
+ *   // dispatch them. This matches the web dyno entry in the Procfile.
+ *   config.dyno('web')
  *
- *   // Configure HireFire to measure BullMQ job queue latency across
- *   // different priority queues, and make these metrics available
- *   // to HireFire. This matches the worker dyno entry in the Procfile.
- *   config.dyno('worker', () => {
- *     // Logic to measure BullMQ job queue latency
- *   });
- * });
+ *   // Configure HireFire to measure BullMQ size across the default and mailer queues, and make
+ *   // these metrics available to HireFire. This matches the worker dyno entry in the Procfile.
+ *   config.dyno('worker', async () => HireFireBullMQ.jobQueueSize('default', 'mailer'))
+ * })
  */
 class HireFire {
   constructor () {
-    /** @type {Configuration} The current configuration instance. */
+    /**
+     * @type {Configuration}
+     * The current configuration instance of the HireFire class. This instance is used to set up and
+     * modify the behavior of HireFire in the context of metric collection and logger customization.
+     */
     this.configuration = new Configuration()
   }
 
   /**
-   * Yields the current configuration to a function, allowing for configuration of HireFire. This
-   * method is typically called from an initialization file or any other setup script in your
-   * application.
+   * This method provides an interface to configure the HireFire instance. It accepts a function as
+   * a parameter, which receives the current configuration instance. This function is used to modify
+   * and set various configuration options.
    *
-   * @param {function(Configuration): void} configureFn - The function to configure HireFire.
+   * @param {function(Configuration): void} fn - The function to configure HireFire. This function
+   * receives the current configuration object, allowing for the customization of metrics
+   * collection, and logger settings.
    */
-  configure (configureFn) {
-    configureFn(this.configuration)
+  configure (fn) {
+    fn(this.configuration)
   }
 }
 
