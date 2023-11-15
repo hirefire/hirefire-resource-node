@@ -2,10 +2,10 @@ const { Configuration } = require('./configuration')
 
 /**
  * The `HireFire` class serves as the primary interface for integrating the `hirefire-resource`
- * functionality into a JavaScript application. It provides a comprehensive configuration interface
- * for defining how HireFire collects, serves, and dispatches metrics, which are crucial for Heroku
- * autoscaling decisions made by dyno managers on HireFire. This class facilitates the configuration
- * of metric collection for both web and worker dynos and the customization of logging mechanisms.
+ * functionality into a JavaScript application. It provides a configuration interface for defining
+ * how HireFire collects, serves, and dispatches metrics. These metrics are required for Heroku
+ * autoscaling decisions by dyno managers on HireFire. This class facilitates the configuration of
+ * metric collection for both web and worker dynos and the customization of logging mechanisms.
  *
  * This setup is typically performed during the initialization phase of your application. Ensure
  * that the configuration is executed as part of the application boot process.
