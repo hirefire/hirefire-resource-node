@@ -58,15 +58,15 @@ class Web {
     this.running = false
 
     /**
-     * Logger for logging informational messages and errors.  Defaults to console but can be
-     * replaced with any logger implementing the log method.
+     * Logger for logging informational messages and errors. Defaults to console but can be
+     * replaced with any logger implementing the info/warn methods.
      * @type {Console}
      */
     this.logger = console
   }
 
   /**
-   * Starts the dispatcher to continuously dispatch web metrics to the HireFire servers.  If the
+   * Starts the dispatcher to continuously dispatch web metrics to HireFire's servers. If the
    * dispatcher is already running, this method will have no effect.
    * @async
    * @example
@@ -91,7 +91,7 @@ class Web {
   }
 
   /**
-   * Stops the dispatcher, ensuring that no further metrics are dispatched to the HireFire servers.
+   * Stops the dispatcher, ensuring that no further metrics are dispatched to HireFire's servers.
    * If the dispatcher is not running, this method will have no effect.
    *
    * The buffer will be cleared after stopping the dispatcher.
@@ -155,7 +155,7 @@ class Web {
   }
 
   /**
-   * Dispatches the buffer contents to the HireFire servers. If the buffer is empty, no action is
+   * Dispatches the buffer contents to HireFire's servers. If the buffer is empty, no action is
    * taken.
    * @async
    */
@@ -175,7 +175,7 @@ class Web {
   }
 
   /**
-   * Repopulates the buffer with the contents from the failed dispatch attempt.  Filters out any
+   * Repopulates the buffer with the contents from a failed dispatch attempt. Filters out any
    * entries older than the `BUFFER_TTL` value to ensure only recent data is preserved.
    * @async
    * @param {object} buffer - The buffer to repopulate.
@@ -197,9 +197,9 @@ class Web {
   }
 
   /**
-   * Sends the buffer contents to the HireFire servers using a POST request. This method ensures
-   * that the contents of the buffer are transmitted securely using HTTPS.  It handles HTTP success
-   * and server error responses, raising corresponding exceptions for error statuses.
+   * Sends the buffer contents to HireFire's servers using a POST request. This method ensures that
+   * the contents of the buffer are transmitted securely using HTTPS. It handles HTTP success and
+   * server error responses, raising corresponding exceptions for error statuses.
    * @async
    * @param {object} buffer - The buffer to be sent to the server.
    * @throws {Error} Throws an error if the HIREFIRE_TOKEN is not set or if there's a network-related issue.
