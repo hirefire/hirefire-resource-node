@@ -2,7 +2,7 @@ const https = require('https')
 const { Mutex } = require('async-mutex')
 
 /**
- * The Web class is responsible for collecting and dispatching web metrics to the HireFire
+ * The Web class is responsible for collecting and dispatching web metrics to HireFire's
  * servers. This class is designed to function efficiently in various web server architectures,
  * including both non-forked (single-process) and forked (multi-process) server models.
  *

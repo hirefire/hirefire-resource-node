@@ -55,8 +55,8 @@ function matchesInfoPath (requestInfo) {
 }
 
 /**
- * Processes the request queue time and adds it to the HireFire Web instance's buffer.
- * Ensures that the web instance is running to dispatch the queue time data to HireFire's servers.
+ * Processes the request queue time and adds it to the Web instance's buffer.  Ensures that the web
+ * instance is running to dispatch the queue time data to HireFire's servers.
  *
  * @param {Object} requestInfo - Normalized request information containing:
  *                               - requestStartTime (string | null): The request's start time, or null if unavailable.
