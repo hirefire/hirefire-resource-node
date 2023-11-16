@@ -1,34 +1,41 @@
-const middleware = require('../middleware')
+const { RequestInfo, request } = require('../middleware')
 
 /**
  * Express middleware for autoscaling Heroku web and worker dynos using HireFire.
  *
- * This middleware delegates request processing to the `request` function in the `middleware`
- * module. It handles incoming HTTP requests by analyzing the request path and start time.
+ * This middleware uses the `request` function from the `middleware` module to process incoming HTTP
+ * requests.  It creates a `RequestInfo` instance with the request path and start time, which is
+ * then used by the `request` function to determine the appropriate action.
  *
- * The middleware checks for specific conditions (like request path) and, if met, responds with the
- * necessary job queue metrics. If the conditions are not met, it passes control to the next
- * middleware in the stack.
+ * The middleware responds with job queue metrics for specific requests.  If the incoming request
+ * does not meet the specific conditions, control is passed to the next middleware in the stack.
  *
- * @param {express.Request} req - The Express request object.
- * @param {express.Response} res - The Express response object to send responses to the client.
- * @param {Function} next - Callback to invoke the next middleware function in the stack.
- * @see {@link middleware.request} - See the `request` function in the middleware.js module for detail on request processing.
+ * @async
+ * @param {express.Request} req - The Express request object, containing request details.
+ * @param {express.Response} res - The Express response object for sending responses to the client.
+ * @param {Function} next - Callback function to invoke the next middleware in the stack.
+ * @see {@link middleware.request} - Refer to the `request` function in the middleware.js module for
+ *                                   details on request processing.
  * @example
- * // Example of how to use HireFireMiddlewareExpress in an Express app
+ * // Example usage of HireFireMiddlewareExpress in an Express application
  * const express = require('express')
- * const HireFireMiddlewareExpress = require('hirefire-resource/middleware/express')
+ * const HireFireMiddlewareExpress = require('path/to/hirefire-resource/middleware/express')
  * const app = express()
  * app.use(HireFireMiddlewareExpress)
  */
 async function HireFireMiddlewareExpress (req, res, next) {
-  const response = await middleware.request({
-    path: req.path,
-    requestStartTime: req.get('X-Request-Start')
-  })
+  const response = await request(
+    new RequestInfo(
+      req.path,
+      req.get('X-Request-Start')
+    )
+  )
 
   if (response) {
-    res.status(response.status).set(response.headers).json(response.body)
+    res
+      .status(response.status)
+      .set(response.headers)
+      .json(response.body)
   } else {
     next()
   }

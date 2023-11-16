@@ -1,31 +1,35 @@
-const middleware = require('../middleware')
+const { RequestInfo, request } = require('../middleware')
 
 /**
  * Connect middleware for autoscaling Heroku web and worker dynos using HireFire.
  *
- * This middleware delegates request processing to the `request` function in the `middleware`
- * module. It handles incoming HTTP requests by analyzing the request path and start time.
+ * This middleware uses the `request` function from the `middleware` module to process incoming HTTP
+ * requests.  It creates a `RequestInfo` instance with the request path and start time, which is
+ * then used by the `request` function to determine the appropriate action.
  *
- * The middleware checks for specific conditions (like request path) and, if met, responds with the
- * necessary job queue metrics. If the conditions are not met, it passes control to the next
- * middleware in the stack.
+ * The middleware responds with job queue metrics for specific requests.  If the incoming request
+ * does not meet the specific conditions, control is passed to the next middleware in the stack.
  *
+ * @async
  * @param {http.IncomingMessage} req - The incoming HTTP request object.
- * @param {http.ServerResponse} res - The HTTP response object to send responses to the client.
+ * @param {http.ServerResponse} res - The HTTP response object for sending responses to the client.
  * @param {Function} next - Callback to invoke the next middleware in the stack.
- * @see {@link middleware.request} - See the `request` function in the middleware.js module for detail on request processing.
+ * @see {@link middleware.request} - Refer to the `request` function in the middleware.js module for
+ *                                   details on request processing.
  * @example
- * // Example of how to use HireFireMiddlewareConnect in a Connect app
+ * // Example usage of HireFireMiddlewareConnect in a Connect application
  * const connect = require('connect')
- * const HireFireMiddlewareConnect = require('hirefire-resource/middleware/connect')
+ * const HireFireMiddlewareConnect = require('path/to/hirefire-resource/middleware/connect')
  * const app = connect()
  * app.use(HireFireMiddlewareConnect)
  */
 async function HireFireMiddlewareConnect (req, res, next) {
-  const response = await middleware.request({
-    path: req.url,
-    requestStartTime: req.headers['x-request-start']
-  })
+  const response = await request(
+    new RequestInfo(
+      req.url,
+      req.headers['x-request-start']
+    )
+  )
 
   if (response) {
     res.writeHead(response.status, response.headers)
