@@ -202,16 +202,10 @@ class Web {
    * server error responses, raising corresponding exceptions for error statuses.
    * @async
    * @param {object} buffer - The buffer to be sent to the server.
-   * @throws {Error} Throws an error if the HIREFIRE_TOKEN is not set or if there's a network-related issue.
+   * @throws {Error} Throws an error if there's a network-related issue.
    * @return {Promise<void>}
    */
   async submitBuffer (buffer) {
-    const token = process.env.HIREFIRE_TOKEN
-
-    if (!token) {
-      throw new Error('HIREFIRE_TOKEN environment variable is not set.')
-    }
-
     const data = JSON.stringify(buffer)
     const options = {
       hostname: 'logdrain.hirefire.io',
@@ -220,7 +214,7 @@ class Web {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'HireFire-Token': token,
+        'HireFire-Token': process.env.HIREFIRE_TOKEN,
         'Content-Length': data.length
       }
     }

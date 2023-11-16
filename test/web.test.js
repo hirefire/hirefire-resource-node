@@ -93,13 +93,6 @@ describe('Web', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Network error occurred'))
   })
 
-  test('dispatch post with missing token', async () => {
-    delete process.env.HIREFIRE_TOKEN
-    await web.addToBuffer(7)
-    await web.dispatch()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('HIREFIRE_TOKEN environment variable is not set.'))
-  })
-
   test('buffer repopulation after dispatch failure', async () => {
     nock('https://logdrain.hirefire.io').post('/').reply(500)
     await web.addToBuffer(7)
