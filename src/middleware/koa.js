@@ -1,24 +1,23 @@
 const { RequestInfo, request } = require('../middleware')
 
 /**
- * Koa middleware for autoscaling Heroku web and worker dynos using HireFire.
+ * Koa middleware for autoscaling Heroku web and worker dynos with HireFire.
  *
- * This middleware uses the `request` function from the `middleware` module to process incoming HTTP
- * requests.  It creates a `RequestInfo` instance with the request path and start time, which is
- * then used by the `request` function to determine the appropriate action.
+ * This middleware leverages the `request` function from the `middleware` module to process incoming
+ * HTTP requests. It instantiates a `RequestInfo` object with the request path and start time, which
+ * is then passed to the `request` function for determining the necessary action.
  *
- * The middleware responds with job queue metrics for specific requests.  If the incoming request
- * does not meet the specific conditions, control is passed to the next middleware in the stack.
+ * The middleware is capable of responding with job queue metrics for specific requests. For other
+ * requests, it passes control to the next middleware in the stack.
  *
  * @async
- * @param {Koa.Context} ctx - The Koa context object, representing the request and response.
- * @param {Function} next - Callback function to invoke the next middleware in the stack.
- * @see {@link middleware.request} - Refer to the `request` function in the middleware.js module for
- *                                   details on request processing.
+ * @param {Koa.Context} ctx - The Koa context object, encapsulating the HTTP request and response.
+ * @param {Function} next - The callback function to continue the middleware chain execution.
+ * @see {@link middleware.request} - For detailed logic on request processing.
  * @example
  * // Example usage of HireFireMiddlewareKoa in a Koa application
  * const Koa = require('koa')
- * const HireFireMiddlewareKoa = require('path/to/hirefire-resource/middleware/koa')
+ * const HireFireMiddlewareKoa = require('hirefire-resource/middleware/koa')
  * const app = new Koa()
  * app.use(HireFireMiddlewareKoa)
  */
