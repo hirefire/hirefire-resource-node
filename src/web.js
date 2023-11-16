@@ -1,5 +1,6 @@
 const https = require('https')
 const { Mutex } = require('async-mutex')
+const pkg = require('../package.json')
 
 /**
  * Manages the collection and dispatching of web metrics to HireFire's servers.
@@ -164,6 +165,7 @@ class Web {
       headers: {
         'Content-Type': 'application/json',
         'HireFire-Token': process.env.HIREFIRE_TOKEN,
+        'HireFire-Resource': `Node-${pkg.version}`,
         'Content-Length': data.length
       }
     }

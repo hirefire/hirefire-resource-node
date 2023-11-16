@@ -2,10 +2,10 @@ const { Configuration } = require('./configuration')
 
 /**
  * Main interface for integrating `hirefire-resource` functionality into a Node.js application. This
- * class facilitates the configuration of metric collection and dispatching for Heroku dyno
- * autoscaling using HireFire. It supports metrics configuration for both web and worker dynos and
- * offers logger customization. It is typically instantiated during the application's initialization
- * phase.
+ * class facilitates the configuration of metric collection, dispatching and serving, for Heroku
+ * dyno autoscaling with HireFire. It supports metrics configuration for both web and worker dynos
+ * and offers logger customization. It is typically instantiated during the application's
+ * initialization phase.
  *
  * @example
  * // Example: Configuring HireFire for web and worker dynos with BullMQ

@@ -6,6 +6,7 @@ const sinon = require('sinon')
 const HireFireMiddlewareKoa = require('../../src/middleware/koa')
 const HireFire = require('../../src')
 const { Configuration } = require('../../src/configuration')
+const pkg = require('../../package.json')
 
 describe('Koa', () => {
   let app
@@ -61,6 +62,7 @@ describe('Koa', () => {
     HireFire.configuration.dyno('worker', () => 5)
     const response = await request(app.callback()).get('/hirefire/SOME_TOKEN/info')
     expect(response.status).toBe(200)
+    expect(response.headers['hirefire-resource']).toBe(`Node-${pkg.version}`)
     expect(response.body).toEqual([{ name: 'worker', value: 5 }])
   })
 })

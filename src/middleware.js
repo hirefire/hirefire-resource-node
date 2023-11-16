@@ -1,4 +1,5 @@
 const HireFire = require('.')
+const pkg = require('../package.json')
 
 /**
  * Represents the normalized details of an HTTP request.
@@ -42,7 +43,8 @@ async function request (requestInfo) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'must-revalidate, private, max-age=0'
+        'Cache-Control': 'must-revalidate, private, max-age=0',
+        'HireFire-Resource': `Node-${pkg.version}`
       },
       body: await Promise.all(
         HireFire.configuration.workers.map(async (worker) => ({

@@ -2,8 +2,8 @@ const { Web } = require('./web')
 const { Worker } = require('./worker')
 
 /**
- * Custom error indicating an invalid dyno name.
- * This error is thrown when a dyno name does not comply with the dyno naming standards on Heroku.
+ * Custom error indicating an invalid dyno name. This error is thrown when a dyno name does not
+ * comply with the dyno naming standards on Heroku.
  */
 class InvalidDynoNameError extends Error {
   /**
@@ -18,8 +18,8 @@ class InvalidDynoNameError extends Error {
 }
 
 /**
- * Custom error indicating the absence of a required function in worker dyno configuration.
- * This error is thrown when the function necessary for measuring job queue metrics is missing.
+ * Custom error indicating the absence of a required function in worker dyno configuration. This
+ * error is thrown when the function necessary for measuring job queue metrics is missing.
  */
 class MissingDynoFnError extends Error {
   /**
@@ -34,7 +34,7 @@ class MissingDynoFnError extends Error {
 }
 
 /**
- * Manages the configuration of web and worker dynos, including metrics collection and logging.
+ * Contains the configuration for the HireFire integration.
  *
  * @property {Web|null} web - Manages metrics for the web dyno. Null if not configured.
  * @property {Worker[]} workers - Manages metrics for configured worker dynos.
