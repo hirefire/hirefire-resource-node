@@ -1,8 +1,13 @@
 /**
- * Unpacks the arguments provided to jobQueueLatency and jobQueueSize functions.
+ * Unpacks the arguments provided to the jobQueueLatency and jobQueueSize functions.
+ * This function processes the arguments array and separates queues from options.
  *
- * @param {Array} args - Arguments array.
- * @returns {object} An object containing queues and an options object.
+ * @param {Array} args - An array of arguments passed to jobQueueLatency or jobQueueSize. This array
+ *                       can include queues (as strings or arrays) and an optional options object.
+ * @returns {{queues: Array, options: object}} An object containing two properties: `queues`, an
+ *                                             array of queues, and `options`, an options object. If
+ *                                             no options object is provided in `args`, `options`
+ *                                             will be an empty object.
  */
 function unpack (args) {
   const lastArg = args[args.length - 1]

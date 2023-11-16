@@ -1,5 +1,5 @@
-const { Web } = require('./web');
-const { Worker } = require('./worker');
+const { Web } = require('./web')
+const { Worker } = require('./worker')
 
 /**
  * Custom error indicating an invalid dyno name.
@@ -11,9 +11,9 @@ class InvalidDynoNameError extends Error {
    *
    * @param {string} message - Describes the issue with the invalid dyno name.
    */
-  constructor(message) {
-    super(message);
-    this.name = 'InvalidDynoNameError';
+  constructor (message) {
+    super(message)
+    this.name = 'InvalidDynoNameError'
   }
 }
 
@@ -27,9 +27,9 @@ class MissingDynoFnError extends Error {
    *
    * @param {string} message - Describes the missing function issue in the worker dyno configuration.
    */
-  constructor(message) {
-    super(message);
-    this.name = 'MissingDynoFnError';
+  constructor (message) {
+    super(message)
+    this.name = 'MissingDynoFnError'
   }
 }
 
@@ -44,10 +44,10 @@ class Configuration {
   /**
    * Constructs a new Configuration instance with default settings.
    */
-  constructor() {
-    this.web = null;
-    this.workers = [];
-    this.logger = console;
+  constructor () {
+    this.web = null
+    this.workers = []
+    this.logger = console
   }
 
   /**
@@ -65,25 +65,25 @@ class Configuration {
    * // Example: Configuring a worker dyno with a job queue measurement function
    * config.dyno('worker', async () => HireFireBullMQ.jobQueueSize('default'));
    */
-  dyno(name, fn) {
+  dyno (name, fn) {
     if (name === 'web') {
-      this.web = new Web();
+      this.web = new Web()
     } else if (/^[a-zA-Z][a-zA-Z0-9_]{0,29}$/.test(name)) {
       if (fn) {
-        this.workers.push(new Worker(name, fn));
+        this.workers.push(new Worker(name, fn))
       } else {
         throw new MissingDynoFnError(
           `Missing function for Configuration#dyno(${name}). ` +
           'A function is required to return the job queue metric for worker dynos.'
-        );
+        )
       }
     } else {
       throw new InvalidDynoNameError(
         `Invalid dyno name for Configuration#dyno(${name}). ` +
         'Name must adhere to Procfile naming conventions.'
-      );
+      )
     }
   }
 }
 
-module.exports = { Configuration, InvalidDynoNameError, MissingDynoFnError };
+module.exports = { Configuration, InvalidDynoNameError, MissingDynoFnError }

@@ -1,17 +1,18 @@
 /**
- * The Worker class measures job queue metrics for various worker libraries and provides these
- * metrics to HireFire's servers. It requires a name and a function defining the metric measuring
- * logic upon initialization.
+ * The Worker class is designed for measuring job queue metrics of various worker libraries.
+ * It is used to provide these metrics to HireFire's servers. The class requires both a name
+ * (indicative of the worker dyno type in the Procfile) and a function defining the logic for
+ * measuring the desired metric (like job queue latency or size) upon instantiation.
  */
 class Worker {
   /**
-   * Creates a new Worker instance. The `name` parameter should match the worker dyno designation in
-   * the Procfile, like 'worker' or 'mailer'. The `fn` parameter should be a function that
-   * calculates and returns a queue metric (such as job queue latency or size). This function can
-   * include common measurement macros or custom logic tailored to the specific metric.
+   * Constructs a new Worker instance.
+   * The `name` should align with the worker dyno designation in the Procfile, such as 'worker' or 'mailer'.
+   * The `fn` is a function that calculates and returns a specific job queue metric, which can be based on
+   * common measurement approaches using macros or custom logic.
    *
    * @param {string} name - The name of the worker, corresponding to the dyno name in the Procfile.
-   * @param {function} fn - A function that calculates and returns a numeric queue metric.
+   * @param {function} fn - A function that calculates and returns a numeric value for the job queue metric.
    */
   constructor (name, fn) {
     this.name = name
@@ -19,11 +20,11 @@ class Worker {
   }
 
   /**
-   * Executes the metric calculation function provided at initialization. This method is
-   * asynchronous and returns a Promise that resolves to the calculated metric, typically a number
-   * representing queue latency or size.
+   * Executes the metric calculation function provided during instantiation.
+   * This method is asynchronous and returns a Promise that resolves with the calculated metric.
+   * The metric must represent a quantifiable aspect of the job queue: either latency or size.
    *
-   * @return {Promise<number>} A Promise that resolves to the calculated queue metric.
+   * @return {Promise<number>} A Promise resolving with the calculated queue metric as a number.
    */
   async call () {
     return this.fn()

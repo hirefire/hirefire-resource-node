@@ -1,4 +1,4 @@
-const { Configuration } = require('./configuration');
+const { Configuration } = require('./configuration')
 
 /**
  * Main interface for integrating `hirefire-resource` functionality into a Node.js application. This
@@ -23,13 +23,13 @@ class HireFire {
    * Creates a new HireFire instance.
    * Initializes the configuration settings for HireFire behavior.
    */
-  constructor() {
+  constructor () {
     /**
      * The current configuration instance of the HireFire class.
      * Utilized for setting and adjusting metric collection and logger configurations.
      * @type {Configuration}
      */
-    this.configuration = new Configuration();
+    this.configuration = new Configuration()
   }
 
   /**
@@ -39,9 +39,9 @@ class HireFire {
    * @param {function(Configuration): void} fn - A function that takes a Configuration object
    *                                            to customize the metric collection and logger settings.
    */
-  configure(fn) {
-    fn(this.configuration);
+  configure (fn) {
+    fn(this.configuration)
   }
 }
 
-module.exports = new HireFire();
+module.exports = new HireFire()
