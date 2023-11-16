@@ -2,66 +2,29 @@ const https = require('https')
 const { Mutex } = require('async-mutex')
 
 /**
- * The Web class is responsible for collecting and dispatching web metrics to HireFire's
- * servers. This class is designed to function efficiently in various web server architectures,
- * including both non-forked (single-process) and forked (multi-process) server models.
+ * The Web class is responsible for collecting and dispatching web metrics to HireFire's servers.
+ * It functions efficiently in various web server architectures, including both non-forked and
+ * forked server models.
  *
- * In a forked environment, such as with worker threads in Node.js, each worker will have its own
- * Web instance. This separation ensures that metrics are collected and dispatched independently by
- * each process. For this reason, it's recommended to start the Web instances within some sort of
- * initialization for each worker. This ensures that each worker initializes its own web instance
- * and associated dispatcher.
+ * @property {number} DISPATCH_INTERVAL - The interval between dispatch attempts in seconds.
+ * @property {number} DISPATCH_TIMEOUT - The timeout for HTTP requests in seconds.
+ * @property {number} BUFFER_TTL - Buffer's Time-To-Live in seconds. Metrics older than this value will be discarded.
+ * @property {Object} buffer - Private. Buffer storing request queue time metrics, keyed by timestamp.
+ * @property {Mutex} mutex - Mutex for ensuring thread safety across asynchronous operations.
+ * @property {boolean} running - Indicates whether the dispatcher is currently running.
+ * @property {Console} logger - Logger for logging messages and errors. Defaults to console.
  */
 class Web {
-  /**
-   * The interval between dispatch attempts in seconds.
-   * @type {number}
-   */
   static DISPATCH_INTERVAL = 5
-
-  /**
-   * The timeout for HTTP requests in seconds.
-   * @type {number}
-   */
   static DISPATCH_TIMEOUT = 5
-
-  /**
-   * Buffer's TTL in seconds. Metrics older than this value will be discarded.
-   * @type {number}
-   */
   static BUFFER_TTL = 60
 
-  /**
-   * Constructs the Web metric dispatcher.
-   */
   constructor () {
-    /**
-     * @private
-     * The buffer is a hash where the keys are timestamps (in seconds since the Epoch) and the
-     * values are arrays of request queue time metrics that have been added at that particular
-     * timestamp on a per-request basis. Metrics older than the `BUFFER_TTL` value will be
-     * automatically discarded, ensuring the buffer contains only recent and relevant data and that
-     * memory usage remains minimal.
-     */
+    /** @private */
     this.buffer = {}
 
-    /**
-     * Mutex to ensure thread safety across asynchronous operations.
-     * @type {Mutex}
-     */
     this.mutex = new Mutex()
-
-    /**
-     * Indicates whether the dispatcher is currently running.
-     * @type {boolean}
-     */
     this.running = false
-
-    /**
-     * Logger for logging informational messages and errors. Defaults to console but can be
-     * replaced with any logger implementing the info/warn methods.
-     * @type {Console}
-     */
     this.logger = console
   }
 

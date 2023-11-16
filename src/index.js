@@ -31,9 +31,10 @@ const { Configuration } = require('./configuration')
 class HireFire {
   constructor () {
     /**
+     * The current configuration instance of the HireFire class.
+     * This instance is used to set up and modify the behavior of HireFire in the context of metric
+     * collection and logger customization.
      * @type {Configuration}
-     * The current configuration instance of the HireFire class. This instance is used to set up and
-     * modify the behavior of HireFire in the context of metric collection and logger customization.
      */
     this.configuration = new Configuration()
   }

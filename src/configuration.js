@@ -25,30 +25,29 @@ class MissingDynoFnError extends Error {
 
 /**
  * The Configuration class for HireFire.
+ *
+ * @property {Web|null} web - The Web instance responsible for collecting and dispatching web metrics.
+ * @property {Worker[]} workers - An array of Worker instances, each configured with a dyno name and
+ *                                a function defining its metric measurement logic.
+ * @property {Console} logger - The logger instance, defaulting to console if not otherwise configured.
  */
 class Configuration {
   constructor () {
-    /** @type {Web|null} The Web instance responsible for collecting and dispatching web metrics. */
     this.web = null
-
-    /** @type {Worker[]} An array of Worker instances, each configured with a dyno name and a fn
-     *                   defining its metric measurement logic.
-     */
     this.workers = []
-
-    /** @type {Console} The logger instance, defaulting to console if not otherwise configured. */
     this.logger = console
   }
 
   /**
    * Configures Web and Worker objects.
-   * The fn is ignored for the Web object and required for Worker objects.
-   * Throws errors for invalid names or missing fn.
+   * The function is ignored for the Web object and required for Worker objects.
+   * Throws errors for invalid names or missing function.
    *
    * @param {string} name - The name of the dyno as declared in the Procfile.
-   * @param {Function} fn - Required for worker dynos and returns an integer representing the job queue latency or job queue size metric.
+   * @param {Function} [fn] - Required for worker dynos. Returns an integer representing the job
+   *                          queue latency or job queue size metric.
    * @throws {InvalidDynoNameError} If the dyno name is invalid according to Procfile naming restrictions.
-   * @throws {MissingDynoFnError} If a required fn is not provided for a worker dyno.
+   * @throws {MissingDynoFnError} If a required function is not provided for a worker dyno.
    * @example
    * // Configuring HireFire to dispatch web dyno metrics
    * const HireFire = require('hirefire-resource')

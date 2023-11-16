@@ -2,6 +2,9 @@ const HireFire = require('.')
 
 /**
  * Represents normalized details of an HTTP request.
+ *
+ * @property {string} path - The request path.
+ * @property {number|null} requestStartTime - The request start time in milliseconds, or null if not provided.
  */
 class RequestInfo {
   /**
