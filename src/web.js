@@ -2,17 +2,18 @@ const https = require('https')
 const { Mutex } = require('async-mutex')
 
 /**
- * The Web class is responsible for collecting and dispatching web metrics to HireFire's servers.
- * It functions efficiently in various web server architectures, including both non-forked and
- * forked server models.
+ * Manages the collection and dispatching of web metrics to HireFire's servers.
+ * Suitable for use in different web server architectures, including non-forked and forked models.
+ * This class handles the periodic dispatch of metrics, ensuring they are securely transmitted
+ * and relevant based on a defined TTL (Time-To-Live).
  *
- * @property {number} DISPATCH_INTERVAL - The interval between dispatch attempts in seconds.
- * @property {number} DISPATCH_TIMEOUT - The timeout for HTTP requests in seconds.
- * @property {number} BUFFER_TTL - Buffer's Time-To-Live in seconds. Metrics older than this value will be discarded.
- * @property {Object} buffer - Private. Buffer storing request queue time metrics, keyed by timestamp.
- * @property {Mutex} mutex - Mutex for ensuring thread safety across asynchronous operations.
- * @property {boolean} running - Indicates whether the dispatcher is currently running.
- * @property {Console} logger - Logger for logging messages and errors. Defaults to console.
+ * @property {number} DISPATCH_INTERVAL - Interval between dispatch attempts in seconds.
+ * @property {number} DISPATCH_TIMEOUT - Timeout for HTTP requests in seconds.
+ * @property {number} BUFFER_TTL - Buffer's Time-To-Live in seconds. Metrics older than this are discarded.
+ * @property {Object} buffer - (Private) Stores request queue time metrics, keyed by timestamp.
+ * @property {Mutex} mutex - Ensures thread safety across asynchronous operations.
+ * @property {boolean} running - Indicates if the dispatcher is actively running.
+ * @property {Console} logger - Logger for messages and errors, defaults to console.
  */
 class Web {
   static DISPATCH_INTERVAL = 5
@@ -29,12 +30,9 @@ class Web {
   }
 
   /**
-   * Starts the dispatcher to continuously dispatch web metrics to HireFire's servers. If the
-   * dispatcher is already running, this method will have no effect.
+   * Starts the dispatcher to periodically dispatch web metrics. No effect if already running.
+   * Uses a setInterval to regularly call the dispatch method based on DISPATCH_INTERVAL.
    * @async
-   * @example
-   * const web = new Web();
-   * await web.start();
    */
   async start () {
     const release = await this.mutex.acquire()
@@ -54,17 +52,9 @@ class Web {
   }
 
   /**
-   * Stops the dispatcher, ensuring that no further metrics are dispatched to HireFire's servers.
-   * If the dispatcher is not running, this method will have no effect.
-   *
-   * The buffer will be cleared after stopping the dispatcher.
-   *
+   * Stops the dispatcher, preventing further metric dispatches. Clears the buffer.
+   * No effect if the dispatcher is not running.
    * @async
-   * @example
-   * const web = new Web();
-   * await web.start();
-   * // ... some time later ...
-   * await web.stop();
    */
   async stop () {
     const release = await this.mutex.acquire()
@@ -82,9 +72,9 @@ class Web {
   }
 
   /**
-   * Adds a value to the buffer with the current timestamp.
+   * Adds a metric value to the buffer. Metrics are keyed by current timestamp.
    * @async
-   * @param {number} value - The request queue time in milliseconds to be added to the buffer.
+   * @param {number} value - The request queue time in milliseconds.
    */
   async addToBuffer (value) {
     const release = await this.mutex.acquire()
@@ -99,11 +89,10 @@ class Web {
   }
 
   /**
-   * Flushes the current buffer, returning its contents. After calling this method, the internal
-   * buffer will be reset to an empty state, ensuring that the same data isn't dispatched more than
-   * once.
+   * Flushes the buffer, returning its contents and resetting to an empty state.
+   * Ensures no duplicate dispatch of the same data.
    * @async
-   * @return {object} The contents of the buffer before it was cleared.
+   * @return {object} Contents of the buffer before clearing.
    */
   async flush () {
     const release = await this.mutex.acquire()
@@ -118,8 +107,7 @@ class Web {
   }
 
   /**
-   * Dispatches the buffer contents to HireFire's servers. If the buffer is empty, no action is
-   * taken.
+   * Dispatches buffered metrics. Skips if buffer is empty. Handles errors and repopulates buffer on failure.
    * @async
    */
   async dispatch () {
@@ -138,10 +126,9 @@ class Web {
   }
 
   /**
-   * Repopulates the buffer with the contents from a failed dispatch attempt. Filters out any
-   * entries older than the `BUFFER_TTL` value to ensure only recent data is preserved.
+   * Repopulates buffer with failed dispatch data. Filters out entries older than BUFFER_TTL.
    * @async
-   * @param {object} buffer - The buffer to repopulate.
+   * @param {object} buffer - Buffer content from a failed dispatch.
    */
   async repopulateBuffer (buffer) {
     const release = await this.mutex.acquire()
@@ -160,12 +147,11 @@ class Web {
   }
 
   /**
-   * Sends the buffer contents to HireFire's servers using a POST request. This method ensures that
-   * the contents of the buffer are transmitted securely using HTTPS. It handles HTTP success and
-   * server error responses, raising corresponding exceptions for error statuses.
+   * Sends buffer data to HireFire's servers securely via HTTPS POST request.
+   * Handles HTTP responses and raises errors for network issues.
    * @async
-   * @param {object} buffer - The buffer to be sent to the server.
-   * @throws {Error} Throws an error if there's a network-related issue.
+   * @param {object} buffer - Buffer data to send.
+   * @throws {Error} - In case of network-related issues or server errors.
    * @return {Promise<void>}
    */
   async submitBuffer (buffer) {
