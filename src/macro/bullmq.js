@@ -1,6 +1,6 @@
-const IORedis = require('ioredis')
-const { unpack } = require('../utility')
-const { MissingQueueError, jobQueueLatencyUnsupported } = require('../errors')
+const IORedis = require("ioredis")
+const { unpack } = require("../utility")
+const { MissingQueueError, jobQueueLatencyUnsupported } = require("../errors")
 
 /**
  * BullMQ macro for measuring job queue latency is currently not supported.
@@ -10,8 +10,8 @@ const { MissingQueueError, jobQueueLatencyUnsupported } = require('../errors')
  * @throws {JobQueueLatencyUnsupportedError} - Indicates that the module does not support job queue latency measurements.
  * @returns {Promise<void>} - The function is asynchronous, but its return value is not used.
  */
-async function jobQueueLatency (...args) {
-  jobQueueLatencyUnsupported('BullMQ')
+async function jobQueueLatency(...args) {
+  jobQueueLatencyUnsupported("BullMQ")
 }
 
 /**
@@ -35,7 +35,7 @@ async function jobQueueLatency (...args) {
  * // Job Queue Size using the options.connection property
  * await jobQueueSize('default', { connection: 'redis://localhost:6379/0' })
  */
-async function jobQueueSize (...args) {
+async function jobQueueSize(...args) {
   const { queues, options } = unpack(args)
 
   if (queues.length === 0) {
@@ -46,7 +46,7 @@ async function jobQueueSize (...args) {
     options.connection ||
       process.env.REDIS_TLS_URL ||
       process.env.REDIS_URL ||
-      'redis://localhost:6379'
+      "redis://localhost:6379",
   )
 
   let totalCount = 0
@@ -59,7 +59,7 @@ async function jobQueueSize (...args) {
       pipeline.lindex(`bull:${queue}:wait`, -1)
       pipeline.llen(`bull:${queue}:wait`)
       pipeline.llen(`bull:${queue}:active`)
-      pipeline.zcount(`bull:${queue}:delayed`, '-inf', now)
+      pipeline.zcount(`bull:${queue}:delayed`, "-inf", now)
     }
 
     const results = await pipeline.exec()
@@ -72,7 +72,7 @@ async function jobQueueSize (...args) {
 
       totalCount += waitCount + activeCount + delayedCount
 
-      if (lastWaitJob && lastWaitJob.startsWith('0:')) {
+      if (lastWaitJob && lastWaitJob.startsWith("0:")) {
         totalCount -= 1
       }
     }

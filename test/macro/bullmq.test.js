@@ -1,14 +1,17 @@
 /* global describe, test, expect, beforeAll, afterAll, beforeEach, afterEach */
 
-const sinon = require('sinon')
-const { Queue } = require('bullmq')
-const { jobQueueLatency, jobQueueSize } = require('../../src/macro/bullmq')
-const { MissingQueueError, JobQueueLatencyUnsupportedError } = require('../../src/errors')
-const IORedis = require('ioredis')
+const sinon = require("sinon")
+const { Queue } = require("bullmq")
+const { jobQueueLatency, jobQueueSize } = require("../../src/macro/bullmq")
+const {
+  MissingQueueError,
+  JobQueueLatencyUnsupportedError,
+} = require("../../src/errors")
+const IORedis = require("ioredis")
 
-const redisURL = 'redis://127.0.0.1:6379'
+const redisURL = "redis://127.0.0.1:6379"
 
-describe('BullMQ', () => {
+describe("BullMQ", () => {
   let defaultQueue, mailerQueue, clock, redis
 
   beforeAll(async () => {
@@ -21,8 +24,8 @@ describe('BullMQ', () => {
 
   beforeEach(async () => {
     redis.flushdb()
-    defaultQueue = new Queue('default', { connection: redisURL })
-    mailerQueue = new Queue('mailer', { connection: redisURL })
+    defaultQueue = new Queue("default", { connection: redisURL })
+    mailerQueue = new Queue("mailer", { connection: redisURL })
     clock = sinon.useFakeTimers(Date.now())
   })
 
@@ -32,34 +35,38 @@ describe('BullMQ', () => {
     await mailerQueue.close()
   })
 
-  test('jobQueueLatency is unsupported', async () => {
-    await expect(jobQueueLatency()).rejects.toThrow(JobQueueLatencyUnsupportedError)
+  test("jobQueueLatency is unsupported", async () => {
+    await expect(jobQueueLatency()).rejects.toThrow(
+      JobQueueLatencyUnsupportedError,
+    )
   })
 
-  test('jobQueueSize missing queue raises error', async () => {
+  test("jobQueueSize missing queue raises error", async () => {
     await expect(jobQueueSize()).rejects.toThrow(MissingQueueError)
   })
 
-  test('jobQueueSize without jobs', async () => {
-    expect(await jobQueueSize('default', { connection: redisURL })).toBe(0)
+  test("jobQueueSize without jobs", async () => {
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
   })
 
-  test('jobQueueSize with jobs', async () => {
-    await defaultQueue.add('testJob', {})
-    await mailerQueue.add('testJob', {})
-    expect(await jobQueueSize('default', { connection: redisURL })).toBe(1)
-    expect(await jobQueueSize('default', 'mailer', { connection: redisURL })).toBe(2)
+  test("jobQueueSize with jobs", async () => {
+    await defaultQueue.add("testJob", {})
+    await mailerQueue.add("testJob", {})
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
+    expect(
+      await jobQueueSize("default", "mailer", { connection: redisURL }),
+    ).toBe(2)
   })
 
-  test('jobQueueSize with jobs scheduled in the past', async () => {
-    await defaultQueue.add('pastScheduledJob', {}, { delay: 15_000 })
-    await defaultQueue.add('pastScheduledJob', {}, { delay: 30_000 })
-    await defaultQueue.add('pastScheduledJob')
+  test("jobQueueSize with jobs scheduled in the past", async () => {
+    await defaultQueue.add("pastScheduledJob", {}, { delay: 15_000 })
+    await defaultQueue.add("pastScheduledJob", {}, { delay: 30_000 })
+    await defaultQueue.add("pastScheduledJob")
     clock.tick(1)
-    expect(await jobQueueSize('default', { connection: redisURL })).toBe(1)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
     clock.tick(15_000)
-    expect(await jobQueueSize('default', { conection: redisURL })).toBe(2)
+    expect(await jobQueueSize("default", { conection: redisURL })).toBe(2)
     clock.tick(15_000)
-    expect(await jobQueueSize('default', { connection: redisURL })).toBe(3)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(3)
   })
 })

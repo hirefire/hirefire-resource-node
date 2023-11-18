@@ -8,12 +8,12 @@ This gem streamlines the integration of HireFire with Node applications running 
 
 ### Supported Node Versions:
 
-|    | Node |
-|----|------|
-| ✅ | 16   |
-| ✅ | 17   |
-| ✅ | 18   |
-| ✅ | 19   |
+|     | Node |
+| --- | ---- |
+| ✅  | 16   |
+| ✅  | 17   |
+| ✅  | 18   |
+| ✅  | 19   |
 
 ---
 
@@ -21,11 +21,11 @@ This gem streamlines the integration of HireFire with Node applications running 
 
 HireFire comes with the following middleware integration:
 
-|    | Node Middleware |
-|----|-----------------|
-| ✅ | Express         |
-| ✅ | Connect         |
-| ✅ | Koa             |
+|     | Node Middleware |
+| --- | --------------- |
+| ✅  | Express         |
+| ✅  | Connect         |
+| ✅  | Koa             |
 
 This makes it compatible with a broad range of Node web frameworks, as many of them are built on top of Express, Connect or Koa.
 
@@ -36,8 +36,8 @@ This makes it compatible with a broad range of Node web frameworks, as many of t
 Some libraries lack the requisite structure to measure latency. If your preferred library isn't listed, or if you need further support, please contact us.
 
 | Node Worker Library | Job Queue Latency | Job Queue Size |
-|---------------------|:-----------------:|:--------------:|
-| BullMQ              | ❌                | ✅             |
+| ------------------- | :---------------: | :------------: |
+| BullMQ              |        ❌         |       ✅       |
 
 ---
 
@@ -54,23 +54,22 @@ npm install hirefire-resource
 2. Configure HireFire in your application and add the middleware:
 
 ```js
-const express = require('express');
-const HireFire = require('hirefire-resource')
-const HireFireMiddlewareExpress = require('hirefire-resource/middleware/express')
-const HireFireMacroBullMQ = require('hirefire-resource/macro/bullmq')
+const express = require("express")
+const HireFire = require("hirefire-resource")
+const HireFireMiddlewareExpress = require("hirefire-resource/middleware/express")
+const HireFireMacroBullMQ = require("hirefire-resource/macro/bullmq")
 
-HireFire.configure(config => {
+HireFire.configure((config) => {
   // To collect Request Queue Time metrics for autoscaling `web` dynos:
-  config.dyno('web');
+  config.dyno("web")
   // To collect Job Queue Size metrics for autoscaling `worker` dynos:
-  config.dyno('worker', async () => HireFireMacroBullMQ.jobQueueSize('default'));
-});
+  config.dyno("worker", async () => HireFireMacroBullMQ.jobQueueSize("default"))
+})
 
-const app = express();
+const app = express()
 // To add the middleware to collect the web and worker metrics:
 app.use(HireFireMiddlewareExpress)
 ```
-
 
 After completing these steps, deploy your application to Heroku. Then, [sign into HireFire] to complete your autoscaling setup by adding the web and worker dyno managers.
 

@@ -1,3 +1,3 @@
-const HireFire = require('./hirefire')
+const HireFire = require("./hirefire")
 
 module.exports = new HireFire()
