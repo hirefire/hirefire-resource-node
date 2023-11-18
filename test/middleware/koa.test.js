@@ -27,7 +27,7 @@ describe("Koa", () => {
   test("pass through without HIREFIRE_TOKEN", async () => {
     HireFire.configuration.dyno("web")
     HireFire.configuration.dyno("worker", () => 5)
-    const start = jest.spyOn(HireFire.configuration.web, "start")
+    const start = jest.spyOn(HireFire.configuration.web, "startDispatcher")
     const response = await request(app.callback())
       .get("/")
       .set("X-Request-Start", 1)
@@ -53,7 +53,7 @@ describe("Koa", () => {
     const requestStartTime = String(now - 1234)
     sinon.useFakeTimers({ now })
     HireFire.configuration.dyno("web")
-    const start = jest.spyOn(HireFire.configuration.web, "start")
+    const start = jest.spyOn(HireFire.configuration.web, "startDispatcher")
     const response = await request(app.callback())
       .get("/")
       .set("X-Request-Start", requestStartTime)

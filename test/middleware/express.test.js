@@ -25,7 +25,7 @@ describe("Express", () => {
   test("pass through without HIREFIRE_TOKEN", async () => {
     HireFire.configuration.dyno("web")
     HireFire.configuration.dyno("worker", () => 5)
-    const start = jest.spyOn(HireFire.configuration.web, "start")
+    const start = jest.spyOn(HireFire.configuration.web, "startDispatcher")
     const response = await request(app).get("/").set("X-Request-Start", 1)
     expect(response.status).toBe(200)
     expect(response.text).toBe("Hello")
@@ -47,7 +47,7 @@ describe("Express", () => {
     const requestStartTime = String(now - 1234)
     sinon.useFakeTimers({ now })
     HireFire.configuration.dyno("web")
-    const start = jest.spyOn(HireFire.configuration.web, "start")
+    const start = jest.spyOn(HireFire.configuration.web, "startDispatcher")
     const response = await request(app)
       .get("/")
       .set("X-Request-Start", requestStartTime)

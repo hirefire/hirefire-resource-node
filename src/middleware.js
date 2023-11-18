@@ -46,7 +46,7 @@ async function processRequestQueueTime(requestInfo) {
     HireFire.configuration.web &&
     requestInfo.requestStartTime
   ) {
-    await HireFire.configuration.web.start()
+    await HireFire.configuration.web.startDispatcher()
     await HireFire.configuration.web.addToBuffer(
       calculateRequestQueueTime(requestInfo),
     )

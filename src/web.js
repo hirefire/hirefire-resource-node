@@ -14,15 +14,7 @@ class Web {
     this.configuration = null
   }
 
-  get logger() {
-    if (this.configuration) {
-      return this.configuration.logger
-    } else {
-      return console
-    }
-  }
-
-  async start() {
+  async startDispatcher() {
     const release = await this.mutex.acquire()
 
     try {
@@ -35,12 +27,12 @@ class Web {
     this.logger.info("[HireFire] Starting web metrics dispatcher.")
 
     this.dispatcher = setInterval(
-      this.dispatch.bind(this),
+      this.dispatchBuffer.bind(this),
       Web.DISPATCH_INTERVAL * 1000,
     )
   }
 
-  async stop() {
+  async stopDispatcher() {
     const release = await this.mutex.acquire()
 
     try {
@@ -51,7 +43,7 @@ class Web {
       release()
     }
 
-    await this.flush()
+    await this.flushBuffer()
 
     this.logger.info("[HireFire] Web metrics dispatcher stopped.")
   }
@@ -68,7 +60,7 @@ class Web {
     }
   }
 
-  async flush() {
+  async flushBuffer() {
     const release = await this.mutex.acquire()
 
     try {
@@ -80,11 +72,11 @@ class Web {
     }
   }
 
-  async dispatch() {
+  async dispatchBuffer() {
     let buffer
 
     try {
-      buffer = await this.flush()
+      buffer = await this.flushBuffer()
       if (Object.keys(buffer).length === 0) return
       await this.submitBuffer(buffer)
     } catch (error) {
@@ -154,6 +146,14 @@ class Web {
       req.write(data)
       req.end()
     })
+  }
+
+  get logger() {
+    if (this.configuration) {
+      return this.configuration.logger
+    } else {
+      return console
+    }
   }
 }
 
