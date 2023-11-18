@@ -8,23 +8,23 @@ class Web {
   static BUFFER_TTL = 60
 
   constructor() {
-    this.buffer = {}
-    this.mutex = new Mutex()
-    this.running = false
+    this._buffer = {}
+    this._mutex = new Mutex()
+    this._dispatcherRunning = false
     this.configuration = null
   }
 
   async startDispatcher() {
-    const release = await this.mutex.acquire()
+    const release = await this._mutex.acquire()
 
     try {
-      if (this.running) return
-      this.running = true
+      if (this._dispatcherRunning) return
+      this._dispatcherRunning = true
     } finally {
       release()
     }
 
-    this.logger.info("[HireFire] Starting web metrics dispatcher.")
+    this._logger.info("[HireFire] Starting web metrics dispatcher.")
 
     this.dispatcher = setInterval(
       this.dispatchBuffer.bind(this),
@@ -33,11 +33,11 @@ class Web {
   }
 
   async stopDispatcher() {
-    const release = await this.mutex.acquire()
+    const release = await this._mutex.acquire()
 
     try {
-      if (!this.running) return
-      this.running = false
+      if (!this._dispatcherRunning) return
+      this._dispatcherRunning = false
       clearInterval(this.dispatcher)
     } finally {
       release()
@@ -45,27 +45,31 @@ class Web {
 
     await this.flushBuffer()
 
-    this.logger.info("[HireFire] Web metrics dispatcher stopped.")
+    this._logger.info("[HireFire] Web metrics dispatcher stopped.")
+  }
+
+  dispatcherRunning() {
+    return this._dispatcherRunning
   }
 
   async addToBuffer(value) {
-    const release = await this.mutex.acquire()
+    const release = await this._mutex.acquire()
 
     try {
       const timestamp = Math.floor(Date.now() / 1000)
-      this.buffer[timestamp] = this.buffer[timestamp] || []
-      this.buffer[timestamp].push(value)
+      this._buffer[timestamp] = this._buffer[timestamp] || []
+      this._buffer[timestamp].push(value)
     } finally {
       release()
     }
   }
 
   async flushBuffer() {
-    const release = await this.mutex.acquire()
+    const release = await this._mutex.acquire()
 
     try {
-      const currentBuffer = this.buffer
-      this.buffer = {}
+      const currentBuffer = this._buffer
+      this._buffer = {}
       return currentBuffer
     } finally {
       release()
@@ -81,21 +85,21 @@ class Web {
       await this.submitBuffer(buffer)
     } catch (error) {
       await this.repopulateBuffer(buffer)
-      this.logger.error(
+      this._logger.error(
         `[HireFire] Error while dispatching web metrics: ${error.message}`,
       )
     }
   }
 
   async repopulateBuffer(buffer) {
-    const release = await this.mutex.acquire()
+    const release = await this._mutex.acquire()
 
     try {
       const now = Math.floor(Date.now() / 1000)
       Object.entries(buffer).forEach(([timestamp, values]) => {
         if (parseInt(timestamp) >= now - Web.BUFFER_TTL) {
-          this.buffer[timestamp] = this.buffer[timestamp] || []
-          this.buffer[timestamp].push(...values)
+          this._buffer[timestamp] = this._buffer[timestamp] || []
+          this._buffer[timestamp].push(...values)
         }
       })
     } finally {
@@ -148,7 +152,7 @@ class Web {
     })
   }
 
-  get logger() {
+  get _logger() {
     if (this.configuration) {
       return this.configuration.logger
     } else {

@@ -9,8 +9,8 @@ describe("Web", () => {
 
   beforeEach(() => {
     web = new Web()
-    infoSpy = jest.spyOn(web.logger, "info").mockImplementation(() => {})
-    errorSpy = jest.spyOn(web.logger, "error").mockImplementation(() => {})
+    infoSpy = jest.spyOn(web._logger, "info").mockImplementation(() => {})
+    errorSpy = jest.spyOn(web._logger, "error").mockImplementation(() => {})
     process.env.HIREFIRE_TOKEN = "8ab101e2-51da-49bc-beba-111dec49a287"
   })
 
@@ -25,16 +25,16 @@ describe("Web", () => {
   })
 
   test("starts and stops correctly", async () => {
-    expect(web.running).toBeFalsy()
+    expect(web.dispatcherRunning()).toBeFalsy()
     await web.startDispatcher()
-    expect(web.running).toBeTruthy()
+    expect(web.dispatcherRunning()).toBeTruthy()
     expect(infoSpy).toHaveBeenCalledWith(
       "[HireFire] Starting web metrics dispatcher.",
     )
     web.addToBuffer(1)
     await web.stopDispatcher()
-    expect(web.running).toBeFalsy()
-    expect(web.buffer).toEqual({})
+    expect(web.dispatcherRunning()).toBeFalsy()
+    expect(web._buffer).toEqual({})
     expect(infoSpy).toHaveBeenCalledWith(
       "[HireFire] Web metrics dispatcher stopped.",
     )

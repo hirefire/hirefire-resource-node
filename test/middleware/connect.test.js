@@ -29,7 +29,7 @@ describe("Connect", () => {
     const response = await request(app).get("/").set("X-Request-Start", 1)
     expect(response.status).toBe(200)
     expect(response.text).toBe("Hello")
-    expect(HireFire.configuration.web.buffer).toEqual({})
+    expect(HireFire.configuration.web._buffer).toEqual({})
     expect(start).not.toHaveBeenCalled()
   })
 
@@ -53,7 +53,7 @@ describe("Connect", () => {
       .set("X-Request-Start", requestStartTime)
     expect(response.status).toBe(200)
     expect(response.text).toBe("Hello")
-    expect(HireFire.configuration.web.buffer).toEqual({
+    expect(HireFire.configuration.web._buffer).toEqual({
       [nowTimestamp]: [1234],
     })
     expect(start).toHaveBeenCalled()
