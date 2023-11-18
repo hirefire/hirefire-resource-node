@@ -5,7 +5,7 @@ class Configuration {
   constructor() {
     this.web = null
     this.workers = []
-    this.logger = console // required interface: info, warn, and error
+    this.logger = console
   }
 
   dyno(name, fn) {
