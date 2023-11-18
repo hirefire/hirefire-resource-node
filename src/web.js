@@ -1,6 +1,7 @@
 const https = require("https")
 const { Mutex } = require("async-mutex")
 const pkg = require("../package.json")
+
 class Web {
   static DISPATCH_INTERVAL = 5
   static DISPATCH_TIMEOUT = 5

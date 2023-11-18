@@ -12,7 +12,6 @@ describe("Worker", () => {
   })
 
   test("invalid dyno name error", () => {
-    console.log(InvalidDynoNameError)
     expect(() => new Worker("invalid name")).toThrow(InvalidDynoNameError)
   })
 

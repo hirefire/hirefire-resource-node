@@ -1,4 +1,5 @@
 const { Configuration } = require("./configuration")
+
 class HireFire {
   constructor() {
     this.configuration = new Configuration()
