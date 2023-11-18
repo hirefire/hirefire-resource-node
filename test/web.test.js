@@ -1,22 +1,22 @@
-const { Web } = require("../src/web")
+const Web = require("../src/web")
 const nock = require("nock")
 const pkg = require("../package.json")
 
 describe("Web", () => {
   let web
   let infoSpy
-  let warnSpy
+  let errorSpy
 
   beforeEach(() => {
     web = new Web()
     infoSpy = jest.spyOn(web.logger, "info").mockImplementation(() => {})
-    warnSpy = jest.spyOn(web.logger, "warn").mockImplementation(() => {})
+    errorSpy = jest.spyOn(web.logger, "error").mockImplementation(() => {})
     process.env.HIREFIRE_TOKEN = "8ab101e2-51da-49bc-beba-111dec49a287"
   })
 
   afterEach(() => {
     infoSpy.mockRestore()
-    warnSpy.mockRestore()
+    errorSpy.mockRestore()
     nock.abortPendingRequests()
     nock.cleanAll()
     jest.clearAllMocks()
@@ -61,14 +61,14 @@ describe("Web", () => {
       .reply(200)
     await web.addToBuffer(5)
     await web.dispatch()
-    expect(warnSpy).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   test("dispatch post with unexpected response code", async () => {
     nock("https://logdrain.hirefire.io").post("/").reply(404)
     await web.addToBuffer(5)
     await web.dispatch()
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Unexpected response code 404."),
     )
   })
@@ -79,7 +79,7 @@ describe("Web", () => {
       .replyWithError("Some generic error")
     await web.addToBuffer(8)
     await web.dispatch()
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Some generic error"),
     )
   })
@@ -88,7 +88,7 @@ describe("Web", () => {
     nock("https://logdrain.hirefire.io").post("/").reply(500)
     await web.addToBuffer(4)
     await web.dispatch()
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Server responded with 500 status."),
     )
   })
@@ -100,7 +100,7 @@ describe("Web", () => {
       .reply(200, "")
     await web.addToBuffer(5)
     await web.dispatch()
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Request timed out."),
     )
   })
@@ -112,7 +112,7 @@ describe("Web", () => {
     })
     await web.addToBuffer(6)
     await web.dispatch()
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Network error occurred"),
     )
   })

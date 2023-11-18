@@ -3,7 +3,7 @@ const connect = require("connect")
 const sinon = require("sinon")
 const HireFireMiddlewareConnect = require("../../src/middleware/connect")
 const HireFire = require("../../src")
-const { Configuration } = require("../../src/configuration")
+const Configuration = require("../../src/configuration")
 const pkg = require("../../package.json")
 
 describe("Connect", () => {

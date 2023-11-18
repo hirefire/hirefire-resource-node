@@ -1,4 +1,4 @@
-const { Configuration } = require("./configuration")
+const Configuration = require("./configuration")
 
 class HireFire {
   constructor() {

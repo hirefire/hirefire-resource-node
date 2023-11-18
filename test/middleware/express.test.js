@@ -3,7 +3,7 @@ const express = require("express")
 const sinon = require("sinon")
 const HireFireMiddlewareExpress = require("../../src/middleware/express")
 const HireFire = require("../../src")
-const { Configuration } = require("../../src/configuration")
+const Configuration = require("../../src/configuration")
 const pkg = require("../../package.json")
 
 describe("Express", () => {

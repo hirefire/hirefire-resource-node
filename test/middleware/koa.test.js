@@ -3,7 +3,7 @@ const Koa = require("koa")
 const sinon = require("sinon")
 const HireFireMiddlewareKoa = require("../../src/middleware/koa")
 const HireFire = require("../../src")
-const { Configuration } = require("../../src/configuration")
+const Configuration = require("../../src/configuration")
 const pkg = require("../../package.json")
 
 describe("Koa", () => {

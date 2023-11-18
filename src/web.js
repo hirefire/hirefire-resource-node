@@ -1,7 +1,6 @@
 const https = require("https")
 const { Mutex } = require("async-mutex")
 const pkg = require("../package.json")
-const HireFire = require("./hirefire")
 
 class Web {
   static DISPATCH_INTERVAL = 5
@@ -12,10 +11,15 @@ class Web {
     this.buffer = {}
     this.mutex = new Mutex()
     this.running = false
+    this.configuration = null
   }
 
   get logger() {
-    return HireFire.configuration?.logger || console
+    if (this.configuration) {
+      return this.configuration.logger
+    } else {
+      return console
+    }
   }
 
   async start() {
@@ -24,10 +28,11 @@ class Web {
     try {
       if (this.running) return
       this.running = true
-      this.logger.info("[HireFire] Starting web metrics dispatcher.")
     } finally {
       release()
     }
+
+    this.logger.info("[HireFire] Starting web metrics dispatcher.")
 
     this.dispatcher = setInterval(
       this.dispatch.bind(this),
@@ -42,12 +47,13 @@ class Web {
       if (!this.running) return
       this.running = false
       clearInterval(this.dispatcher)
-      this.logger.info("[HireFire] Web metrics dispatcher stopped.")
     } finally {
       release()
     }
 
     await this.flush()
+
+    this.logger.info("[HireFire] Web metrics dispatcher stopped.")
   }
 
   async addToBuffer(value) {
@@ -83,7 +89,7 @@ class Web {
       await this.submitBuffer(buffer)
     } catch (error) {
       await this.repopulateBuffer(buffer)
-      this.logger.warn(
+      this.logger.error(
         `[HireFire] Error while dispatching web metrics: ${error.message}`,
       )
     }
@@ -151,4 +157,4 @@ class Web {
   }
 }
 
-module.exports = { Web }
+module.exports = Web

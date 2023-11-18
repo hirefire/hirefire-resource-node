@@ -1,5 +1,5 @@
 const HireFire = require("../src/hirefire")
-const { Configuration } = require("../src/configuration")
+const Configuration = require("../src/configuration")
 
 describe("HireFire", () => {
   test("configure yields configuration", () => {

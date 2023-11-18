@@ -1,4 +1,4 @@
-const { Web } = require("./web")
+const Web = require("./web")
 const { Worker } = require("./worker")
 
 class Configuration {
@@ -11,10 +11,11 @@ class Configuration {
   dyno(name, fn) {
     if (name === "web") {
       this.web = new Web()
+      this.web.configuration = this
     } else {
       this.workers.push(new Worker(name, fn))
     }
   }
 }
 
-module.exports = { Configuration }
+module.exports = Configuration

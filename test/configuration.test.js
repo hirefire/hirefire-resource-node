@@ -1,5 +1,5 @@
-const { Configuration } = require("../src/configuration")
-const { Web } = require("../src/web")
+const Configuration = require("../src/configuration")
+const Web = require("../src/web")
 
 describe("Configuration", () => {
   let configuration
