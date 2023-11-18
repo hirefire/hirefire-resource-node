@@ -1,6 +1,7 @@
 const https = require("https")
 const { Mutex } = require("async-mutex")
 const pkg = require("../package.json")
+const HireFire = require("./hirefire")
 
 class Web {
   static DISPATCH_INTERVAL = 5
@@ -8,13 +9,15 @@ class Web {
   static BUFFER_TTL = 60
 
   constructor() {
-    /** @private */
     this.buffer = {}
-
     this.mutex = new Mutex()
     this.running = false
-    this.logger = console
   }
+
+  get logger() {
+    return HireFire.configuration?.logger || console
+  }
+
   async start() {
     const release = await this.mutex.acquire()
 
@@ -46,6 +49,7 @@ class Web {
 
     await this.flush()
   }
+
   async addToBuffer(value) {
     const release = await this.mutex.acquire()
 
