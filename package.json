@@ -26,8 +26,8 @@
     "url": "git+https://github.com/hirefire/hirefire-resource-node.git"
   },
   "scripts": {
-    "check": "prettier --check .",
-    "format": "prettier --write .",
+    "check": "prettier --check --no-semi .",
+    "format": "prettier --write --no-semi .",
     "test": "jest --silent"
   },
   "engines": {
