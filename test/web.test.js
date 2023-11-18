@@ -1,6 +1,6 @@
 const Web = require("../src/web")
 const nock = require("nock")
-const pkg = require("../package.json")
+const VERSION = require("../src/version")
 
 describe("Web", () => {
   let web
@@ -56,7 +56,7 @@ describe("Web", () => {
 
   test("successful dispatch post", async () => {
     nock("https://logdrain.hirefire.io")
-      .matchHeader("HireFire-Resource", `Node-${pkg.version}`)
+      .matchHeader("HireFire-Resource", `Node-${VERSION}`)
       .post("/")
       .reply(200)
     await web.addToBuffer(5)

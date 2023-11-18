@@ -1,6 +1,6 @@
 const https = require("https")
 const { Mutex } = require("async-mutex")
-const pkg = require("../package.json")
+const VERSION = require("../src/version")
 
 class Web {
   static DISPATCH_INTERVAL = 5
@@ -113,7 +113,7 @@ class Web {
       headers: {
         "Content-Type": "application/json",
         "HireFire-Token": process.env.HIREFIRE_TOKEN,
-        "HireFire-Resource": `Node-${pkg.version}`,
+        "HireFire-Resource": `Node-${VERSION}`,
         "Content-Length": data.length,
       },
     }

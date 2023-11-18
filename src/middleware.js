@@ -1,5 +1,5 @@
 const HireFire = require(".")
-const pkg = require("../package.json")
+const VERSION = require("./version")
 
 class RequestInfo {
   constructor(path, requestStartTime = null) {
@@ -19,7 +19,7 @@ async function request(requestInfo) {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "must-revalidate, private, max-age=0",
-        "HireFire-Resource": `Node-${pkg.version}`,
+        "HireFire-Resource": `Node-${VERSION}`,
       },
       body: await Promise.all(
         HireFire.configuration.workers.map(async (worker) => ({
