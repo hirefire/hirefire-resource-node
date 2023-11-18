@@ -46,10 +46,7 @@ class Web {
       release()
     }
 
-    this.dispatcher = setInterval(
-      () => this.dispatch(),
-      Web.DISPATCH_INTERVAL * 1000
-    )
+    this.dispatcher = setInterval(this.dispatch.bind(this), Web.DISPATCH_INTERVAL * 1000)
   }
 
   /**
