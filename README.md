@@ -64,6 +64,8 @@ HireFire.configure((config) => {
   config.dyno("web")
   // To collect Job Queue Size metrics for autoscaling `worker` dynos:
   config.dyno("worker", async () => HireFireMacroBullMQ.jobQueueSize("default"))
+  // To use the console or other logger
+  config.logger = console
 })
 
 const app = express()
