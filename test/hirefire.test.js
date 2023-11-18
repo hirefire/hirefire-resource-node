@@ -1,5 +1,3 @@
-/* global describe, expect, test */
-
 const HireFire = require("../src/hirefire")
 const { Configuration } = require("../src/configuration")
 

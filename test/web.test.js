@@ -1,5 +1,3 @@
-/* global describe, test, expect, beforeEach, afterEach, jest */
-
 const { Web } = require("../src/web")
 const nock = require("nock")
 const pkg = require("../package.json")

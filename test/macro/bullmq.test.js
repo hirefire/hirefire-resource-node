@@ -1,5 +1,3 @@
-/* global describe, test, expect, beforeAll, afterAll, beforeEach, afterEach */
-
 const sinon = require("sinon")
 const { Queue } = require("bullmq")
 const { jobQueueLatency, jobQueueSize } = require("../../src/macro/bullmq")

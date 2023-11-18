@@ -1,5 +1,3 @@
-/* global describe, test, expect, beforeEach, afterEach, jest */
-
 const request = require("supertest")
 const Koa = require("koa")
 const sinon = require("sinon")

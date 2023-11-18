@@ -1,5 +1,3 @@
-/* global describe, beforeEach, expect, test */
-
 const { Configuration } = require("../src/configuration")
 const { Web } = require("../src/web")
 
