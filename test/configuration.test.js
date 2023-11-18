@@ -1,6 +1,6 @@
 /* global describe, beforeEach, expect, test */
 
-const { Configuration, InvalidDynoNameError, MissingDynoFnError } = require('../src/configuration')
+const { Configuration } = require('../src/configuration')
 const { Web } = require('../src/web')
 
 describe('Configuration', () => {
@@ -39,17 +39,5 @@ describe('Configuration', () => {
     expect(configuration.workers.length).toBe(1)
     expect(configuration.workers[0].name).toBe('worker')
     expect(configuration.workers[0].fn()).toBe(2)
-  })
-
-  test('dyno raises error for invalid dyno name', () => {
-    expect(() => {
-      configuration.dyno('_invalid')
-    }).toThrow(InvalidDynoNameError)
-  })
-
-  test('dyno raises error for missing dyno function', () => {
-    expect(() => {
-      configuration.dyno('worker')
-    }).toThrow(MissingDynoFnError)
   })
 })

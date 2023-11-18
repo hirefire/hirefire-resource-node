@@ -2,38 +2,6 @@ const { Web } = require('./web')
 const { Worker } = require('./worker')
 
 /**
- * Custom error indicating an invalid dyno name. This error is thrown when a dyno name does not
- * comply with the dyno naming standards on Heroku.
- */
-class InvalidDynoNameError extends Error {
-  /**
-   * Constructs an InvalidDynoNameError instance with a specific error message.
-   *
-   * @param {string} message - Describes the issue with the invalid dyno name.
-   */
-  constructor (message) {
-    super(message)
-    this.name = 'InvalidDynoNameError'
-  }
-}
-
-/**
- * Custom error indicating the absence of a required function in worker dyno configuration. This
- * error is thrown when the function necessary for measuring job queue metrics is missing.
- */
-class MissingDynoFnError extends Error {
-  /**
-   * Constructs a MissingDynoFnError instance with a specific error message.
-   *
-   * @param {string} message - Describes the missing function issue in the worker dyno configuration.
-   */
-  constructor (message) {
-    super(message)
-    this.name = 'MissingDynoFnError'
-  }
-}
-
-/**
  * Contains the configuration for the HireFire integration.
  *
  * @property {Web|null} web - Manages metrics for the web dyno. Null if not configured.
@@ -68,22 +36,10 @@ class Configuration {
   dyno (name, fn) {
     if (name === 'web') {
       this.web = new Web()
-    } else if (/^[a-zA-Z][a-zA-Z0-9_]{0,29}$/.test(name)) {
-      if (fn) {
-        this.workers.push(new Worker(name, fn))
-      } else {
-        throw new MissingDynoFnError(
-          `Missing function for Configuration#dyno(${name}). ` +
-          'A function is required to return the job queue metric for worker dynos.'
-        )
-      }
     } else {
-      throw new InvalidDynoNameError(
-        `Invalid dyno name for Configuration#dyno(${name}). ` +
-        'Name must adhere to Procfile naming conventions.'
-      )
+      this.workers.push(new Worker(name, fn))
     }
   }
 }
 
-module.exports = { Configuration, InvalidDynoNameError, MissingDynoFnError }
+module.exports = { Configuration }
