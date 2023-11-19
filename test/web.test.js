@@ -1,16 +1,19 @@
 const Web = require("../src/web")
+const Configuration = require("../src/configuration")
 const nock = require("nock")
 const VERSION = require("../src/version")
 
 describe("Web", () => {
   let web
+  let configuration
   let infoSpy
   let errorSpy
 
   beforeEach(() => {
-    web = new Web()
-    infoSpy = jest.spyOn(web._logger, "info").mockImplementation(() => {})
-    errorSpy = jest.spyOn(web._logger, "error").mockImplementation(() => {})
+    configuration = new Configuration()
+    web = new Web(configuration)
+    infoSpy = jest.spyOn(configuration.logger, "info").mockImplementation(() => {})
+    errorSpy = jest.spyOn(configuration.logger, "error").mockImplementation(() => {})
     process.env.HIREFIRE_TOKEN = "8ab101e2-51da-49bc-beba-111dec49a287"
   })
 
@@ -42,15 +45,15 @@ describe("Web", () => {
 
   test("buffer addition", async () => {
     await web.addToBuffer(1)
-    const bufferContents = await web.flushBuffer()
+    const bufferContents = await web._flushBuffer()
     expect(Object.keys(bufferContents).length).toBeGreaterThan(0)
     expect(bufferContents[Object.keys(bufferContents)[0]]).toEqual([1])
   })
 
   test("buffer flushing", async () => {
     await web.addToBuffer(2)
-    await web.flushBuffer()
-    const bufferContentsAfterFlush = await web.flushBuffer()
+    await web._flushBuffer()
+    const bufferContentsAfterFlush = await web._flushBuffer()
     expect(bufferContentsAfterFlush).toEqual({})
   })
 
@@ -60,14 +63,14 @@ describe("Web", () => {
       .post("/")
       .reply(200)
     await web.addToBuffer(5)
-    await web.dispatchBuffer()
+    await web._dispatchBuffer()
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
   test("dispatch post with unexpected response code", async () => {
     nock("https://logdrain.hirefire.io").post("/").reply(404)
     await web.addToBuffer(5)
-    await web.dispatchBuffer()
+    await web._dispatchBuffer()
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Unexpected response code 404."),
     )
@@ -78,7 +81,7 @@ describe("Web", () => {
       .post("/")
       .replyWithError("Some generic error")
     await web.addToBuffer(8)
-    await web.dispatchBuffer()
+    await web._dispatchBuffer()
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Some generic error"),
     )
@@ -87,7 +90,7 @@ describe("Web", () => {
   test("dispatch post with server error", async () => {
     nock("https://logdrain.hirefire.io").post("/").reply(500)
     await web.addToBuffer(4)
-    await web.dispatchBuffer()
+    await web._dispatchBuffer()
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Server responded with 500 status."),
     )
@@ -99,7 +102,7 @@ describe("Web", () => {
       .delayConnection(6000)
       .reply(200, "")
     await web.addToBuffer(5)
-    await web.dispatchBuffer()
+    await web._dispatchBuffer()
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Request timed out."),
     )
@@ -111,7 +114,7 @@ describe("Web", () => {
       code: "ENETUNREACH",
     })
     await web.addToBuffer(6)
-    await web.dispatchBuffer()
+    await web._dispatchBuffer()
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Network error occurred"),
     )
@@ -120,8 +123,8 @@ describe("Web", () => {
   test("buffer repopulation after dispatch failure", async () => {
     nock("https://logdrain.hirefire.io").post("/").reply(500)
     await web.addToBuffer(7)
-    await web.dispatchBuffer()
-    const bufferContentsAfterFail = await web.flushBuffer()
+    await web._dispatchBuffer()
+    const bufferContentsAfterFail = await web._flushBuffer()
     expect(
       bufferContentsAfterFail[Object.keys(bufferContentsAfterFail)[0]],
     ).toEqual([7])
@@ -136,8 +139,8 @@ describe("Web", () => {
     Date.now.mockImplementation(() => expired)
     await web.addToBuffer(8)
     Date.now.mockImplementation(() => now)
-    await web.dispatchBuffer()
-    const bufferContentsAfterFail = await web.flushBuffer()
+    await web._dispatchBuffer()
+    const bufferContentsAfterFail = await web._flushBuffer()
     const timestamp = Math.floor(now / 1000)
     expect(bufferContentsAfterFail).toEqual({ [timestamp]: [7] })
   })

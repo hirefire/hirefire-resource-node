@@ -10,8 +10,7 @@ class Configuration {
 
   dyno(name, fn) {
     if (name === "web") {
-      this.web = new Web()
-      this.web.configuration = this
+      this.web = new Web(this)
     } else {
       this.workers.push(new Worker(name, fn))
     }
