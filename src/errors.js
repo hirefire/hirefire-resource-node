@@ -1,6 +1,6 @@
 class MissingQueueError extends Error {
   constructor() {
-    super("No queues were provided.")
+    super("No queue was specified. Please specify at least one queue.")
     this.name = "MissingQueueError"
   }
 }
