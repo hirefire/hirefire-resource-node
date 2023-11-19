@@ -8,7 +8,7 @@ describe("Worker", () => {
   test("setup and methods", () => {
     const worker = new Worker("worker", () => 1 + 1)
     expect(worker.name).toBe("worker")
-    expect(worker.call()).resolves.toBe(2)
+    expect(worker.value()).resolves.toBe(2)
   })
 
   test("invalid dyno name error", () => {

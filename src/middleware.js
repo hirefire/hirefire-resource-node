@@ -24,7 +24,7 @@ async function request(requestInfo) {
       body: await Promise.all(
         HireFire.configuration.workers.map(async (worker) => ({
           name: worker.name,
-          value: await worker.call(),
+          value: await worker.value(),
         })),
       ),
     }

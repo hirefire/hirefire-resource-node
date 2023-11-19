@@ -21,7 +21,7 @@ class Worker {
     this.fn = fn
   }
 
-  async call() {
+  async value() {
     return this.fn()
   }
 
