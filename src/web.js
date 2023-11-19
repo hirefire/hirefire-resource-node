@@ -18,7 +18,7 @@ class Web {
     const release = await this._mutex.acquire()
 
     try {
-      if (this._dispatcherRunning) return
+      if (this._dispatcherRunning) return false
       this._dispatcherRunning = true
     } finally {
       release()
@@ -30,13 +30,15 @@ class Web {
       this._dispatchBuffer.bind(this),
       Web.DISPATCH_INTERVAL * 1000,
     )
+
+    return true
   }
 
   async stopDispatcher() {
     const release = await this._mutex.acquire()
 
     try {
-      if (!this._dispatcherRunning) return
+      if (!this._dispatcherRunning) return false
       this._dispatcherRunning = false
       clearInterval(this.dispatcher)
     } finally {
@@ -46,6 +48,8 @@ class Web {
     await this._flushBuffer()
 
     this._logger.info("[HireFire] Web metrics dispatcher stopped.")
+
+    return true
   }
 
   dispatcherRunning() {

@@ -28,7 +28,8 @@
   "scripts": {
     "check": "prettier --check --no-semi .",
     "format": "prettier --write --no-semi .",
-    "test": "jest --silent"
+    "test": "jest --silent",
+    "test:coverage": "jest --silent --coverage --coverageReporters=html"
   },
   "engines": {
     "node": ">=16.0.0 <22.0.0"

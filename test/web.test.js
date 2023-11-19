@@ -29,14 +29,16 @@ describe("Web", () => {
 
   test("starts and stops correctly", async () => {
     expect(web.dispatcherRunning()).toBeFalsy()
-    await web.startDispatcher()
+    expect(await web.startDispatcher()).toBeTruthy()
     expect(web.dispatcherRunning()).toBeTruthy()
+    expect(await web.startDispatcher()).toBeFalsy()
     expect(infoSpy).toHaveBeenCalledWith(
       "[HireFire] Starting web metrics dispatcher.",
     )
     web.addToBuffer(1)
-    await web.stopDispatcher()
+    expect(await web.stopDispatcher()).toBeTruthy()
     expect(web.dispatcherRunning()).toBeFalsy()
+    expect(await web.stopDispatcher()).toBeFalsy()
     expect(web._buffer).toEqual({})
     expect(infoSpy).toHaveBeenCalledWith(
       "[HireFire] Web metrics dispatcher stopped.",
@@ -107,6 +109,16 @@ describe("Web", () => {
       expect.stringContaining("Request timed out."),
     )
   })
+
+  test("dispatch post with ETIMEDOUT error", async () => {
+    nock("https://logdrain.hirefire.io").post("/")
+      .replyWithError({ code: "ETIMEDOUT" })
+    await web.addToBuffer(9);
+    await web._dispatchBuffer();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Request timed out.")
+    );
+  });
 
   test("dispatch post with network error", async () => {
     nock("https://logdrain.hirefire.io").post("/").replyWithError({
