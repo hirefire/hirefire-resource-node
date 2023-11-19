@@ -26,10 +26,9 @@
     "url": "git+https://github.com/hirefire/hirefire-resource-node.git"
   },
   "scripts": {
+    "test": "jest --silent --coverage --coverageReporters=html",
     "check": "prettier --check --no-semi .",
-    "format": "prettier --write --no-semi .",
-    "test": "jest --silent",
-    "test:coverage": "jest --silent --coverage --coverageReporters=html"
+    "format": "prettier --write --no-semi ."
   },
   "engines": {
     "node": ">=16.0.0 <22.0.0"
