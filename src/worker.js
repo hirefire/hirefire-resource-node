@@ -18,11 +18,11 @@ class Worker {
   constructor(name, fn) {
     this._validate(name, fn)
     this.name = name
-    this.fn = fn
+    this._fn = fn
   }
 
   async value() {
-    return this.fn()
+    return this._fn()
   }
 
   _validate(name, fn) {

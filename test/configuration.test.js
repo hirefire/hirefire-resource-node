@@ -31,11 +31,11 @@ describe("Configuration", () => {
     expect(configuration.web).toBeInstanceOf(Web)
   })
 
-  test("dyno adds function configuration to workers", () => {
-    const workerFn = () => 1 + 1
+  test("dyno adds function configuration to workers", async () => {
+    const workerFn = async () => 1 + 1
     configuration.dyno("worker", workerFn)
     expect(configuration.workers.length).toBe(1)
     expect(configuration.workers[0].name).toBe("worker")
-    expect(configuration.workers[0].fn()).toBe(2)
+    expect(await configuration.workers[0].value()).toBe(2)
   })
 })
