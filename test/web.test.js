@@ -12,8 +12,12 @@ describe("Web", () => {
   beforeEach(() => {
     configuration = new Configuration()
     web = new Web(configuration)
-    infoSpy = jest.spyOn(configuration.logger, "info").mockImplementation(() => {})
-    errorSpy = jest.spyOn(configuration.logger, "error").mockImplementation(() => {})
+    infoSpy = jest
+      .spyOn(configuration.logger, "info")
+      .mockImplementation(() => {})
+    errorSpy = jest
+      .spyOn(configuration.logger, "error")
+      .mockImplementation(() => {})
     process.env.HIREFIRE_TOKEN = "8ab101e2-51da-49bc-beba-111dec49a287"
   })
 
@@ -111,14 +115,15 @@ describe("Web", () => {
   })
 
   test("dispatch with ETIMEDOUT error", async () => {
-    nock("https://logdrain.hirefire.io").post("/")
+    nock("https://logdrain.hirefire.io")
+      .post("/")
       .replyWithError({ code: "ETIMEDOUT" })
-    await web.addToBuffer(9);
-    await web._dispatchBuffer();
+    await web.addToBuffer(9)
+    await web._dispatchBuffer()
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Request timed out.")
-    );
-  });
+      expect.stringContaining("Request timed out."),
+    )
+  })
 
   test("dispatch with network error", async () => {
     nock("https://logdrain.hirefire.io").post("/").replyWithError({
