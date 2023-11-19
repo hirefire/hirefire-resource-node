@@ -69,7 +69,7 @@ describe("Web", () => {
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
-  test("dispatch post with unexpected response code", async () => {
+  test("dispatch with unexpected response code", async () => {
     nock("https://logdrain.hirefire.io").post("/").reply(404)
     await web.addToBuffer(5)
     await web._dispatchBuffer()
@@ -78,7 +78,7 @@ describe("Web", () => {
     )
   })
 
-  test("dispatch post with generic exception", async () => {
+  test("dispatch with generic exception", async () => {
     nock("https://logdrain.hirefire.io")
       .post("/")
       .replyWithError("Some generic error")
@@ -89,7 +89,7 @@ describe("Web", () => {
     )
   })
 
-  test("dispatch post with server error", async () => {
+  test("dispatch with server error", async () => {
     nock("https://logdrain.hirefire.io").post("/").reply(500)
     await web.addToBuffer(4)
     await web._dispatchBuffer()
@@ -98,7 +98,7 @@ describe("Web", () => {
     )
   })
 
-  test("dispatch post with timeout", async () => {
+  test("dispatch with timeout", async () => {
     nock("https://logdrain.hirefire.io")
       .post("/")
       .delayConnection(6000)
@@ -110,7 +110,7 @@ describe("Web", () => {
     )
   })
 
-  test("dispatch post with ETIMEDOUT error", async () => {
+  test("dispatch with ETIMEDOUT error", async () => {
     nock("https://logdrain.hirefire.io").post("/")
       .replyWithError({ code: "ETIMEDOUT" })
     await web.addToBuffer(9);
@@ -120,7 +120,7 @@ describe("Web", () => {
     );
   });
 
-  test("dispatch post with network error", async () => {
+  test("dispatch with network error", async () => {
     nock("https://logdrain.hirefire.io").post("/").replyWithError({
       message: "Network error occurred",
       code: "ENETUNREACH",
