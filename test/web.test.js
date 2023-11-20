@@ -154,17 +154,14 @@ describe("Web", () => {
     jest.spyOn(Date, "now").mockImplementation(() => timestamp1)
     await web.addToBuffer(5)
     expect(web._buffer).toEqual({ [timestamp1Key]: [5] })
-
     const timestamp2 = new Date(2000, 0, 1, 0, 0, 30).getTime()
     const timestamp2Key = Math.floor(timestamp2 / 1000)
     Date.now.mockImplementation(() => timestamp2)
     await web.addToBuffer(10)
     expect(web._buffer).toEqual({ [timestamp1Key]: [5], [timestamp2Key]: [10] })
-
     Date.now.mockImplementation(() => new Date(2000, 0, 1, 0, 1, 0).getTime())
     await web._dispatchBuffer()
     expect(web._buffer).toEqual({ [timestamp1Key]: [5], [timestamp2Key]: [10] })
-
     Date.now.mockImplementation(() => new Date(2000, 0, 1, 0, 1, 1).getTime())
     await web._dispatchBuffer()
     expect(web._buffer).toEqual({ [timestamp2Key]: [10] })
