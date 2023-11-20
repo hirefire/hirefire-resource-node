@@ -3,15 +3,14 @@ const { Mutex } = require("async-mutex")
 const VERSION = require("../src/version")
 
 class Web {
-  static DISPATCH_INTERVAL = 5
-  static DISPATCH_TIMEOUT = 5
-  static BUFFER_TTL = 60
-
   constructor(configuration) {
     this._buffer = {}
     this._mutex = new Mutex()
     this._dispatcherRunning = false
     this._configuration = configuration
+    this._dispatchInterval = 5
+    this._dispatchTimeout = 5
+    this._bufferTTL = 60
   }
 
   async startDispatcher() {
@@ -28,7 +27,7 @@ class Web {
 
     this.dispatcher = setInterval(
       this._dispatchBuffer.bind(this),
-      Web.DISPATCH_INTERVAL * 1000,
+      this._dispatchInterval * 1000,
     )
 
     return true
@@ -101,7 +100,7 @@ class Web {
     try {
       const now = Math.floor(Date.now() / 1000)
       Object.entries(buffer).forEach(([timestamp, requestQueueTimes]) => {
-        if (parseInt(timestamp) >= now - Web.BUFFER_TTL) {
+        if (parseInt(timestamp) >= now - this._bufferTTL) {
           this._buffer[timestamp] = this._buffer[timestamp] || []
           this._buffer[timestamp].push(...requestQueueTimes)
         }
@@ -129,6 +128,21 @@ class Web {
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
         if (res.statusCode === 200) {
+          if (res.headers["hirefire-resource-dispatcher-interval"]) {
+            this._dispatchInterval = parseInt(
+              res.headers["hirefire-resource-dispatcher-interval"],
+            )
+          }
+          if (res.headers["hirefire-resource-dispatcher-timeout"]) {
+            this._dispatchTimeout = parseInt(
+              res.headers["hirefire-resource-dispatcher-timeout"],
+            )
+          }
+          if (res.headers["hirefire-resource-buffer-ttl"]) {
+            this._bufferTTL = parseInt(
+              res.headers["hirefire-resource-buffer-ttl"],
+            )
+          }
           resolve()
         } else if (res.statusCode >= 500) {
           reject(new Error(`Server responded with ${res.statusCode} status.`))
@@ -146,11 +160,11 @@ class Web {
       })
 
       req.on("timeout", () => {
-        req.abort()
+        req.destroy()
         reject(new Error("Request timed out."))
       })
 
-      req.setTimeout(Web.DISPATCH_TIMEOUT * 1000)
+      req.setTimeout(this._dispatchTimeout * 1000)
       req.write(data)
       req.end()
     })

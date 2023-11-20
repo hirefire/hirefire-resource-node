@@ -149,16 +149,43 @@ describe("Web", () => {
 
   test("buffer TTL discards old entries", async () => {
     nock("https://logdrain.hirefire.io").post("/").reply(500)
-    const now = Date.now()
-    const expired = now - (Web.BUFFER_TTL + 10) * 1000
-    jest.spyOn(Date, "now").mockImplementation(() => now)
-    await web.addToBuffer(7)
-    Date.now.mockImplementation(() => expired)
-    await web.addToBuffer(8)
-    Date.now.mockImplementation(() => now)
+    const timestamp1 = new Date(2000, 0, 1, 0, 0, 0).getTime()
+    const timestamp1Key = Math.floor(timestamp1 / 1000)
+    jest.spyOn(Date, "now").mockImplementation(() => timestamp1)
+    await web.addToBuffer(5)
+    expect(web._buffer).toEqual({ [timestamp1Key]: [5] })
+
+    const timestamp2 = new Date(2000, 0, 1, 0, 0, 30).getTime()
+    const timestamp2Key = Math.floor(timestamp2 / 1000)
+    Date.now.mockImplementation(() => timestamp2)
+    await web.addToBuffer(10)
+    expect(web._buffer).toEqual({ [timestamp1Key]: [5], [timestamp2Key]: [10] })
+
+    Date.now.mockImplementation(() => new Date(2000, 0, 1, 0, 1, 0).getTime())
     await web._dispatchBuffer()
-    const bufferContentsAfterFail = await web._flushBuffer()
-    const timestamp = Math.floor(now / 1000)
-    expect(bufferContentsAfterFail).toEqual({ [timestamp]: [7] })
+    expect(web._buffer).toEqual({ [timestamp1Key]: [5], [timestamp2Key]: [10] })
+
+    Date.now.mockImplementation(() => new Date(2000, 0, 1, 0, 1, 1).getTime())
+    await web._dispatchBuffer()
+    expect(web._buffer).toEqual({ [timestamp2Key]: [10] })
+  })
+
+  test("update variables based on response headers", async () => {
+    const newInterval = 10
+    const newTimeout = 10
+    const newTTL = 120
+    nock("https://logdrain.hirefire.io")
+      .matchHeader("HireFire-Resource", `Node-${VERSION}`)
+      .post("/")
+      .reply(200, "", {
+        "HireFire-Resource-Dispatcher-Interval": newInterval,
+        "HireFire-Resource-Dispatcher-Timeout": newTimeout,
+        "HireFire-Resource-Buffer-TTL": newTTL,
+      })
+    await web.addToBuffer(5)
+    await web._dispatchBuffer()
+    expect(web._dispatchInterval).toEqual(newInterval)
+    expect(web._dispatchTimeout).toEqual(newTimeout)
+    expect(web._bufferTTL).toEqual(newTTL)
   })
 })
