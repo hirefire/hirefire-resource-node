@@ -111,6 +111,16 @@ class Web {
   }
 
   async _submitBuffer(buffer) {
+    const hirefireToken = process.env.HIREFIRE_TOKEN
+
+    if (!hirefireToken) {
+      throw new Error(
+        "The HIREFIRE_TOKEN environment variable is not set. Unable to submit " +
+          "Request Queue Time metric data. The HIREFIRE_TOKEN can be found in " +
+          "the HireFire Web UI in the web dyno manager settings.",
+      )
+    }
+
     const data = JSON.stringify(buffer)
     const options = {
       hostname: "logdrain.hirefire.io",
@@ -119,7 +129,7 @@ class Web {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "HireFire-Token": process.env.HIREFIRE_TOKEN,
+        "HireFire-Token": hirefireToken,
         "HireFire-Resource": `Node-${VERSION}`,
         "Content-Length": data.length,
       },

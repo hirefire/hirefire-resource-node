@@ -185,4 +185,16 @@ describe("Web", () => {
     expect(web._dispatchTimeout).toEqual(newTimeout)
     expect(web._bufferTTL).toEqual(newTTL)
   })
+
+  test("throws error when HIREFIRE_TOKEN is missing", async () => {
+    delete process.env.HIREFIRE_TOKEN
+    const buffer = {}
+
+    await expect(web._submitBuffer(buffer)).rejects.toThrow(
+      "The HIREFIRE_TOKEN environment variable is not set. " +
+        "Unable to submit Request Queue Time metric data. " +
+        "The HIREFIRE_TOKEN can be found in the HireFire Web UI " +
+        "in the web dyno manager settings.",
+    )
+  })
 })
