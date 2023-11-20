@@ -128,21 +128,7 @@ class Web {
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
         if (res.statusCode === 200) {
-          if (res.headers["hirefire-resource-dispatcher-interval"]) {
-            this._dispatchInterval = parseInt(
-              res.headers["hirefire-resource-dispatcher-interval"],
-            )
-          }
-          if (res.headers["hirefire-resource-dispatcher-timeout"]) {
-            this._dispatchTimeout = parseInt(
-              res.headers["hirefire-resource-dispatcher-timeout"],
-            )
-          }
-          if (res.headers["hirefire-resource-buffer-ttl"]) {
-            this._bufferTTL = parseInt(
-              res.headers["hirefire-resource-buffer-ttl"],
-            )
-          }
+          this._adjustParameters(res)
           resolve()
         } else if (res.statusCode >= 500) {
           reject(new Error(`Server responded with ${res.statusCode} status.`))
@@ -168,6 +154,22 @@ class Web {
       req.write(data)
       req.end()
     })
+  }
+
+  _adjustParameters(res) {
+    if (res.headers["hirefire-resource-dispatcher-interval"]) {
+      this._dispatchInterval = parseInt(
+        res.headers["hirefire-resource-dispatcher-interval"],
+      )
+    }
+    if (res.headers["hirefire-resource-dispatcher-timeout"]) {
+      this._dispatchTimeout = parseInt(
+        res.headers["hirefire-resource-dispatcher-timeout"],
+      )
+    }
+    if (res.headers["hirefire-resource-buffer-ttl"]) {
+      this._bufferTTL = parseInt(res.headers["hirefire-resource-buffer-ttl"])
+    }
   }
 
   get _logger() {

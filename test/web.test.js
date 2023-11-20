@@ -167,7 +167,7 @@ describe("Web", () => {
     expect(web._buffer).toEqual({ [timestamp2Key]: [10] })
   })
 
-  test("update variables based on response headers", async () => {
+  test("adjust parameters based on response headers", async () => {
     const newInterval = 10
     const newTimeout = 10
     const newTTL = 120
