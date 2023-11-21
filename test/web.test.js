@@ -1,4 +1,4 @@
-const Web = require("../src/web")
+const { Web, DispatchError } = require("../src/web")
 const Configuration = require("../src/configuration")
 const nock = require("nock")
 const VERSION = require("../src/version")
@@ -190,11 +190,13 @@ describe("Web", () => {
     delete process.env.HIREFIRE_TOKEN
     const buffer = {}
 
-    await expect(web._submitBuffer(buffer)).rejects.toThrow(
-      "The HIREFIRE_TOKEN environment variable is not set. " +
-        "Unable to submit Request Queue Time metric data. " +
-        "The HIREFIRE_TOKEN can be found in the HireFire Web UI " +
-        "in the web dyno manager settings.",
+    await expect(web._submitBuffer(buffer)).rejects.toThrowError(
+      new DispatchError(
+        "The HIREFIRE_TOKEN environment variable is not set. " +
+          "Unable to submit Request Queue Time metric data. " +
+          "The HIREFIRE_TOKEN can be found in the HireFire Web UI " +
+          "in the web dyno manager settings.",
+      ),
     )
   })
 })

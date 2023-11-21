@@ -1,4 +1,4 @@
-const Web = require("./web")
+const { Web } = require("./web")
 const { Worker } = require("./worker")
 
 class Configuration {

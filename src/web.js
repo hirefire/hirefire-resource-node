@@ -2,6 +2,13 @@ const https = require("https")
 const { Mutex } = require("async-mutex")
 const VERSION = require("../src/version")
 
+class DispatchError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = "DispatchError"
+  }
+}
+
 class Web {
   constructor(configuration) {
     this._buffer = {}
@@ -114,7 +121,7 @@ class Web {
     const hirefireToken = process.env.HIREFIRE_TOKEN
 
     if (!hirefireToken) {
-      throw new Error(
+      throw new DispatchError(
         "The HIREFIRE_TOKEN environment variable is not set. Unable to submit " +
           "Request Queue Time metric data. The HIREFIRE_TOKEN can be found in " +
           "the HireFire Web UI in the web dyno manager settings.",
@@ -141,23 +148,29 @@ class Web {
           this._adjustParameters(res)
           resolve()
         } else if (res.statusCode >= 500) {
-          reject(new Error(`Server responded with ${res.statusCode} status.`))
+          reject(
+            new DispatchError(
+              `Server responded with ${res.statusCode} status.`,
+            ),
+          )
         } else {
-          reject(new Error(`Unexpected response code ${res.statusCode}.`))
+          reject(
+            new DispatchError(`Unexpected response code ${res.statusCode}.`),
+          )
         }
       })
 
       req.on("error", (e) => {
         if (e.code === "ETIMEDOUT" || e.code === "ESOCKETTIMEDOUT") {
-          reject(new Error("Request timed out."))
+          reject(new DispatchError("Request timed out."))
         } else {
-          reject(new Error(`Network error occurred (${e.message}).`))
+          reject(new DispatchError(`Network error occurred (${e.message}).`))
         }
       })
 
       req.on("timeout", () => {
         req.destroy()
-        reject(new Error("Request timed out."))
+        reject(new DispatchError("Request timed out."))
       })
 
       req.setTimeout(this._dispatchTimeout * 1000)
@@ -187,4 +200,4 @@ class Web {
   }
 }
 
-module.exports = Web
+module.exports = { Web, DispatchError }
