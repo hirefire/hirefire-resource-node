@@ -129,8 +129,9 @@ class Web {
     }
 
     const data = JSON.stringify(buffer)
+    const dispatchUrl = process.env.HIREFIRE_DISPATCH_URL || "logdrain.hirefire.io"
     const options = {
-      hostname: "logdrain.hirefire.io",
+      hostname: dispatchUrl,
       port: 443,
       path: "/",
       method: "POST",
