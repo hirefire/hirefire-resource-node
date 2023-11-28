@@ -129,7 +129,9 @@ class Web {
     }
 
     const data = JSON.stringify(buffer)
-    const dispatchUrl = process.env.HIREFIRE_DISPATCH_URL || "logdrain.hirefire.io"
+    const dispatchUrl = (
+      process.env.HIREFIRE_DISPATCH_URL || "logdrain.hirefire.io"
+    ).replace(/^(https?:\/\/)/, "")
     const options = {
       hostname: dispatchUrl,
       port: 443,

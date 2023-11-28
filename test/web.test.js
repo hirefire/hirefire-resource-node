@@ -199,4 +199,18 @@ describe("Web", () => {
       ),
     )
   })
+
+  test("uses HIREFIRE_DISPATCH_URL when set", async () => {
+    const dispatchUrl = "https://custom.dispatch.url"
+    process.env.HIREFIRE_DISPATCH_URL = dispatchUrl
+
+    nock(dispatchUrl).post("/").reply(200)
+
+    await web.addToBuffer(5)
+    await web._dispatchBuffer()
+
+    expect(nock.isDone()).toBeTruthy()
+
+    delete process.env.HIREFIRE_DISPATCH_URL
+  })
 })
