@@ -2,18 +2,19 @@ const HireFire = require(".")
 const VERSION = require("./version")
 
 class RequestInfo {
-  constructor(path, requestStartTime = null) {
+  constructor(path, requestStartTime = null, token = null) {
     this.path = path
     this.requestStartTime = requestStartTime
       ? parseInt(requestStartTime, 10)
       : null
+    this.token = token
   }
 }
 
 async function request(requestInfo) {
   await processRequestQueueTime(requestInfo)
 
-  if (matchesInfoPath(requestInfo)) {
+  if (matchesHireFirePath(requestInfo) || matchesInfoPath(requestInfo)) {
     return {
       status: 200,
       headers: {
@@ -37,6 +38,14 @@ function matchesInfoPath(requestInfo) {
   return (
     process.env.HIREFIRE_TOKEN &&
     requestInfo.path === `/hirefire/${process.env.HIREFIRE_TOKEN}/info`
+  )
+}
+
+function matchesHireFirePath(requestInfo) {
+  return (
+    process.env.HIREFIRE_TOKEN &&
+    requestInfo.path === "/hirefire" &&
+    requestInfo.token === process.env.HIREFIRE_TOKEN
   )
 }
 

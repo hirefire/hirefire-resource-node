@@ -75,4 +75,15 @@ describe("Koa", () => {
     expect(response.headers["hirefire-resource"]).toBe(`Node-${VERSION}`)
     expect(response.body).toEqual([{ name: "worker", value: 5 }])
   })
+
+  test.only("intercept and process worker configuration with hirefire-token header", async () => {
+    process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+    HireFire.configuration.dyno("worker", () => 5)
+    const response = await request(app.callback())
+      .get("/hirefire")
+      .set("HireFire-Token", "SOME_TOKEN")
+    expect(response.status).toBe(200)
+    expect(response.headers["hirefire-resource"]).toBe(`Node-${VERSION}`)
+    expect(response.body).toEqual([{ name: "worker", value: 5 }])
+  })
 })

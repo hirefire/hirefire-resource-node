@@ -2,7 +2,11 @@ const { RequestInfo, request } = require("../middleware")
 
 async function HireFireMiddlewareKoa(ctx, next) {
   const response = await request(
-    new RequestInfo(ctx.path, ctx.get("X-Request-Start")),
+    new RequestInfo(
+      ctx.path,
+      ctx.get("X-Request-Start"),
+      ctx.get("HireFire-Token"),
+    ),
   )
 
   if (response) {

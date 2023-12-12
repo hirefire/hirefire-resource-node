@@ -2,7 +2,11 @@ const { RequestInfo, request } = require("../middleware")
 
 async function HireFireMiddlewareExpress(req, res, next) {
   const response = await request(
-    new RequestInfo(req.path, req.get("X-Request-Start")),
+    new RequestInfo(
+      req.path,
+      req.get("X-Request-Start"),
+      req.get("HireFire-Token"),
+    ),
   )
 
   if (response) {
