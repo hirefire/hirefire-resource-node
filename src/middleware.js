@@ -34,18 +34,18 @@ async function request(requestInfo) {
   return null
 }
 
-function matchesInfoPath(requestInfo) {
-  return (
-    process.env.HIREFIRE_TOKEN &&
-    requestInfo.path === `/hirefire/${process.env.HIREFIRE_TOKEN}/info`
-  )
-}
-
 function matchesHireFirePath(requestInfo) {
   return (
     process.env.HIREFIRE_TOKEN &&
     requestInfo.path === "/hirefire" &&
     requestInfo.token === process.env.HIREFIRE_TOKEN
+  )
+}
+
+function matchesInfoPath(requestInfo) {
+  return (
+    process.env.HIREFIRE_TOKEN &&
+    requestInfo.path === `/hirefire/${process.env.HIREFIRE_TOKEN}/info`
   )
 }
 
