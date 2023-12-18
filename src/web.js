@@ -15,7 +15,7 @@ class Web {
     this._mutex = new Mutex()
     this._dispatcherRunning = false
     this._configuration = configuration
-    this._dispatchInterval = 5
+    this._dispatchInterval = 1
     this._dispatchTimeout = 5
     this._bufferTTL = 60
   }
@@ -91,7 +91,17 @@ class Web {
 
     try {
       buffer = await this._flushBuffer()
-      if (Object.keys(buffer).length === 0) return
+
+      if (Object.keys(buffer).length === 0) {
+        return
+      }
+
+      if (process.env.HIREFIRE_VERBOSE) {
+        this._logger.info(
+          `[HireFire] Dispatching web metrics: ${JSON.stringify(buffer)}`,
+        )
+      }
+
       await this._submitBuffer(buffer)
     } catch (error) {
       await this._repopulateBuffer(buffer)
