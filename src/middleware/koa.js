@@ -14,7 +14,7 @@ async function HireFireMiddlewareKoa(ctx, next) {
     ctx.set(response.headers)
     ctx.body = response.body
   } else {
-    next()
+    await next()
   }
 }
 
