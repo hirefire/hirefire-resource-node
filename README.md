@@ -6,7 +6,7 @@ This gem collects metrics from Node applications running on Heroku and makes the
 
 ## Guides & Documentation
 
-WIP: See our [Getting Started with Node] guide on how to set up HireFire with your Node application.
+Please refer to our [Getting Started with Node] guide for instructions on setting up HireFire with your Node application.
 
 ## Development
 
