@@ -20,7 +20,7 @@ See `npm run` for common tasks.
 4. Create a `git tag` matching the new version (e.g., `v1.0.0`).
 5. Push the new git tag. Continuous Integration will handle the distribution process.
 
-### License
+## License
 
 This package is licensed under the MIT license. See LICENSE.
 
