@@ -11,7 +11,11 @@
     "worker",
     "dyno",
     "job",
-    "task"
+    "task",
+    "connect",
+    "express",
+    "koa",
+    "bullmq"
   ],
   "homepage": "https://hirefire.io",
   "author": "Michael van Rooijen",
@@ -21,6 +25,12 @@
     "src"
   ],
   "main": "src/index.js",
+  "exports": {
+    "./middleware/connect": "./src/middleware/connect.js",
+    "./middleware/express": "./src/middleware/express.js",
+    "./middleware/koa": "./src/middleware/koa.js",
+    "./macro/bullmq": "./src/macro/bullmq.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hirefire/hirefire-resource-node.git"
