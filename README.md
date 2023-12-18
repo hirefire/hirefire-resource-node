@@ -4,6 +4,8 @@
 
 This gem collects metrics from Node applications running on Heroku and makes them available to HireFire in order to autoscale web and worker dynos.
 
+## Guides & Documentation
+
 WIP: See our [Getting Started with Node] guide on how to set up HireFire with your Node application.
 
 ## Development
@@ -12,7 +14,7 @@ Run `bin/setup` to prepare the environment.
 
 See `npm run` for common tasks.
 
-## Release Procedure
+## Release
 
 1. Update the version in `package.json` using `npm version <patch|minor|major>`.
 2. Ensure that `CHANGELOG.md` is up-to-date.
