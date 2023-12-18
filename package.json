@@ -24,8 +24,8 @@
     "CHANGELOG.md",
     "src"
   ],
-  "main": "src/index.js",
   "exports": {
+    ".": "src/index.js",
     "./middleware/connect": "./src/middleware/connect.js",
     "./middleware/express": "./src/middleware/express.js",
     "./middleware/koa": "./src/middleware/koa.js",
