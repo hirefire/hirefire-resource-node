@@ -25,7 +25,7 @@
     "src"
   ],
   "exports": {
-    ".": "src/index.js",
+    ".": "./src/index.js",
     "./middleware/connect": "./src/middleware/connect.js",
     "./middleware/express": "./src/middleware/express.js",
     "./middleware/koa": "./src/middleware/koa.js",
