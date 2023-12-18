@@ -6,7 +6,7 @@ This gem collects metrics from Node applications running on Heroku and makes the
 
 ## Guides & Documentation
 
-Please refer to our [Getting Started with Node] guide for instructions on setting up HireFire with your Node application.
+Please refer to our [Node Guide] for instructions on setting up HireFire with your Node application.
 
 ## Development
 
@@ -28,4 +28,4 @@ This package is licensed under the MIT license. See LICENSE.
 
 [HireFire]: https://www.hirefire.io/
 [Heroku]: https://www.heroku.com/
-[Getting Started with Node]: https://help.hirefire.io/TODO
+[Node Guide]: https://help.hirefire.io/TODO
