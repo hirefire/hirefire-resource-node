@@ -1,18 +1,15 @@
-## HireFire: Advanced Autoscaling for Heroku-hosted Applications
+## HireFire: Advanced autoscaling for Heroku-hosted applications
 
-[HireFire] is the oldest autoscaling service for applications running on [Heroku]. Since 2011, we've assisted more than 1,000 companies in autoscaling upwards of 5,000 applications, with over 10,000 dynos.
+Since 2011, over 1,000 companies have trusted [HireFire] to autoscale more than 5,000 applications hosted on [Heroku], with over 10,000 web and worker dynos.
 
-This package collects metrics from Node applications running on Heroku and provides them to HireFire in order to autoscale web and worker dynos.
+## Instructions
 
-## Guides & Documentation
-
-Please refer to our [Node Guide] for instructions on setting up HireFire with your Node application.
+You can find the integration instructions on [HireFire] when you are setting up your Dyno Manager (Autoscaler).
 
 ## Development
 
-Run `bin/setup` to prepare the environment.
-
-See `npm run` for common tasks.
+- Run `bin/setup` to prepare the environment.
+- See `npm run` for common tasks.
 
 ## Release
 
@@ -24,8 +21,7 @@ See `npm run` for common tasks.
 
 ## License
 
-This package is licensed under the MIT license. See LICENSE.
+This package is licensed under the terms of the MIT license.
 
 [HireFire]: https://www.hirefire.io/
 [Heroku]: https://www.heroku.com/
-[Node Guide]: https://help.hirefire.io/TODO

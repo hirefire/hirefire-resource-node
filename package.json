@@ -1,24 +1,17 @@
 {
   "name": "hirefire-resource",
   "version": "0.1.0",
-  "description": "Advanced Heroku Dyno Autoscaling",
+  "description": "HireFire: Advanced autoscaling for Heroku-hosted applications",
   "keywords": [
     "hirefire",
     "heroku",
-    "autoscale",
-    "middleware",
-    "web",
-    "worker",
-    "dyno",
-    "job",
-    "task",
-    "connect",
-    "express",
-    "koa",
-    "bullmq"
+    "autoscale"
   ],
   "homepage": "https://hirefire.io",
-  "author": "Michael van Rooijen",
+  "author": "HireFire",
+  "contributors": [
+    "Michael van Rooijen <support@hirefire.io>"
+  ],
   "license": "MIT",
   "files": [
     "CHANGELOG.md",
@@ -34,6 +27,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hirefire/hirefire-resource-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hirefire/hirefire-resource-node/issues"
   },
   "scripts": {
     "test": "jest --silent --coverage --coverageReporters=html",
