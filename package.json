@@ -1,7 +1,7 @@
 {
   "name": "hirefire-resource",
   "version": "0.1.0",
-  "description": "HireFire: Advanced autoscaling for Heroku-hosted applications",
+  "description": "HireFire: Advanced Autoscalers for Heroku",
   "keywords": [
     "hirefire",
     "heroku",
