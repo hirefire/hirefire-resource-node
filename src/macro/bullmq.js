@@ -18,11 +18,12 @@ async function jobQueueLatency(...args) {
  * Calculates the total job queue size across the specified queues.
  *
  * @async
- * @param {...string | object} args - Queue names followed by an optional options object.  The
- *                                    options object can include a 'connection' property, which is
- *                                    passed to IORedis and is compatible with its connection
- *                                    options.  Defaults to REDIS_TLS_URL, REDIS_URL, or localhost
- *                                    if not provided.
+ * @param {...string} queues - The names of the queues to be included in the measurement of job queue size.
+ * @param {object} [options] - Optional options object. The options object can include a
+ *                             'connection' property, which is passed to IORedis and is compatible
+ *                             with its connection options. Defaults to the value of the
+ *                             REDIS_TLS_URL, REDIS_URL, REDISTOGO_URL, REDISCLOUD_URL,
+ *                             OPENREDIS_URL environment variables, or localhost if not provided.
  * @returns {Promise<number>} Cumulative job queue size across the specified queues.
  * @throws {MissingQueueError} If no queues are provided to the function.
  * @example
@@ -46,6 +47,9 @@ async function jobQueueSize(...args) {
     options.connection ||
       process.env.REDIS_TLS_URL ||
       process.env.REDIS_URL ||
+      process.env.REDISTOGO_URL ||
+      process.env.REDISCLOUD_URL ||
+      process.env.OPENREDIS_URL ||
       "redis://localhost:6379",
   )
 
