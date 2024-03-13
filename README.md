@@ -31,7 +31,7 @@ For more information, visit our [home page][HireFire].
 
 ## Release
 
-1. Update the version in `package.json` using `npm version <patch|minor|major>`.
+1. Update the version in `package.json` using `npm version <patch|minor|major> --no-git-tag-version`.
 2. Ensure that `CHANGELOG.md` is up-to-date.
 3. Commit changes with `git commit`.
 4. Create a `git tag` matching the new version (e.g., `v1.0.0`).
