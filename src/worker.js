@@ -13,7 +13,7 @@ class MissingDynoFnError extends Error {
 }
 
 class Worker {
-  static PROCESS_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]{0,29}$/
+  static PROCESS_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{0,29}$/
 
   constructor(name, fn) {
     this._validate(name, fn)
