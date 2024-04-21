@@ -1,4 +1,4 @@
-## HEAD
+## v1.1.0
 
 - Add support for [Fastify](https://fastify.dev).
 
