@@ -7,6 +7,7 @@ This library integrates Node.js applications with HireFire's Dyno Managers (Hero
 - Express
 - Koa
 - Connect
+- Fastify
 - Sails
 - Nest
 
