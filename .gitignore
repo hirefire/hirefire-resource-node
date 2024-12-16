@@ -1,6 +1,7 @@
 .DS_Store
+.npmrc
 coverage
 dist
+doc
 node_modules
 out
-doc
