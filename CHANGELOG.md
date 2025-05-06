@@ -1,3 +1,7 @@
+## v1.1.1
+
+- Add connectionOptions to BullMQ jobQueueSize
+
 ## v1.1.0
 
 - Add support for [Fastify](https://fastify.dev).
