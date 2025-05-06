@@ -25,7 +25,11 @@ async function jobQueueLatency(...args) {
  *                             function will use the value of the `REDIS_TLS_URL`, `REDIS_URL`,
  *                             `REDISTOGO_URL`, `REDISCLOUD_URL`, `OPENREDIS_URL` environment
  *                             variables, in the order specified. If none of these environment
- *                             variables are set, it defaults to `redis://localhost:6379/0`.
+ *                             variables are set, it defaults to `redis://localhost:6379/0`. The
+ *                             `options` object can also include a `connectionOptions` property,
+ *                             which is passed as the second argument to the `IORedis` constructor,
+ *                             allowing for further customization of the Redis connection (e.g., TLS
+ *                             options, retry strategies).
  * @returns {Promise<number>} Cumulative job queue size across the specified queues.
  * @example
  * // Calculate size across all queues
@@ -39,6 +43,9 @@ async function jobQueueLatency(...args) {
  * @example
  * // Calculate Size using the options.connection property
  * await jobQueueSize("default", { connection: "redis://localhost:6379/0" })
+ * @example
+ * // Calculate Size using the options.connectionOptions property
+ * await jobQueueSize("default", { connectionOptions: { tls: { rejectUnauthorized: false } } })
  */
 async function jobQueueSize(...args) {
   let { queues, options } = unpack(args)
@@ -51,6 +58,7 @@ async function jobQueueSize(...args) {
       process.env.REDISCLOUD_URL ||
       process.env.OPENREDIS_URL ||
       "redis://localhost:6379/0",
+    options.connectionOptions,
   )
 
   if (queues.length === 0) {

@@ -68,4 +68,13 @@ describe("BullMQ", () => {
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(3)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
   })
+
+  test("jobQueueSize respects connectionOptions.stringNumbers", async () => {
+    await defaultQueue.add("testJob", {})
+    const count = await jobQueueSize("default", {
+      connection: redisURL,
+      connectionOptions: { stringNumbers: true },
+    })
+    expect(typeof count).toBe("string")
+  })
 })
