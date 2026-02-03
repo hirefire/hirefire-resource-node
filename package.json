@@ -25,6 +25,7 @@
     "./middleware/express": "./src/middleware/express.js",
     "./middleware/koa": "./src/middleware/koa.js",
     "./middleware/fastify": "./src/middleware/fastify.js",
+    "./middleware/next": "./src/middleware/next.js",
     "./macro/bullmq": "./src/macro/bullmq.js"
   },
   "repository": {
