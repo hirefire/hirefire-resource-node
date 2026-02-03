@@ -21,11 +21,11 @@ jobs:
           - 6379:6379
     strategy:
       matrix:
-        node: [16, 17, 18, 19, 20, 21]
+        node: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
       - name: Run Install
@@ -38,16 +38,14 @@ jobs:
     needs: validate
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Use Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 21
+          node-version: 25
           registry-url: "https://registry.npmjs.org"
-      - name: Run Install
-        run: npm install
-      - name: Publish
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_API_TOKEN }}
+      - run: npm ci
+      - run: npm publish --access public
