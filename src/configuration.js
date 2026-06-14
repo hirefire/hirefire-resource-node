@@ -5,6 +5,7 @@ const CPU = require("./cpu")
 const Buffer = require("./buffer")
 const Dispatcher = require("./dispatcher")
 const Identity = require("./identity")
+const safeLog = require("./log")
 
 class MissingSamplerError extends Error {
   constructor(message) {
@@ -178,8 +179,10 @@ class Configuration {
         `Duplicate declaration for "${name}". Each dyno name maps to exactly one collector.`,
       )
     }
-    this._names.push(name)
 
+    // Validate and build the collector before reserving the name, so a rejected
+    // declaration (a sampler on http/cpu, a second http) leaves no trace in the
+    // registry and a corrected retry under the same name still succeeds.
     switch (collector) {
       case "http":
         this._rejectSampler(name, sampler)
@@ -202,6 +205,8 @@ class Configuration {
         this.cpu.push(new CPU(name, this))
         break
     }
+
+    this._names.push(name)
   }
 
   _rejectSampler(name, sampler) {
@@ -222,7 +227,9 @@ class Configuration {
     const identity = this._resolvedIdentity()
 
     if (identity === null) {
-      this.logger.error(
+      safeLog(
+        this.logger,
+        "error",
         "[HireFire] CPU metrics are configured but this process's identity could not be " +
           "resolved, so the CPU collector is disabled. Set the HIREFIRE_SERVICE_NAME " +
           "environment variable to this process's dyno name.",
@@ -258,7 +265,9 @@ class Configuration {
     if (this._identityResolved) return this._identity
 
     if (Identity.herokuConflict()) {
-      this.logger.warn(
+      safeLog(
+        this.logger,
+        "warn",
         `[HireFire] HIREFIRE_SERVICE_NAME (${Identity.explicit()}) does not match the Heroku ` +
           `DYNO prefix (${Identity.herokuDyno()}). Heroku config vars are app-wide, so this makes ` +
           `every dyno identify as the same name. Set it inline per process in the Procfile, or ` +

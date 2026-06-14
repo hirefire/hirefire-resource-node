@@ -102,11 +102,6 @@ describe("Configuration", () => {
     )
   })
 
-  test("dyno accepts a string tracking value", () => {
-    config.dyno("clock", { tracking: "cpu" })
-    expect(config.cpu.map((c) => c.name)).toEqual(["clock"])
-  })
-
   // service — universal / platform-neutral front door (full truth table)
 
   test("service http configures http", () => {
@@ -155,11 +150,6 @@ describe("Configuration", () => {
     expect(() => config.service("web", { tracking: "foo" })).toThrow(
       Configuration.UnknownCollectorError,
     )
-  })
-
-  test("service accepts a string tracking value", () => {
-    config.service("web", { tracking: "http" })
-    expect(config.web).toBeInstanceOf(Web)
   })
 
   // Shared invariants across both front doors
@@ -217,6 +207,15 @@ describe("Configuration", () => {
 
   test("rejects a positional second argument (service)", () => {
     expect(() => config.service("web", "http")).toThrow()
+  })
+
+  test("a rejected registration does not reserve the name", () => {
+    expect(() => config.service("web", { tracking: "http" }, () => 1)).toThrow(
+      Configuration.UnexpectedSamplerError,
+    )
+    // The failed declaration must leave no trace, so a corrected retry succeeds.
+    expect(() => config.service("web", { tracking: "http" })).not.toThrow()
+    expect(config.web.name).toBe("web")
   })
 
   // Memoized collaborators

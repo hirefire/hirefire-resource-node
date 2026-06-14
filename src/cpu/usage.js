@@ -34,14 +34,32 @@ const Usage = {
   // shared counter. process.cpuUsage() is the dev/macOS last resort and only
   // sees this process.
   totalSeconds() {
-    const value =
-      this.cgroupV2Seconds() ??
-      this.cgroupV1Seconds() ??
-      this.procNamespaceSeconds() ??
-      this.processSeconds()
-    return value
+    return this.reading().seconds
   },
 
+  // { seconds, source } — the source label lets the consumer reseed when the
+  // answering source changes between ticks (e.g. /proc briefly unreadable, then
+  // back). Counters from different sources aren't comparable: a whole-dyno
+  // source (cgroup/proc) and the per-process clock differ by orders of
+  // magnitude, so differencing across a switch would fabricate a usage spike.
+  reading() {
+    const sources = [
+      ["cgroupV2", () => this.cgroupV2Seconds()],
+      ["cgroupV1", () => this.cgroupV1Seconds()],
+      ["proc", () => this.procNamespaceSeconds()],
+      ["process", () => this.processSeconds()],
+    ]
+    for (const [source, read] of sources) {
+      const seconds = read()
+      if (seconds !== null) return { seconds, source }
+    }
+    return { seconds: null, source: null }
+  },
+
+  // A malformed value returns null (not NaN) so totalSeconds keeps its
+  // finite-or-null contract: NaN is not nullish, so it would defeat the ??
+  // source chain and stick as a permanent CPU baseline. The line is trimmed
+  // before splitting so a trailing space can't make pop() an empty token.
   cgroupV2Seconds() {
     const content = this.read(this.CGROUP_V2_USAGE)
     if (!content) return null
@@ -49,12 +67,13 @@ const Usage = {
     const line = content.split("\n").find((l) => l.startsWith("usage_usec"))
     if (!line) return null
 
-    return parseInt(line.split(/\s+/).pop()) / 1000000.0
+    const usec = parseInt(line.trim().split(/\s+/).pop())
+    return Number.isFinite(usec) ? usec / 1000000.0 : null
   },
 
   cgroupV1Seconds() {
-    const usage = this.read(this.CGROUP_V1_USAGE)
-    return usage ? parseFloat(usage) / 1000000000.0 : null
+    const ns = parseFloat(this.read(this.CGROUP_V1_USAGE))
+    return Number.isFinite(ns) ? ns / 1000000000.0 : null
   },
 
   procNamespaceSeconds() {
@@ -100,12 +119,24 @@ const Usage = {
       .split(/\s+/)
     if (fields.length < 13) return null
 
-    return parseInt(fields[11]) + parseInt(fields[12])
+    const utime = parseInt(fields[11])
+    const stime = parseInt(fields[12])
+    // Non-numeric fields return null so the per-process tick is skipped rather
+    // than poisoning the whole-dyno sum with NaN.
+    return Number.isFinite(utime) && Number.isFinite(stime)
+      ? utime + stime
+      : null
   },
 
+  // Wrapped like the file's fs reads so reading() honors its finite-or-null
+  // contract even if the clock read fails on an exotic platform.
   processSeconds() {
-    const { user, system } = process.cpuUsage()
-    return (user + system) / 1000000.0
+    try {
+      const { user, system } = process.cpuUsage()
+      return (user + system) / 1000000.0
+    } catch {
+      return null
+    }
   },
 
   // Number of CPUs to normalize usage against — the CPU the platform guarantees
@@ -130,19 +161,20 @@ const Usage = {
     const [quota, period] = value.split(/\s+/)
     if (quota === undefined || quota === "max") return null
 
+    const quotaValue = parseFloat(quota)
     const periodValue = parseFloat(period)
-    return periodValue > 0 ? parseFloat(quota) / periodValue : null
+    // !(x > 0) on both rejects NaN, zero, and negatives in one comparison, so a
+    // malformed quota falls through to the next source instead of normalizing
+    // CPU against a bad divisor (matches cgroupV1Quota).
+    return quotaValue > 0 && periodValue > 0 ? quotaValue / periodValue : null
   },
 
   cgroupV1Quota() {
-    const quotaRaw = this.read(this.CGROUP_V1_QUOTA)
-    const periodRaw = this.read(this.CGROUP_V1_PERIOD)
-    const quota = quotaRaw === null ? null : parseInt(quotaRaw)
-    const period = periodRaw === null ? null : parseFloat(periodRaw)
-    if (quota === null || quota <= 0 || period === null || period <= 0)
-      return null
-
-    return quota / period
+    const quota = parseInt(this.read(this.CGROUP_V1_QUOTA))
+    const period = parseFloat(this.read(this.CGROUP_V1_PERIOD))
+    // x > 0 rejects unreadable (NaN), zero, and the v1 "-1" unlimited marker, so
+    // a malformed value falls through instead of dividing (matches cgroupV2Quota).
+    return quota > 0 && period > 0 ? quota / period : null
   },
 
   // Gated on DYNO because elsewhere a v1 memory limit says nothing about CPU.
@@ -158,11 +190,15 @@ const Usage = {
   },
 
   processorCount() {
-    if (typeof os.availableParallelism === "function") {
-      return os.availableParallelism()
+    try {
+      if (typeof os.availableParallelism === "function") {
+        return os.availableParallelism()
+      }
+      const count = os.cpus().length
+      return count > 0 ? count : 1
+    } catch {
+      return 1 // a sane divisor if the OS query fails; availableCpus stays positive
     }
-    const count = os.cpus().length
-    return count > 0 ? count : 1
   },
 
   read(path) {

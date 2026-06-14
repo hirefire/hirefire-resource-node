@@ -8,6 +8,7 @@ class CPU {
     this._configuration = configuration
     this._lastUsage = null
     this._lastTime = null
+    this._lastSource = null
   }
 
   get name() {
@@ -16,15 +17,20 @@ class CPU {
 
   sample() {
     const time = Date.now() / 1000.0
-    const usage = Usage.totalSeconds()
+    const { seconds: usage, source } = Usage.reading()
 
     const previousUsage = this._lastUsage
     const previousTime = this._lastTime
+    const previousSource = this._lastSource
     this._lastUsage = usage
     this._lastTime = time
+    this._lastSource = source
 
-    // The first reading only seeds the baseline.
-    if (usage === null || previousUsage === null) return null
+    // The first reading only seeds the baseline; so does a change of usage
+    // source (counters from different sources aren't comparable, so a delta
+    // across a switch would fabricate a spike).
+    if (usage === null || previousUsage === null || source !== previousSource)
+      return null
 
     const wallDelta = time - previousTime
     const usageDelta = usage - previousUsage

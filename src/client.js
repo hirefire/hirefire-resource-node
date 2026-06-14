@@ -106,7 +106,10 @@ class Client {
   }
 
   _baseUrl() {
-    return process.env.HIREFIRE_DATA_URL || "https://data.hirefire.io"
+    // Strip trailing slashes so a custom HIREFIRE_DATA_URL with one doesn't
+    // produce a "//metrics/ingest" path the server won't route.
+    const url = process.env.HIREFIRE_DATA_URL || "https://data.hirefire.io"
+    return url.replace(/\/+$/, "")
   }
 
   _token() {

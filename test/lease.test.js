@@ -231,6 +231,22 @@ describe("Lease", () => {
     expect(lease.sampleFrequency).toBe(15) // default retained
   })
 
+  test("ignores a malformed sample frequency", async () => {
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "abc",
+    })
+    await lease.requestIfDue()
+    // A NaN frequency would collapse the sample interval; the default is kept.
+    expect(lease.sampleFrequency).toBe(15)
+  })
+
+  test("ignores a non-positive lease ttl", async () => {
+    grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "0" })
+    await lease.requestIfDue()
+    expect(lease._ttl).toBe(15) // default retained, no instant-expiry storm
+  })
+
   test("grants only on a literal true", async () => {
     grant({ "HireFire-Lease-Granted": "1", "HireFire-Sample-Frequency": "15" })
     await lease.requestIfDue()

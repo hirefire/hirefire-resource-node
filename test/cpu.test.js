@@ -14,8 +14,20 @@ describe("CPU", () => {
     return new CPU(name, configuration)
   }
 
+  // cpu.js reads Usage.reading() => { seconds, source }. A single source is used
+  // across a scenario unless a test specifically exercises a source switch.
+  function read(seconds, source = "proc") {
+    return { seconds, source: seconds === null ? null : source }
+  }
+
+  function mockReadings(...secondsValues) {
+    const spy = jest.spyOn(Usage, "reading")
+    secondsValues.forEach((seconds) => spy.mockReturnValueOnce(read(seconds)))
+    return spy
+  }
+
   test("first sample only seeds the baseline", () => {
-    jest.spyOn(Usage, "totalSeconds").mockReturnValue(10.0)
+    mockReadings(10.0)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()
@@ -25,10 +37,7 @@ describe("CPU", () => {
   })
 
   test("second sample buffers normalized percentage", () => {
-    jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(10.0)
-      .mockReturnValueOnce(10.5)
+    mockReadings(10.0, 10.5)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()
@@ -44,10 +53,7 @@ describe("CPU", () => {
   })
 
   test("normalizes by available cpus", () => {
-    jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(0.0)
-      .mockReturnValueOnce(1.0)
+    mockReadings(0.0, 1.0)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(4.0)
 
     const collector = cpu("worker")
@@ -63,10 +69,7 @@ describe("CPU", () => {
   })
 
   test("clamps to 100 percent", () => {
-    jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(0.0)
-      .mockReturnValueOnce(5.0)
+    mockReadings(0.0, 5.0)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()
@@ -81,11 +84,7 @@ describe("CPU", () => {
   })
 
   test("negative usage delta skips and reseeds the baseline", () => {
-    jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(10.0)
-      .mockReturnValueOnce(5.0)
-      .mockReturnValueOnce(5.5)
+    mockReadings(10.0, 5.0, 5.5)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()
@@ -102,8 +101,30 @@ describe("CPU", () => {
     })
   })
 
+  test("a usage source switch only reseeds the baseline", () => {
+    jest
+      .spyOn(Usage, "reading")
+      .mockReturnValueOnce(read(5.0, "process"))
+      .mockReturnValueOnce(read(500.0, "proc")) // source switched between ticks
+      .mockReturnValueOnce(read(500.5, "proc"))
+    jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
+
+    const collector = cpu()
+    freezeTime(1000)
+    collector.sample() // baseline (process, 5.0)
+    freezeTime(1001)
+    // process -> proc: the 495s jump must reseed, not become a clamped 100% spike.
+    expect(collector.sample()).toBeNull()
+    freezeTime(1002)
+    collector.sample() // proc -> proc: 0.5 over 1s on 1 CPU => 50%
+
+    expect(configuration.buffer.flush().cpu).toEqual({
+      clock: { 1002: [50.0] },
+    })
+  })
+
   test("skips the sample when usage is unavailable", () => {
-    jest.spyOn(Usage, "totalSeconds").mockReturnValue(null)
+    mockReadings(null, null)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()
@@ -116,10 +137,7 @@ describe("CPU", () => {
 
   test("non-positive wall delta skips the sample", () => {
     // Same instant + positive usage delta isolates the wallDelta <= 0 guard.
-    jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(10.0)
-      .mockReturnValueOnce(10.5)
+    mockReadings(10.0, 10.5)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()
@@ -130,10 +148,7 @@ describe("CPU", () => {
   })
 
   test("skips the sample when available cpus is null", () => {
-    jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(0.0)
-      .mockReturnValueOnce(1.0)
+    mockReadings(0.0, 1.0)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(null)
 
     const collector = cpu()
@@ -145,10 +160,7 @@ describe("CPU", () => {
   })
 
   test("skips the sample when available cpus is zero", () => {
-    jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(0.0)
-      .mockReturnValueOnce(1.0)
+    mockReadings(0.0, 1.0)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(0.0)
 
     const collector = cpu()
@@ -160,11 +172,7 @@ describe("CPU", () => {
   })
 
   test("recovers after an initially unavailable usage source", () => {
-    jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce(10.0)
-      .mockReturnValueOnce(10.5)
+    mockReadings(null, 10.0, 10.5)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()

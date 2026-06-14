@@ -1,3 +1,5 @@
+const safeLog = require("./log")
+
 // A collection of declared job collectors that knows how to sample them all.
 class Workers {
   constructor(configuration) {
@@ -44,16 +46,23 @@ class Workers {
 
         this._configuration.buffer.sampleWorker(worker.name, value)
       } catch (error) {
+        // JS allows throwing non-Errors (throw null, Promise.reject("x")), so
+        // reading .name/.message blindly could itself throw and break isolation.
+        const reason =
+          error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : inspect(error)
         this._logger().error(
-          `[HireFire] The sampler for dyno "${worker.name}" raised ` +
-            `${error.name}: ${error.message}`,
+          `[HireFire] The sampler for dyno "${worker.name}" raised ${reason}`,
         )
       }
     }
   }
 
+  // A throwing/incomplete user logger must not break sampler isolation.
   _logger() {
-    return this._configuration.logger
+    const logger = this._configuration.logger
+    return { error: (message) => safeLog(logger, "error", message) }
   }
 }
 

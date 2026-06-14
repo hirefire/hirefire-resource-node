@@ -118,6 +118,15 @@ describe("Buffer", () => {
     expect(buffer.flush().cpu).toEqual({ clock: { 1000: [40.0, 60.0] } })
   })
 
+  test("a reserved cpu collector name does not pollute Object.prototype", () => {
+    freezeTime(1000)
+    buffer.sampleCpu("__proto__", 50.0)
+
+    // The write must land in the buffer, not mutate the global prototype.
+    expect({}[1000]).toBeUndefined()
+    expect(buffer.flush().cpu["__proto__"]).toEqual({ 1000: [50.0] })
+  })
+
   test("repopulate web keeps the second exactly at the ttl boundary", () => {
     // 40 == now - ttl: the boundary second is inside the window (drop is "<").
     freezeTime(100)

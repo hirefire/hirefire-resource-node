@@ -7,11 +7,12 @@
 // synchronous step before any network I/O is awaited.
 class Buffer {
   constructor(ttl = 60) {
-    // @web / @cpu are keyed by Unix second (string keys, the JSON wire shape);
-    // @workers is a Map so insertion order is preserved regardless of name.
+    // _web is keyed by Unix second; _cpu by collector name then Unix second;
+    // _workers is a Map (insertion order). _cpu has a null prototype so a
+    // declared name like "__proto__" can't mutate the global Object.prototype.
     this._web = {}
     this._workers = new Map()
-    this._cpu = {}
+    this._cpu = Object.create(null)
     this._ttl = ttl
   }
 
@@ -43,7 +44,7 @@ class Buffer {
     const cpu = this._cpu
     this._web = {}
     this._workers = new Map()
-    this._cpu = {}
+    this._cpu = Object.create(null)
 
     return {
       web,
@@ -56,8 +57,10 @@ class Buffer {
     const now = Math.floor(Date.now() / 1000)
     Object.entries(data).forEach(([timestamp, samples]) => {
       if (parseInt(timestamp) < now - this._ttl) return
-      this._web[timestamp] = this._web[timestamp] || []
-      this._web[timestamp].push(...samples)
+      const bucket = (this._web[timestamp] = this._web[timestamp] || [])
+      // A loop, not push(...samples): the spread would RangeError on a very large
+      // array, and this runs inside the dispatch catch which must not throw.
+      for (const sample of samples) bucket.push(sample)
     })
   }
 }

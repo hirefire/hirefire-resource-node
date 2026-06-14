@@ -54,6 +54,22 @@ describe("Workers", () => {
     )
   })
 
+  test("a sampler that throws a non-error is isolated and logged", async () => {
+    const configuration = configure()
+    configuration.dyno("worker", () => {
+      throw null // reading .name on null would throw inside the catch
+    })
+    configuration.dyno("mailer", () => 18)
+
+    await configuration.workers.sample()
+
+    // Isolation must survive the non-Error throw: mailer still samples.
+    expect(configuration.buffer.flush().workers).toEqual([
+      { name: "mailer", sample: 18 },
+    ])
+    expect(configuration.logger.error).toHaveBeenCalled()
+  })
+
   test("invalid sample values are dropped and logged", async () => {
     const configuration = configure()
     const values = ["10", null, -1, Infinity, NaN, 7]

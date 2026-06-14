@@ -47,10 +47,48 @@ describe("CPU.Usage", () => {
       expect(Usage.totalSeconds()).toBeCloseTo(3.0, 4)
     })
 
+    test("a malformed usage value falls through instead of returning NaN", () => {
+      stubReads({
+        [Usage.CGROUP_V2_USAGE]: "usage_usec notanumber",
+        [Usage.CGROUP_V1_USAGE]: "3000000000",
+      })
+      // NaN is not nullish, so without the guard it would defeat the ?? chain
+      // and stick as a permanent CPU baseline.
+      expect(Usage.totalSeconds()).toBeCloseTo(3.0, 4)
+    })
+
+    test("tolerates trailing whitespace in the usage line", () => {
+      stubReads({
+        [Usage.CGROUP_V2_USAGE]: "usage_usec 2500000 \nuser_usec 1",
+      })
+      expect(Usage.totalSeconds()).toBeCloseTo(2.5, 4)
+    })
+
     test("falls back to the process clock", () => {
       stubReads({})
       jest.spyOn(Usage, "procStatPaths").mockReturnValue([])
       expect(typeof Usage.totalSeconds()).toBe("number")
+    })
+  })
+
+  describe("reading", () => {
+    test("reports the source that answered, for switch detection", () => {
+      stubReads({ [Usage.CGROUP_V2_USAGE]: "usage_usec 2500000" })
+      expect(Usage.reading()).toEqual({ seconds: 2.5, source: "cgroupV2" })
+    })
+
+    test("labels the fallback source when higher ones are absent", () => {
+      stubReads({ [Usage.CGROUP_V1_USAGE]: "3000000000" })
+      expect(Usage.reading().source).toBe("cgroupV1")
+    })
+
+    test("a throwing clock read falls through to a null reading", () => {
+      stubReads({}) // no cgroup/proc sources
+      jest.spyOn(Usage, "procStatPaths").mockReturnValue([])
+      jest.spyOn(process, "cpuUsage").mockImplementation(() => {
+        throw new Error("clock unavailable")
+      })
+      expect(Usage.reading()).toEqual({ seconds: null, source: null })
     })
   })
 
@@ -107,6 +145,19 @@ describe("CPU.Usage", () => {
         os.availableParallelism = original
       }
     })
+
+    test("falls back to 1 when the OS query throws", () => {
+      const original = os.availableParallelism
+      os.availableParallelism = undefined
+      try {
+        jest.spyOn(os, "cpus").mockImplementation(() => {
+          throw new Error("os unavailable")
+        })
+        expect(Usage.processorCount()).toBe(1)
+      } finally {
+        os.availableParallelism = original
+      }
+    })
   })
 
   describe("statTicks", () => {
@@ -123,6 +174,11 @@ describe("CPU.Usage", () => {
     test("null for a truncated line", () => {
       expect(Usage.statTicks("123 (ruby) S 0 1")).toBeNull()
     })
+
+    test("null for non-numeric utime or stime", () => {
+      const line = "1 (ruby) S 0 0 0 0 0 0 0 0 0 0 x y 0 0 0 0 0 0 0 0"
+      expect(Usage.statTicks(line)).toBeNull()
+    })
   })
 
   describe("availableCpus", () => {
@@ -133,6 +189,18 @@ describe("CPU.Usage", () => {
 
     test("ignores unlimited v2 quota", () => {
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "max 100000" })
+      expect(Usage.availableCpus()).toBe(Usage.processorCount())
+    })
+
+    test("ignores a non-numeric v2 quota", () => {
+      stubReads({ [Usage.CGROUP_V2_QUOTA]: "garbage 100000" })
+      expect(Usage.availableCpus()).toBe(Usage.processorCount())
+    })
+
+    test("ignores a non-positive v2 quota", () => {
+      // A 0/negative quota must fall through to the next source, not normalize
+      // CPU against it.
+      stubReads({ [Usage.CGROUP_V2_QUOTA]: "0 100000" })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 

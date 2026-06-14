@@ -1,6 +1,7 @@
 const { Client } = require("./client")
 const Lease = require("./lease")
 const Workers = require("./workers")
+const safeLog = require("./log")
 
 class Dispatcher {
   // How far back (seconds) a dispatch may claim unreported web seconds. Matches
@@ -28,6 +29,7 @@ class Dispatcher {
     this._client = new Client(configuration)
     this._lease = new Lease(configuration, { enabled: workers.any() })
     this._running = false
+    this._stopping = false
     this._lastWebSecond = null
     this._webWatermark = undefined
     this._interval = 1
@@ -42,10 +44,21 @@ class Dispatcher {
   // inherited; each process lazily starts its own from configure() or the first
   // web request.
   start() {
-    if (this._running) return false
+    // Also refuse mid-stop: stop() clears _running before its awaits, so a
+    // start() in that window would orphan a second loop.
+    if (this._running || this._stopping) return false
 
     this._running = true
-    this._loopPromise = this._loop()
+    // Backstop: anything escaping the guarded loop is logged and stops the
+    // dispatcher rather than becoming an unhandled rejection (a crash on Node >=15).
+    this._loopPromise = this._loop().catch((error) => {
+      this._running = false
+      this._logger().error(
+        `[HireFire] Dispatcher loop stopped unexpectedly: ${
+          error?.message ?? error
+        }`,
+      )
+    })
     this._logger().info("[HireFire] Starting dispatcher.")
     return true
   }
@@ -54,12 +67,17 @@ class Dispatcher {
     if (!this._running) return false
 
     this._running = false
+    this._stopping = true
     this._wakeSleep() // resolve any pending sleep so the loop exits promptly
-    await this._loopPromise // wait for the in-flight tick to finish (Ruby's join)
+
+    // Clear the handle before awaiting so a concurrent start() can't be orphaned.
+    const loopPromise = this._loopPromise
     this._loopPromise = null
+    await loopPromise // wait for the in-flight tick to finish (Ruby's join)
 
-    await this._dispatch() // final flush
+    await this._guard(() => this._dispatch()) // final flush, never rejecting
 
+    this._stopping = false
     this._logger().info("[HireFire] Dispatcher stopped.")
     return true
   }
@@ -116,14 +134,18 @@ class Dispatcher {
     try {
       await fn()
     } catch (error) {
-      this._logger().error(`[HireFire] ${error.message}`)
+      // error?.message ?? error so a non-Error throw (throw null, a rejected
+      // string) can't make the guard itself throw and escape the loop.
+      this._logger().error(`[HireFire] ${error?.message ?? error}`)
     }
   }
 
   async _dispatch() {
-    const data = this._buffer().flush()
+    // flush is inside the try so a dispatch can never reject and escape the loop.
+    let data
 
     try {
+      data = this._buffer().flush()
       const payload = this._buildPayload(data)
       if (payload.length === 0) return
 
@@ -143,10 +165,12 @@ class Dispatcher {
       if (this._webWatermark !== undefined)
         this._lastWebSecond = this._webWatermark
     } catch (error) {
-      if (data.web && Object.keys(data.web).length > 0) {
+      if (data && data.web && Object.keys(data.web).length > 0) {
         this._buffer().repopulateWeb(data.web)
       }
-      this._logger().error(`[HireFire] Dispatch error: ${error.message}`)
+      this._logger().error(
+        `[HireFire] Dispatch error: ${error?.message ?? error}`,
+      )
     }
   }
 
@@ -211,8 +235,14 @@ class Dispatcher {
     return this._configuration.buffer
   }
 
+  // Wraps the user-supplied logger so a missing method or a throw inside it can
+  // never crash the dispatch loop or its terminal crash backstop.
   _logger() {
-    return this._configuration.logger
+    const logger = this._configuration.logger
+    return {
+      info: (message) => safeLog(logger, "info", message),
+      error: (message) => safeLog(logger, "error", message),
+    }
   }
 }
 

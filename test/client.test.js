@@ -69,6 +69,13 @@ describe("Client", () => {
     }
   })
 
+  test("maps a socket ETIMEDOUT to a timeout error", async () => {
+    // A kernel-level socket timeout surfaces as an error event with this code,
+    // distinct from the request timeout option but reported the same way.
+    nock(BASE).post("/metrics/ingest").replyWithError({ code: "ETIMEDOUT" })
+    await expect(client.submitSamples(BODY)).rejects.toThrow("timed out")
+  })
+
   test("requestLease sends the process id and token", async () => {
     const scope = nock(BASE, {
       reqheaders: {
@@ -134,6 +141,17 @@ describe("Client", () => {
     process.env.HIREFIRE_DATA_URL = "http://localhost:9999"
     const scope = nock("http://localhost:9999")
       .post("/metrics/ingest")
+      .reply(200)
+
+    await client.submitSamples(BODY)
+
+    expect(scope.isDone()).toBe(true)
+  })
+
+  test("tolerates a trailing slash in the data url", async () => {
+    process.env.HIREFIRE_DATA_URL = "https://custom.hirefire.io/"
+    const scope = nock("https://custom.hirefire.io")
+      .post("/metrics/ingest") // not "//metrics/ingest"
       .reply(200)
 
     await client.submitSamples(BODY)

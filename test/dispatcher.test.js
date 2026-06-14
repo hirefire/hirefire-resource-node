@@ -304,9 +304,9 @@ describe("Dispatcher", () => {
   test("dispatches cpu samples in the samples format", async () => {
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
     jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(0.0)
-      .mockReturnValueOnce(0.5)
+      .spyOn(Usage, "reading")
+      .mockReturnValueOnce({ seconds: 0.0, source: "proc" })
+      .mockReturnValueOnce({ seconds: 0.5, source: "proc" })
     const bodies = captureIngestBodies()
 
     const dispatcher = configureCpuOnly("clock")
@@ -322,7 +322,9 @@ describe("Dispatcher", () => {
 
   test("cpu first tick seeds the baseline without dispatching", async () => {
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
-    jest.spyOn(Usage, "totalSeconds").mockReturnValue(0.0)
+    jest
+      .spyOn(Usage, "reading")
+      .mockReturnValue({ seconds: 0.0, source: "proc" })
     const bodies = captureIngestBodies()
 
     const dispatcher = configureCpuOnly("clock")
@@ -335,9 +337,9 @@ describe("Dispatcher", () => {
   test("cpu samples are not repopulated on dispatch failure", async () => {
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
     jest
-      .spyOn(Usage, "totalSeconds")
-      .mockReturnValueOnce(0.0)
-      .mockReturnValueOnce(0.5)
+      .spyOn(Usage, "reading")
+      .mockReturnValueOnce({ seconds: 0.0, source: "proc" })
+      .mockReturnValueOnce({ seconds: 0.5, source: "proc" })
     nock(BASE).persist().post("/metrics/ingest").reply(500)
 
     const dispatcher = configureCpuOnly("clock")
@@ -462,11 +464,13 @@ describe("Dispatcher", () => {
       })
 
     const dispatcher = configureWebOnly()
-    dispatcher.start()
-    await ran // block until the background loop runs a real tick
-    expect(dispatcher.running()).toBe(true)
-
-    await dispatcher.stop()
+    try {
+      dispatcher.start()
+      await ran // block until the background loop runs a real tick
+      expect(dispatcher.running()).toBe(true)
+    } finally {
+      await dispatcher.stop() // always tear the loop down, even on a failure
+    }
     expect(dispatcher.running()).toBe(false)
   })
 
@@ -485,11 +489,13 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureWebOnly()
     dispatcher._interval = 0.01 // 10ms between ticks, so the sleep path runs fast
-    dispatcher.start()
-    await twoTicks // tick -> sleep -> tick proves the loop resumes after sleeping
-
-    await dispatcher.stop() // stops mid-sleep, exercising the wake path
-    expect(count).toBeGreaterThanOrEqual(2)
+    try {
+      dispatcher.start()
+      await twoTicks // tick -> sleep -> tick proves the loop resumes after sleeping
+      expect(count).toBeGreaterThanOrEqual(2)
+    } finally {
+      await dispatcher.stop() // stops mid-sleep, exercising the wake path
+    }
     expect(dispatcher.running()).toBe(false)
   })
 
@@ -533,6 +539,72 @@ describe("Dispatcher", () => {
     await dispatcher._tick() // 500 — workers-only, so web data is empty
 
     expect(config().buffer.flush().web).toEqual({})
+    expect(loggedError("Dispatch error")).toBe(true)
+  })
+
+  test("a guarded non-error throw does not crash the tick", async () => {
+    captureIngestBodies()
+    const dispatcher = configureWebOnly()
+    jest.spyOn(dispatcher._lease, "requestIfDue").mockImplementation(() => {
+      throw null // JS allows throwing non-Errors; the guard must still absorb it
+    })
+
+    await expect(dispatcher._tick()).resolves.toBeUndefined()
+    expect(logger.error).toHaveBeenCalled()
+  })
+
+  test("the loop's terminal catch contains an unexpected tick failure", async () => {
+    const dispatcher = configureWebOnly()
+    jest.spyOn(dispatcher, "_tick").mockRejectedValue(new Error("unexpected"))
+
+    dispatcher.start()
+    await dispatcher._loopPromise // the terminal catch settles this, never rejects
+
+    // A throw escaping the loop must stop the dispatcher, not crash the host.
+    expect(dispatcher.running()).toBe(false)
+    expect(loggedError("stopped unexpectedly")).toBe(true)
+  })
+
+  test("a throwing logger cannot crash a dispatch", async () => {
+    nock(BASE).persist().post("/metrics/ingest").reply(500)
+    const dispatcher = configureWebOnly()
+    // A logger whose .error() throws must not turn a dispatch failure (which
+    // logs) into an unhandled rejection that crashes the host.
+    config().logger = {
+      info() {},
+      warn() {},
+      error() {
+        throw new Error("logger is broken")
+      },
+    }
+    freezeTime(1000)
+    config().buffer.sampleWeb(7)
+
+    await expect(dispatcher._tick()).resolves.toBeUndefined()
+  })
+
+  test("start is refused while a stop is in progress", async () => {
+    stubLease()
+    captureIngestBodies()
+    const dispatcher = configureWebOnly()
+    dispatcher.start()
+
+    const stopping = dispatcher.stop() // runs up to its first await; _stopping set
+    expect(dispatcher.start()).toBe(false) // refused mid-stop: no second loop
+    await stopping
+    expect(dispatcher.running()).toBe(false)
+  })
+
+  test("a dispatch never rejects, so a buffer failure cannot kill the loop", async () => {
+    captureIngestBodies()
+    const dispatcher = configureWebOnly()
+    jest.spyOn(config().buffer, "flush").mockImplementation(() => {
+      throw null // even a non-Error throw must be absorbed, never rejected
+    })
+
+    // An escaping rejection here would reach the unguarded loop as an unhandled
+    // rejection (a process crash on Node >=15); the tick must absorb it instead.
+    await expect(dispatcher._tick()).resolves.toBeUndefined()
     expect(loggedError("Dispatch error")).toBe(true)
   })
 })

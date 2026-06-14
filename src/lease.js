@@ -63,13 +63,19 @@ class Lease {
       throw new RequestError(`Lease request failed with ${status} status.`)
     }
 
+    // Guard the server-provided cadence values: a non-positive or unparseable
+    // header keeps the prior value rather than letting NaN/0 collapse the
+    // interval and storm the sampler (user infra) or the lease endpoint.
     const headers = response.headers
-    if (headers["hirefire-sample-frequency"] !== undefined) {
-      this._sampleFrequency = parseInt(headers["hirefire-sample-frequency"])
+
+    const frequency = parseInt(headers["hirefire-sample-frequency"])
+    if (Number.isFinite(frequency) && frequency > 0) {
+      this._sampleFrequency = frequency
     }
 
-    if (headers["hirefire-lease-ttl"] !== undefined) {
-      this._ttl = parseInt(headers["hirefire-lease-ttl"])
+    const ttl = parseInt(headers["hirefire-lease-ttl"])
+    if (Number.isFinite(ttl) && ttl > 0) {
+      this._ttl = ttl
       this._expiresAt = Date.now() + this._ttl * 1000
     }
 
