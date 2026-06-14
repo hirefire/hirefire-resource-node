@@ -47,6 +47,14 @@ describe("middleware", () => {
       expect(HireFire.configuration.buffer.flush().web).toEqual({})
     })
 
+    test("does not sample an over-the-limit queue time", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      HireFire.configuration.dyno("web")
+      freezeTime(1700000000)
+      processRequestQueueTime("1699999000000") // ~16 min, over the 60s cap
+      expect(HireFire.configuration.buffer.flush().web).toEqual({})
+    })
+
     test("does not sample without a web collector", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       freezeTime(1700000001)
@@ -105,6 +113,18 @@ describe("middleware", () => {
     test("clamps a future request start to zero", () => {
       freezeTime(1700000001)
       expect(calculateRequestQueueTime("1700000005000")).toBe(0)
+    })
+
+    test("keeps a high-but-plausible queue time", () => {
+      freezeTime(1700000000)
+      // 50s — severe overload but under the limit, so still reported.
+      expect(calculateRequestQueueTime("1699999950000")).toBe(50000)
+    })
+
+    test("drops an implausibly large queue time", () => {
+      freezeTime(1700000000)
+      // ~16 minutes of queue time, over the 60-second cap.
+      expect(calculateRequestQueueTime("1699999000000")).toBeNull()
     })
   })
 })

@@ -1,5 +1,7 @@
 const HireFire = require(".")
 
+const REQUEST_QUEUE_TIME_LIMIT = 60000
+
 // Samples this request's queue time (when a web collector and token are
 // configured) and lazily starts the dispatcher. The push model serves no
 // endpoint, so the middleware only observes — it never produces a response.
@@ -38,7 +40,8 @@ function calculateRequestQueueTime(requestStart) {
     milliseconds = value / 1000 // epoch microseconds
   }
 
-  return Math.max(Date.now() - Math.trunc(milliseconds), 0)
+  const requestQueueTime = Math.max(Date.now() - Math.trunc(milliseconds), 0)
+  return requestQueueTime <= REQUEST_QUEUE_TIME_LIMIT ? requestQueueTime : null
 }
 
 module.exports = { processRequestQueueTime, calculateRequestQueueTime }
