@@ -1,179 +1,101 @@
-const sinon = require("sinon")
+require("../support")
 const HireFire = require("../../src")
-const Configuration = require("../../src/configuration")
-const VERSION = require("../../src/version")
+const Dispatcher = require("../../src/dispatcher")
 
-// Mock next/server module
 const mockNextResponse = {
-  json: jest.fn((body, options) => ({
-    type: "json",
-    body,
-    status: options?.status,
-    headers: options?.headers,
-  })),
+  json: jest.fn((body, options) => ({ type: "json", body, ...options })),
   next: jest.fn(() => ({ type: "next" })),
 }
 
-jest.mock(
-  "next/server",
-  () => ({
-    NextResponse: mockNextResponse,
-  }),
-  { virtual: true },
-)
+jest.mock("next/server", () => ({ NextResponse: mockNextResponse }), {
+  virtual: true,
+})
 
 const { middleware, withHireFire } = require("../../src/middleware/next")
 
-function createMockNextRequest(pathname, headers = {}) {
+function mockRequest(pathname, headers = {}) {
   return {
     nextUrl: { pathname },
-    headers: {
-      get: (name) => headers[name.toLowerCase()] || null,
-    },
+    headers: { get: (name) => headers[name.toLowerCase()] || null },
   }
 }
 
 describe("Next.js", () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
-  })
+  let start
 
-  afterEach(() => {
-    delete process.env.HIREFIRE_TOKEN
-    HireFire.configuration = new Configuration()
-    jest.restoreAllMocks()
-    sinon.restore()
+  beforeEach(() => {
+    start = jest.spyOn(Dispatcher.prototype, "start").mockReturnValue(true)
   })
 
   describe("middleware", () => {
-    test("pass through without HIREFIRE_TOKEN", async () => {
+    test("passes through without a token", () => {
       HireFire.configuration.dyno("web")
-      HireFire.configuration.dyno("worker", () => 5)
-      const start = jest.spyOn(HireFire.configuration.web, "startDispatcher")
-      const request = createMockNextRequest("/", {
-        "x-request-start": "1",
-      })
-
-      const response = await middleware(request)
-
+      const response = middleware(
+        mockRequest("/", { "x-request-start": String(Date.now() - 1000) }),
+      )
       expect(response.type).toBe("next")
-      expect(mockNextResponse.next).toHaveBeenCalled()
-      expect(HireFire.configuration.web._buffer).toEqual({})
+      expect(HireFire.configuration.buffer.flush().web).toEqual({})
       expect(start).not.toHaveBeenCalled()
     })
 
-    test("pass through without configuration", async () => {
+    test("samples the web request and passes through", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      const request = createMockNextRequest("/", {
-        "x-request-start": "1",
-      })
-
-      const response = await middleware(request)
-
-      expect(response.type).toBe("next")
-      expect(mockNextResponse.next).toHaveBeenCalled()
-    })
-
-    test("pass through and process web configuration", async () => {
-      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      const now = Date.now()
-      const nowTimestamp = Math.floor(now / 1000)
-      const requestStartTime = String(now - 1234)
-      sinon.useFakeTimers({ now })
+      const second = Math.floor(Date.now() / 1000)
+      jest.spyOn(Date, "now").mockReturnValue(second * 1000)
       HireFire.configuration.dyno("web")
-      const start = jest.spyOn(HireFire.configuration.web, "startDispatcher")
-      const request = createMockNextRequest("/", {
-        "x-request-start": requestStartTime,
-      })
 
-      const response = await middleware(request)
+      const response = middleware(
+        mockRequest("/", { "x-request-start": String(second * 1000 - 1234) }),
+      )
 
       expect(response.type).toBe("next")
-      expect(mockNextResponse.next).toHaveBeenCalled()
-      expect(HireFire.configuration.web._buffer).toEqual({
-        [nowTimestamp]: [1234],
+      expect(HireFire.configuration.buffer.flush().web).toEqual({
+        [second]: [1234],
       })
       expect(start).toHaveBeenCalled()
     })
 
-    test("intercept and process worker configuration", async () => {
+    test("the former info path now passes through", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       HireFire.configuration.dyno("worker", () => 5)
-      const request = createMockNextRequest("/hirefire/SOME_TOKEN/info")
-
-      const response = await middleware(request)
-
-      expect(response.type).toBe("json")
-      expect(response.status).toBe(200)
-      expect(response.headers["HireFire-Resource"]).toBe(`Node-${VERSION}`)
-      expect(response.body).toEqual([{ name: "worker", value: 5 }])
-    })
-
-    test("intercept and process worker configuration with hirefire-token header", async () => {
-      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("worker", () => 5)
-      const request = createMockNextRequest("/hirefire", {
-        "hirefire-token": "SOME_TOKEN",
-      })
-
-      const response = await middleware(request)
-
-      expect(response.type).toBe("json")
-      expect(response.status).toBe(200)
-      expect(response.headers["HireFire-Resource"]).toBe(`Node-${VERSION}`)
-      expect(response.body).toEqual([{ name: "worker", value: 5 }])
+      const response = middleware(mockRequest("/hirefire/SOME_TOKEN/info"))
+      expect(response.type).toBe("next") // no JSON interception
     })
   })
 
   describe("withHireFire", () => {
-    test("calls user middleware when not a HireFire request", async () => {
+    test("calls the user middleware", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       const userMiddleware = jest.fn(() => ({ type: "user-response" }))
-      const wrappedMiddleware = withHireFire(userMiddleware)
-      const request = createMockNextRequest("/some-page")
+      const wrapped = withHireFire(userMiddleware)
+      const request = mockRequest("/some-page")
       const event = { waitUntil: jest.fn() }
 
-      const response = await wrappedMiddleware(request, event)
+      const response = wrapped(request, event)
 
       expect(response.type).toBe("user-response")
       expect(userMiddleware).toHaveBeenCalledWith(request, event)
     })
 
-    test("processes web metrics before calling user middleware", async () => {
+    test("samples web metrics before calling the user middleware", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      const now = Date.now()
-      const nowTimestamp = Math.floor(now / 1000)
-      const requestStartTime = String(now - 567)
-      sinon.useFakeTimers({ now })
+      const second = Math.floor(Date.now() / 1000)
+      jest.spyOn(Date, "now").mockReturnValue(second * 1000)
       HireFire.configuration.dyno("web")
       const userMiddleware = jest.fn(() => ({ type: "user-response" }))
-      const wrappedMiddleware = withHireFire(userMiddleware)
-      const request = createMockNextRequest("/some-page", {
-        "x-request-start": requestStartTime,
-      })
+      const wrapped = withHireFire(userMiddleware)
 
-      const response = await wrappedMiddleware(request, {})
+      const response = wrapped(
+        mockRequest("/some-page", {
+          "x-request-start": String(second * 1000 - 567),
+        }),
+        {},
+      )
 
       expect(response.type).toBe("user-response")
-      expect(userMiddleware).toHaveBeenCalled()
-      expect(HireFire.configuration.web._buffer).toEqual({
-        [nowTimestamp]: [567],
+      expect(HireFire.configuration.buffer.flush().web).toEqual({
+        [second]: [567],
       })
-    })
-
-    test("intercepts HireFire info endpoint without calling user middleware", async () => {
-      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("worker", () => 10)
-      const userMiddleware = jest.fn()
-      const wrappedMiddleware = withHireFire(userMiddleware)
-      const request = createMockNextRequest("/hirefire/SOME_TOKEN/info")
-
-      const response = await wrappedMiddleware(request, {})
-
-      expect(response.type).toBe("json")
-      expect(response.status).toBe(200)
-      expect(response.body).toEqual([{ name: "worker", value: 10 }])
-      expect(userMiddleware).not.toHaveBeenCalled()
     })
   })
 })

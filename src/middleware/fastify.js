@@ -1,22 +1,9 @@
 const fp = require("fastify-plugin")
-const { RequestInfo, request } = require("../middleware")
+const { processRequestQueueTime } = require("../middleware")
 
 async function HireFireMiddlewareFastify(fastify, options) {
-  fastify.addHook("onRequest", async (request_, reply) => {
-    const response = await request(
-      new RequestInfo(
-        request_.url,
-        request_.headers["x-request-start"],
-        request_.headers["hirefire-token"],
-      ),
-    )
-
-    if (response) {
-      reply
-        .status(response.status)
-        .headers(response.headers)
-        .send(response.body)
-    }
+  fastify.addHook("onRequest", async (request, reply) => {
+    processRequestQueueTime(request.headers["x-request-start"])
   })
 }
 

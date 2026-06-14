@@ -1,47 +1,17 @@
-const {
-  Worker,
-  InvalidDynoNameError,
-  MissingDynoFnError,
-} = require("../src/worker")
+require("./support")
+const Worker = require("../src/worker")
 
 describe("Worker", () => {
-  test("setup and methods", () => {
-    const validNames = [
-      "worker",
-      "worker1",
-      "my-worker",
-      "my_worker",
-      "Worker_123",
-      "worker-123",
-      "w",
-      "a".repeat(30),
-    ]
-
-    validNames.forEach((name) => {
-      const worker = new Worker("worker", () => 1 + 1)
-      expect(worker.name).toBe("worker")
-      expect(worker.value()).resolves.toBe(2)
-    })
+  test("coerces the name to a string", () => {
+    expect(new Worker("worker", () => 1).name).toBe("worker")
+    expect(new Worker(123, () => 1).name).toBe("123")
   })
 
-  test("invalid dyno name error", () => {
-    const invalidNames = [
-      "", // Empty string
-      "1worker", // Starts with a digit
-      "-worker", // Starts with a dash
-      "_worker", // Starts with an underscore
-      "worker!", // Contains an invalid character
-      " worker", // Starts with a space
-      "worker ", // Ends with a space
-      "a".repeat(31), // Exceeds maximum length
-    ]
-
-    invalidNames.forEach((name) => {
-      expect(() => new Worker(name)).toThrow(InvalidDynoNameError)
-    })
+  test("sample returns a synchronous sampler value", async () => {
+    expect(await new Worker("worker", () => 42).sample()).toBe(42)
   })
 
-  test("missing dyno function error", () => {
-    expect(() => new Worker("worker")).toThrow(MissingDynoFnError)
+  test("sample awaits an async sampler", async () => {
+    expect(await new Worker("worker", async () => 7).sample()).toBe(7)
   })
 })

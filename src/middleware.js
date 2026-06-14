@@ -1,69 +1,44 @@
 const HireFire = require(".")
-const VERSION = require("./version")
 
-class RequestInfo {
-  constructor(path, requestStartTime = null, token = null) {
-    this.path = path
-    this.requestStartTime = requestStartTime
-      ? parseInt(requestStartTime, 10)
-      : null
-    this.token = token
+// Samples this request's queue time (when a web collector and token are
+// configured) and lazily starts the dispatcher. The push model serves no
+// endpoint, so the middleware only observes — it never produces a response.
+function processRequestQueueTime(requestStart) {
+  if (!requestStart) return
+
+  const requestQueueTime = calculateRequestQueueTime(requestStart)
+  if (requestQueueTime === null) return
+
+  const configuration = HireFire.configuration
+
+  if (configuration.web && configuration.token) {
+    configuration.web.sample(requestQueueTime)
+    configuration.dispatcher.start()
+  }
+
+  if (configuration.logQueueMetrics) {
+    console.log(`[hirefire:router] queue=${requestQueueTime}ms`)
   }
 }
 
-async function request(requestInfo) {
-  await processRequestQueueTime(requestInfo)
+// X-Request-Start arrives in router-specific shapes: Heroku sends epoch
+// milliseconds, nginx "t=" plus fractional epoch seconds, Apache "t=" plus epoch
+// microseconds. The unit is inferred from the magnitude (the ranges are ~3
+// orders apart); unparseable or implausible values yield null.
+function calculateRequestQueueTime(requestStart) {
+  const value = parseFloat(String(requestStart).replace(/^t=/, ""))
+  if (!(value >= 1e9)) return null
 
-  if (matchesHireFirePath(requestInfo) || matchesInfoPath(requestInfo)) {
-    return {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "must-revalidate, private, max-age=0",
-        "HireFire-Resource": `Node-${VERSION}`,
-      },
-      body: await Promise.all(
-        HireFire.configuration.workers.map(async (worker) => ({
-          name: worker.name,
-          value: await worker.value(),
-        })),
-      ),
-    }
+  let milliseconds
+  if (value < 1e11) {
+    milliseconds = value * 1000 // epoch seconds
+  } else if (value < 1e14) {
+    milliseconds = value // epoch milliseconds
+  } else {
+    milliseconds = value / 1000 // epoch microseconds
   }
 
-  return null
+  return Math.max(Date.now() - Math.trunc(milliseconds), 0)
 }
 
-function matchesHireFirePath(requestInfo) {
-  return (
-    process.env.HIREFIRE_TOKEN &&
-    requestInfo.path === "/hirefire" &&
-    requestInfo.token === process.env.HIREFIRE_TOKEN
-  )
-}
-
-function matchesInfoPath(requestInfo) {
-  return (
-    process.env.HIREFIRE_TOKEN &&
-    requestInfo.path === `/hirefire/${process.env.HIREFIRE_TOKEN}/info`
-  )
-}
-
-async function processRequestQueueTime(requestInfo) {
-  if (
-    process.env.HIREFIRE_TOKEN &&
-    HireFire.configuration.web &&
-    requestInfo.requestStartTime
-  ) {
-    await HireFire.configuration.web.startDispatcher()
-    await HireFire.configuration.web.addToBuffer(
-      calculateRequestQueueTime(requestInfo),
-    )
-  }
-}
-
-function calculateRequestQueueTime(requestInfo) {
-  return Math.max(Date.now() - requestInfo.requestStartTime, 0)
-}
-
-module.exports = { RequestInfo, request }
+module.exports = { processRequestQueueTime, calculateRequestQueueTime }
