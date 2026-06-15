@@ -1,15 +1,7 @@
 require("../support")
 const HireFire = require("../../src")
 const Dispatcher = require("../../src/dispatcher")
-
-const mockNextResponse = {
-  json: jest.fn((body, options) => ({ type: "json", body, ...options })),
-  next: jest.fn(() => ({ type: "next" })),
-}
-
-jest.mock("next/server", () => ({ NextResponse: mockNextResponse }), {
-  virtual: true,
-})
+const { NextResponse } = require("next/server")
 
 const { middleware, withHireFire } = require("../../src/middleware/next")
 
@@ -33,7 +25,8 @@ describe("Next.js", () => {
       const response = middleware(
         mockRequest("/", { "x-request-start": String(Date.now() - 1000) }),
       )
-      expect(response.type).toBe("next")
+      expect(response).toBeInstanceOf(NextResponse)
+      expect(response.headers.get("x-middleware-next")).toBe("1")
       expect(HireFire.configuration.buffer.flush().web).toEqual({})
       expect(start).not.toHaveBeenCalled()
     })
@@ -48,7 +41,8 @@ describe("Next.js", () => {
         mockRequest("/", { "x-request-start": String(second * 1000 - 1234) }),
       )
 
-      expect(response.type).toBe("next")
+      expect(response).toBeInstanceOf(NextResponse)
+      expect(response.headers.get("x-middleware-next")).toBe("1")
       expect(HireFire.configuration.buffer.flush().web).toEqual({
         [second]: [1234],
       })
@@ -59,7 +53,9 @@ describe("Next.js", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       HireFire.configuration.dyno("worker", () => 5)
       const response = middleware(mockRequest("/hirefire/SOME_TOKEN/info"))
-      expect(response.type).toBe("next") // no JSON interception
+      // Passes through (NextResponse.next) rather than intercepting with JSON.
+      expect(response).toBeInstanceOf(NextResponse)
+      expect(response.headers.get("x-middleware-next")).toBe("1")
     })
   })
 

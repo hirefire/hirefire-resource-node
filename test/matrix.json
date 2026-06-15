@@ -23,6 +23,11 @@
       "test": "test/middleware/koa.test.js"
     },
     {
+      "package": "next",
+      "majors": [14, 15, 16],
+      "test": "test/middleware/next.test.js"
+    },
+    {
       "package": "bullmq",
       "majors": [4, 5],
       "test": "test/macro/bullmq.test.js"

@@ -20,7 +20,7 @@ package="${1:-}"
 [ -n "$package" ] || usage
 
 if [ "$package" = "core" ]; then
-  exec npx --no-install jest --testPathIgnorePatterns 'middleware/(connect|express|fastify|koa)\.test|macro/bullmq\.test'
+  exec npx --no-install jest --testPathIgnorePatterns 'middleware/(connect|express|fastify|koa|next)\.test|macro/bullmq\.test'
 fi
 
 major="${2:-}"
