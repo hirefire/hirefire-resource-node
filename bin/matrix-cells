@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+jq -c '[
+  .node[] as $node
+  | .integrations[] as $integration
+  | $integration.majors[] as $major
+  | {
+      node: $node,
+      package: $integration.package,
+      major: $major,
+      test: $integration.test,
+      name: (if $integration.package == "core" then "core" else "\($integration.package)@\($major)" end)
+    }
+]' test/matrix.json

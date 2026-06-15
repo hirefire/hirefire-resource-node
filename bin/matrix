@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+bin/services up
+
+current_node=""
+failures=()
+
+while read -r cell; do
+  node=$(jq -r '.node' <<<"$cell")
+  package=$(jq -r '.package' <<<"$cell")
+  major=$(jq -r '.major' <<<"$cell")
+  testfile=$(jq -r '.test' <<<"$cell")
+  name=$(jq -r '.name' <<<"$cell")
+
+  if [ "$node" != "$current_node" ]; then
+    echo
+    echo "=== Node $node ==="
+    mise exec "node@$node" -- npm ci --silent
+    current_node="$node"
+  fi
+
+  echo
+  echo "--- $name (Node $node) ---"
+  if ! mise exec "node@$node" -- bin/run-cell "$package" "$major" "$testfile"; then
+    failures+=("$name (Node $node)")
+  fi
+done < <(bin/matrix-cells | jq -c '.[]')
+
+echo
+if [ ${#failures[@]} -eq 0 ]; then
+  echo "All matrix cells passed."
+else
+  echo "Failed cells:"
+  printf '  - %s\n' "${failures[@]}"
+  exit 1
+fi

@@ -1,0 +1,31 @@
+{
+  "node": [22, 24, 26],
+  "integrations": [
+    { "package": "core", "majors": [null], "test": "core" },
+    {
+      "package": "connect",
+      "majors": [3],
+      "test": "test/middleware/connect.test.js"
+    },
+    {
+      "package": "express",
+      "majors": [4, 5],
+      "test": "test/middleware/express.test.js"
+    },
+    {
+      "package": "fastify",
+      "majors": [4, 5],
+      "test": "test/middleware/fastify.test.js"
+    },
+    {
+      "package": "koa",
+      "majors": [2, 3],
+      "test": "test/middleware/koa.test.js"
+    },
+    {
+      "package": "bullmq",
+      "majors": [4, 5],
+      "test": "test/macro/bullmq.test.js"
+    }
+  ]
+}

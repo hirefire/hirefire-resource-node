@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: bin/run-cell <package> <major> <testfile>
+       bin/run-cell core
+
+Runs one matrix cell: installs <package>@<major> (--no-save) and runs <testfile>.
+"core" runs the full suite minus the version-pinned integration files.
+Cells are defined in test/matrix.json; run them all with bin/matrix.
+
+Example: bin/run-cell express 5 test/middleware/express.test.js
+EOF
+  exit 64
+}
+
+package="${1:-}"
+[ -n "$package" ] || usage
+
+if [ "$package" = "core" ]; then
+  exec npx --no-install jest --testPathIgnorePatterns 'middleware/(connect|express|fastify|koa)\.test|macro/bullmq\.test'
+fi
+
+major="${2:-}"
+testfile="${3:-}"
+if [ -z "$major" ] || [ -z "$testfile" ]; then
+  usage
+fi
+
+npm install "${package}@${major}" --no-save --no-audit --no-fund --silent
+exec npx --no-install jest "$testfile"
