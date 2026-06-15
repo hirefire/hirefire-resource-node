@@ -28,7 +28,10 @@ For more information, visit our [home page][HireFire].
 
 ## Development
 
+Requires [Docker](https://www.docker.com/) — Redis for the BullMQ macro tests runs in a container. `bin/services up` starts it on a Docker-assigned free host port recorded in a git-ignored `.env` (read by the test suite); `bin/services down` stops it and removes `.env`.
+
 - Run `bin/setup` to prepare the environment.
+- Run `bin/services up` / `bin/services down` to start / stop the Redis container.
 - See `npm run` for common tasks.
 
 ## Release

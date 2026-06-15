@@ -4,7 +4,7 @@ const { jobQueueLatency, jobQueueSize } = require("../../src/macro/bullmq")
 const { JobQueueLatencyUnsupportedError } = require("../../src/errors")
 const IORedis = require("ioredis")
 
-const redisURL = "redis://127.0.0.1:6379/15"
+const redisURL = `redis://127.0.0.1:${process.env.REDIS_PORT || "6379"}/15`
 
 describe("BullMQ", () => {
   let defaultQueue, mailerQueue, clock, redis

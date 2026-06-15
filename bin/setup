@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-IFS=$'\n\t'
-set -vx
+cd "$(dirname "$0")/.."
 
-brew bundle
-brew services start redis
+bin/services up
 
-npm install
+mise install
+mise exec -- npm install

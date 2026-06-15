@@ -41,6 +41,11 @@
     "format": "prettier --write --no-semi .",
     "doc": "jsdoc"
   },
+  "jest": {
+    "setupFiles": [
+      "<rootDir>/test/load-env.js"
+    ]
+  },
   "engines": {
     "node": ">=16"
   },
