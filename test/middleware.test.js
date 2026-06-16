@@ -102,6 +102,23 @@ describe("middleware", () => {
       expect(calculateRequestQueueTime("t=1700000000000000")).toBe(1000)
     })
 
+    test("parses epoch nanoseconds", () => {
+      freezeTime(1700000001)
+      expect(calculateRequestQueueTime("1700000000000000000")).toBe(1000)
+    })
+
+    test("normalizes every precision variant to the same queue time", () => {
+      freezeTime(1700000001)
+      // The same instant (epoch 1700000000.250) in each unit a router may emit;
+      // all must normalize to the identical 750ms. The 250ms fraction exercises
+      // the sub-millisecond path in every unit, including nanoseconds (whose
+      // value exceeds a double's exact-integer range).
+      expect(calculateRequestQueueTime("t=1700000000.250")).toBe(750) // seconds
+      expect(calculateRequestQueueTime("1700000000250")).toBe(750) // milliseconds
+      expect(calculateRequestQueueTime("1700000000250000")).toBe(750) // microseconds
+      expect(calculateRequestQueueTime("1700000000250000000")).toBe(750) // nanoseconds
+    })
+
     test("ignores an unparseable value", () => {
       expect(calculateRequestQueueTime("garbage")).toBeNull()
     })
@@ -115,6 +132,20 @@ describe("middleware", () => {
       expect(calculateRequestQueueTime("1700000005000")).toBe(0)
     })
 
+    test("clamps a future microsecond start to zero", () => {
+      freezeTime(1700000001)
+      // Clamp-to-zero is applied after unit inference, regardless of unit.
+      expect(calculateRequestQueueTime("1700000005000000")).toBe(0)
+    })
+
+    test("accepts the 1e9 lower-guard boundary and rejects below it", () => {
+      freezeTime(1000000001)
+      // Exactly 1e9 is a valid epoch-seconds timestamp (2001-09-09), not rejected.
+      expect(calculateRequestQueueTime("1000000000")).toBe(1000)
+      // One below the 1e9 guard is implausible and dropped.
+      expect(calculateRequestQueueTime("999999999")).toBeNull()
+    })
+
     test("keeps a high-but-plausible queue time", () => {
       freezeTime(1700000000)
       // 50s — severe overload but under the limit, so still reported.
@@ -125,6 +156,18 @@ describe("middleware", () => {
       freezeTime(1700000000)
       // ~16 minutes of queue time, over the 60-second cap.
       expect(calculateRequestQueueTime("1699999000000")).toBeNull()
+    })
+
+    test("drops an over-the-limit nanosecond start", () => {
+      freezeTime(1700000000)
+      // ~1000s in the past in nanoseconds: the 60s cap drops it regardless of unit.
+      expect(calculateRequestQueueTime("1699999000000000000")).toBeNull()
+    })
+
+    test("keeps exactly the cap limit and drops one over", () => {
+      freezeTime(1700000000)
+      expect(calculateRequestQueueTime("1699999940000")).toBe(60000) // exactly 60000ms
+      expect(calculateRequestQueueTime("1699999939999")).toBeNull() // 60001ms
     })
   })
 })
