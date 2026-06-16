@@ -20,7 +20,9 @@ package="${1:-}"
 [ -n "$package" ] || usage
 
 if [ "$package" = "core" ]; then
-  exec npx --no-install jest --testPathIgnorePatterns 'middleware/(connect|express|fastify|koa|next)\.test|macro/bullmq\.test'
+  # Ignore every integration test claimed by the matrix; core runs the rest.
+  ignore="$(jq -r '[.integrations[] | select(.package != "core") | .test] | join("|")' test/matrix.json)"
+  exec npx --no-install jest --testPathIgnorePatterns "$ignore"
 fi
 
 major="${2:-}"
