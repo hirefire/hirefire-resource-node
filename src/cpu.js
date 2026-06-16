@@ -1,7 +1,6 @@
 const Usage = require("./cpu/usage")
 
-// Samples this process's container-level CPU utilization on each dispatcher
-// tick and buffers it as a 0-100 percentage of the dyno's available CPU.
+// Samples this process's CPU utilization as a 0-100% of available CPU.
 class CPU {
   constructor(name, configuration) {
     this._name = String(name)
@@ -26,18 +25,16 @@ class CPU {
     this._lastTime = time
     this._lastSource = source
 
-    // The first reading only seeds the baseline; so does a change of usage
-    // source (counters from different sources aren't comparable, so a delta
-    // across a switch would fabricate a spike).
+    // The first reading only seeds the baseline; so does a usage-source change
+    // (a delta across a switch would fabricate a spike).
     if (usage === null || previousUsage === null || source !== previousSource)
       return null
 
     const wallDelta = time - previousTime
     const usageDelta = usage - previousUsage
 
-    // A non-positive wall delta means the clock stepped backward; a negative
-    // usage delta means the usage source changed between reads (e.g. a cgroup
-    // file vanished). Either way, skip the second rather than fabricate a value.
+    // Skip rather than fabricate: the clock stepped back, or the usage counter
+    // went backward.
     if (wallDelta <= 0 || usageDelta < 0) return null
 
     const available = Usage.availableCpus()

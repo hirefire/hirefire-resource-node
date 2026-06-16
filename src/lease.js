@@ -25,8 +25,7 @@ class Lease {
     return this._granted
   }
 
-  // Advances before yielding so a raising sampler costs one sample window
-  // instead of being retried on every dispatcher tick.
+  // Advance before yielding so a raising sampler costs one window, not every tick.
   async sampleIfDue(fn) {
     if (!this._granted || Date.now() < this._nextSampleAt) return
 
@@ -34,8 +33,7 @@ class Lease {
     await fn()
   }
 
-  // Advances before the request so a failed renewal waits a full TTL instead of
-  // blocking the dispatcher loop on every tick.
+  // Advance before the request so a failed renewal waits a full TTL, not every tick.
   async requestIfDue() {
     if (!this._enabled || Date.now() < this._expiresAt) return
 
@@ -45,9 +43,8 @@ class Lease {
     try {
       response = await this._client.requestLease(this._processId)
     } catch (error) {
-      // Unconfirmed leases may be re-granted to another process meanwhile; stop
-      // sampling until a successful renewal rather than risk two processes
-      // sampling the same fleet.
+      // Demote on failure: an unconfirmed lease may be re-granted elsewhere, so
+      // stop sampling rather than risk two processes sampling one fleet.
       this._granted = false
       throw error
     }
@@ -63,9 +60,8 @@ class Lease {
       throw new RequestError(`Lease request failed with ${status} status.`)
     }
 
-    // Guard the server-provided cadence values: a non-positive or unparseable
-    // header keeps the prior value rather than letting NaN/0 collapse the
-    // interval and storm the sampler (user infra) or the lease endpoint.
+    // Guard the cadence headers: a non-positive or unparseable value keeps the
+    // prior one, so NaN/0 can't collapse the interval and storm the sampler.
     const headers = response.headers
 
     const frequency = parseInt(headers["hirefire-sample-frequency"])

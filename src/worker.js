@@ -1,6 +1,5 @@
-// The job collector: holds a declared name and the user's sampler function,
-// which queries shared job-queue state (queue size or latency). The sampler may
-// be synchronous or async; the Workers collection awaits and validates it.
+// The job collector: a declared name and the user's sampler. The sampler may be
+// sync or async; Workers awaits and validates it.
 class Worker {
   constructor(name, sampler) {
     this._name = String(name)

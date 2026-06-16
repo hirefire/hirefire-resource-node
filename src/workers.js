@@ -27,8 +27,7 @@ class Workers {
     return this._workers[Symbol.iterator]()
   }
 
-  // Samplers are user code: isolate failures and validate values so one bad
-  // sampler never blocks the others or propagates into the dispatcher loop.
+  // Samplers are user code: isolate failures and validate values per worker.
   async sample() {
     for (const worker of this._workers) {
       try {

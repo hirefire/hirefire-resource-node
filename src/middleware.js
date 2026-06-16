@@ -2,9 +2,8 @@ const HireFire = require(".")
 
 const REQUEST_QUEUE_TIME_LIMIT = 60000
 
-// Samples this request's queue time (when a web collector and token are
-// configured) and lazily starts the dispatcher. The push model serves no
-// endpoint, so the middleware only observes — it never produces a response.
+// Observe-only: the push model serves no endpoint, so this never produces a
+// response.
 function processRequestQueueTime(requestStart) {
   if (!requestStart) return
 
@@ -23,10 +22,8 @@ function processRequestQueueTime(requestStart) {
   }
 }
 
-// X-Request-Start arrives in router-specific shapes: Heroku sends epoch
-// milliseconds, nginx "t=" plus fractional epoch seconds, Apache "t=" plus epoch
-// microseconds. The unit is inferred from the magnitude (the ranges are ~3
-// orders apart); unparseable or implausible values yield null.
+// X-Request-Start's unit varies by router (epoch s / ms / µs), so infer it from
+// magnitude. Unparseable or implausible values yield null.
 function calculateRequestQueueTime(requestStart) {
   const value = parseFloat(String(requestStart).replace(/^t=/, ""))
   if (!(value >= 1e9)) return null

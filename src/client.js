@@ -15,8 +15,7 @@ class Client {
     this._timeout = timeout
   }
 
-  // Takes the JSON-encoded body; the dispatcher encodes it to enforce the
-  // payload size limit before submitting.
+  // Body is pre-encoded JSON (the dispatcher enforces the size cap before this).
   async submitSamples(body) {
     this._requireToken()
 
@@ -42,8 +41,7 @@ class Client {
     }
   }
 
-  // Returns the raw { statusCode, headers } so the Lease can interpret the
-  // grant the same way the Ruby reference reads the Net::HTTP response.
+  // Returns the raw { statusCode, headers } for the Lease to interpret.
   async requestLease(processId) {
     this._requireToken()
 
@@ -53,9 +51,8 @@ class Client {
     })
   }
 
-  // Maps the whole transport failure family (DNS, refused/reset connections,
-  // broken pipes, TLS) and timeouts to RequestError so callers handle one
-  // error type. Resolves for any HTTP response (the caller interprets status).
+  // Map every transport failure to RequestError so callers handle one error
+  // type; resolve for any HTTP response (the caller interprets status).
   _execute(path, headers, body) {
     const uri = new URL(this._baseUrl() + path)
     const transport = uri.protocol === "https:" ? https : http
@@ -106,8 +103,8 @@ class Client {
   }
 
   _baseUrl() {
-    // Strip trailing slashes so a custom HIREFIRE_DATA_URL with one doesn't
-    // produce a "//metrics/ingest" path the server won't route.
+    // Strip trailing slashes so a custom HIREFIRE_DATA_URL doesn't yield a
+    // "//metrics/ingest" path.
     const url = process.env.HIREFIRE_DATA_URL || "https://data.hirefire.io"
     return url.replace(/\/+$/, "")
   }

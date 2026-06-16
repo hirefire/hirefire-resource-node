@@ -13,10 +13,8 @@ class HireFire {
     return this.configuration
   }
 
-  // Stops the current dispatcher (if one was built) and installs a fresh
-  // configuration. Returns the stop promise so callers that care — chiefly
-  // tests — can await the final flush; the timer is cleared synchronously
-  // either way.
+  // Stops the current dispatcher and installs a fresh configuration. Returns the
+  // stop promise so callers (chiefly tests) can await the final flush.
   reset() {
     const dispatcher = this.configuration._dispatcher
     this.configuration = new Configuration()

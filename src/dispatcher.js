@@ -4,12 +4,10 @@ const Workers = require("./workers")
 const safeLog = require("./log")
 
 class Dispatcher {
-  // How far back (seconds) a dispatch may claim unreported web seconds. Matches
-  // the server's ingest staleness acceptance and doubles as an honesty cap: a
-  // process suspended longer than this must not assert liveness for that time.
+  // Max seconds back a dispatch may claim web liveness.
   static WEB_BACKFILL_LIMIT = 60
 
-  // Mirrors the server's request body cap; larger payloads are rejected with 413.
+  // Mirrors the server's request body cap.
   static PAYLOAD_SIZE_LIMIT = 65536
 
   constructor(
@@ -38,11 +36,9 @@ class Dispatcher {
     this._loopPromise = null
   }
 
-  // Idempotent: a second call while running is a no-op. Unlike the Ruby
-  // reference there is no fork/PID guard — Node's cluster.fork() re-execs into a
-  // fresh process (new event loop, new singleton), so a running loop is never
-  // inherited; each process lazily starts its own from configure() or the first
-  // web request.
+  // Idempotent: a second call while running is a no-op. No fork/PID guard —
+  // Node's cluster.fork() re-execs into a fresh process, so a running loop is
+  // never inherited; each process starts its own from configure() or first request.
   start() {
     // Also refuse mid-stop: stop() clears _running before its awaits, so a
     // start() in that window would orphan a second loop.
@@ -86,9 +82,8 @@ class Dispatcher {
     return this._running
   }
 
-  // tick, then wait a second, then tick again — sequential, never overlapping,
-  // mirroring the Ruby `while running?; tick; sleep 1; end` loop. The sleep
-  // timer is unref'd so HireFire never keeps an otherwise-idle process alive.
+  // Sequential tick → sleep → tick, never overlapping. The sleep timer is
+  // unref'd so HireFire never keeps an otherwise-idle process alive.
   async _loop() {
     while (this._running) {
       await this._tick()
@@ -116,9 +111,7 @@ class Dispatcher {
     }
   }
 
-  // Each stage is isolated: a failure in one (a lease renewal timing out, a job
-  // sampler raising) must not starve the stages after it — most importantly
-  // dispatch, which drains the buffer.
+  // Stage-isolated so one failure can't starve dispatch, which drains the buffer.
   async _tick() {
     await this._guard(() => this._lease.requestIfDue())
     await this._guard(() =>
@@ -159,9 +152,7 @@ class Dispatcher {
       }
 
       await this._client.submitSamples(body)
-      // Advance only after a successful submit so the next success re-claims the
-      // seconds whose delivery failed; duplicate empty claims are harmless
-      // server-side.
+      // Advance only after a successful submit; failed seconds re-claim next time.
       if (this._webWatermark !== undefined)
         this._lastWebSecond = this._webWatermark
     } catch (error) {
@@ -174,9 +165,8 @@ class Dispatcher {
     }
   }
 
-  // Repopulating would retry the same oversized payload every tick, so it is
-  // dropped outright. Advancing the watermark leaves the dropped seconds
-  // unclaimed (missing data) rather than backfilled as empty (zero traffic).
+  // Drop rather than repopulate (a retry would re-send the same oversized
+  // payload); advancing the watermark leaves a gap instead of backfilling false zeros.
   _dropOversizedPayload(body) {
     if (this._webWatermark !== undefined)
       this._lastWebSecond = this._webWatermark
@@ -196,9 +186,7 @@ class Dispatcher {
       this._webWatermark = Math.max(...Object.keys(samples).map(Number))
       entries.push({ name: this._web.name, samples })
     } else if (this._web && Object.keys(data.web).length > 0) {
-      // Identity says this is not the http-serving process: real samples are
-      // still delivered, but no liveness is synthesized — this process must not
-      // claim the web name's seconds.
+      // Not the http process: deliver real samples but synthesize no liveness.
       entries.push({ name: this._web.name, samples: data.web })
     }
 
@@ -211,12 +199,8 @@ class Dispatcher {
     return entries
   }
 
-  // Claims every second since the last successfully dispatched one: seconds with
-  // buffered samples keep them, seconds without get an explicit empty claim,
-  // which the server reads as 0 traffic — so a delivery blip never leaves a gap
-  // that an additive metric would misread as missing data. With no watermark
-  // (first dispatch after boot) only the current second is claimed: a fresh
-  // process must not assert liveness for time before it existed.
+  // Claim every second since the last delivered one (no samples => empty => 0
+  // traffic), capped at WEB_BACKFILL_LIMIT. First dispatch claims only now.
   _backfillWebSeconds(samples) {
     const now = Math.floor(Date.now() / 1000)
     let from = this._lastWebSecond !== null ? this._lastWebSecond + 1 : now

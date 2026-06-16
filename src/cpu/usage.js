@@ -1,9 +1,7 @@
 const fs = require("fs")
 const os = require("os")
 
-// Reads container-level CPU usage and the CPU normalization divisor, trying
-// progressively less precise sources. All reads are best-effort: a missing or
-// unreadable file returns null so the caller can fall through.
+// Best-effort reads of container CPU usage and the normalization divisor.
 const Usage = {
   CGROUP_V2_USAGE: "/sys/fs/cgroup/cpu.stat",
   CGROUP_V1_USAGE: "/sys/fs/cgroup/cpuacct/cpuacct.usage",
@@ -13,35 +11,24 @@ const Usage = {
   CEDAR_MEMORY_LIMIT: "/sys/fs/cgroup/memory/memory.limit_in_bytes",
   PROC_DIR: "/proc",
 
-  // No portable sysconf in Node; 100 is the universal USER_HZ default and the
-  // value the /proc/[pid]/stat parser needs on the Linux dynos where it runs.
+  // No portable sysconf in Node; 100 is the universal USER_HZ default.
   CLOCK_TICKS: 100,
 
-  // Cedar shared dynos have no CPU limit anywhere, but each size is bound to a
-  // fixed memory limit, so the memory limit identifies the size and the size
-  // implies the CPU entitlement. Dedicated dynos are deliberately absent: their
-  // core count is the real one, so they fall through.
+  // Cedar shared dynos expose no CPU limit; the memory limit fingerprints the
+  // size, which implies the entitlement. Other sizes fall through.
   CEDAR_SHARED_ENTITLEMENTS: {
     536870912: 1.0, // 512 MB: eco / basic / standard-1x
     1073741824: 2.0, // 1 GB: standard-2x
   },
 
-  // Cumulative CPU time in seconds for the whole dyno/container, from the first
-  // available source: cgroup v2, cgroup v1, the /proc PID namespace, or this
-  // process's own clock. Heroku exposes no cpu cgroup at all, so /proc carries
-  // it there: it is PID-namespaced to the dyno, so summing every visible
-  // process gives whole-dyno CPU — covering multi-process servers without a
-  // shared counter. process.cpuUsage() is the dev/macOS last resort and only
-  // sees this process.
+  // Cumulative whole-container CPU seconds, first available source wins.
   totalSeconds() {
     return this.reading().seconds
   },
 
-  // { seconds, source } — the source label lets the consumer reseed when the
-  // answering source changes between ticks (e.g. /proc briefly unreadable, then
-  // back). Counters from different sources aren't comparable: a whole-dyno
-  // source (cgroup/proc) and the per-process clock differ by orders of
-  // magnitude, so differencing across a switch would fabricate a usage spike.
+  // Returns { seconds, source }; the source label lets the consumer reseed when
+  // the answering source changes, since counters from different sources aren't
+  // comparable and differencing across a switch would fabricate a spike.
   reading() {
     const sources = [
       ["cgroupV2", () => this.cgroupV2Seconds()],
@@ -56,10 +43,8 @@ const Usage = {
     return { seconds: null, source: null }
   },
 
-  // A malformed value returns null (not NaN) so totalSeconds keeps its
-  // finite-or-null contract: NaN is not nullish, so it would defeat the ??
-  // source chain and stick as a permanent CPU baseline. The line is trimmed
-  // before splitting so a trailing space can't make pop() an empty token.
+  // Returns null, not NaN: NaN isn't nullish, so it would defeat the ?? source
+  // chain and stick as a permanent baseline.
   cgroupV2Seconds() {
     const content = this.read(this.CGROUP_V2_USAGE)
     if (!content) return null
@@ -76,6 +61,8 @@ const Usage = {
     return Number.isFinite(ns) ? ns / 1000000000.0 : null
   },
 
+  // Heroku exposes no cpu cgroup; /proc is PID-namespaced to the dyno, so
+  // summing every visible process gives whole-dyno CPU.
   procNamespaceSeconds() {
     const paths = this.procStatPaths()
     if (paths.length === 0) return null
@@ -106,9 +93,8 @@ const Usage = {
       .map((entry) => `${this.PROC_DIR}/${entry}/stat`)
   },
 
-  // utime + stime (clock ticks) from a /proc/[pid]/stat line. The comm field
-  // (2nd) can contain spaces and parens, so parse from after the last ')': the
-  // remaining fields put utime at index 11 and stime at index 12.
+  // utime + stime ticks; parse after the last ")" since comm may contain spaces
+  // and parens, which puts utime at index 11 and stime at index 12.
   statTicks(content) {
     const close = content.lastIndexOf(")")
     if (close === -1) return null
@@ -121,15 +107,13 @@ const Usage = {
 
     const utime = parseInt(fields[11])
     const stime = parseInt(fields[12])
-    // Non-numeric fields return null so the per-process tick is skipped rather
-    // than poisoning the whole-dyno sum with NaN.
+    // Non-numeric fields return null so a bad PID is skipped, not summed as NaN.
     return Number.isFinite(utime) && Number.isFinite(stime)
       ? utime + stime
       : null
   },
 
-  // Wrapped like the file's fs reads so reading() honors its finite-or-null
-  // contract even if the clock read fails on an exotic platform.
+  // Wrapped so a clock failure yields null, honoring the finite-or-null contract.
   processSeconds() {
     try {
       const { user, system } = process.cpuUsage()
@@ -139,12 +123,8 @@ const Usage = {
     }
   },
 
-  // Number of CPUs to normalize usage against — the CPU the platform guarantees
-  // this container, not the host's core count. Sources, first answer wins: a
-  // cgroup quota (platforms with a hard CPU limit), the Cedar shared-dyno
-  // entitlement (shared dynos burst on an 8-core host, so the core count would
-  // understate utilization and invert under contention), or the core count
-  // (dedicated machines, where the host's core count is the container's).
+  // CPUs to normalize against: the platform's guarantee, not the host core
+  // count. First source wins.
   availableCpus() {
     return (
       this.cgroupV2Quota() ??
@@ -163,9 +143,8 @@ const Usage = {
 
     const quotaValue = parseFloat(quota)
     const periodValue = parseFloat(period)
-    // !(x > 0) on both rejects NaN, zero, and negatives in one comparison, so a
-    // malformed quota falls through to the next source instead of normalizing
-    // CPU against a bad divisor (matches cgroupV1Quota).
+    // > 0 rejects NaN, zero, and negatives, so a malformed quota falls through
+    // instead of dividing (matches cgroupV1Quota).
     return quotaValue > 0 && periodValue > 0 ? quotaValue / periodValue : null
   },
 
@@ -177,9 +156,7 @@ const Usage = {
     return quota > 0 && period > 0 ? quota / period : null
   },
 
-  // Gated on DYNO because elsewhere a v1 memory limit says nothing about CPU.
-  // Unrecognized fingerprints (dedicated dynos, future sizes) fall through to
-  // the processor count.
+  // Gated on DYNO: a v1 memory limit says nothing about CPU off Heroku.
   herokuEntitlement() {
     if (!process.env.DYNO) return null
 

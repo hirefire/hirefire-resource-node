@@ -1,8 +1,6 @@
-// The http collector: represents the HTTP-serving process for request queue
-// time tracking. The whole HTTP family (RequestQueueTime, RequestsPerMinute)
-// rides this one feed; the server derives queue time from the sample values and
-// request rate from the sample counts. The name need not be "web" — on
-// Render/DigitalOcean the HTTP process can have any name.
+// The http collector for the HTTP-serving process; buffers one request queue
+// time sample per request. The whole HTTP family rides this one feed, and the
+// name need not be "web".
 class Web {
   constructor(name, configuration) {
     this._name = String(name)
