@@ -45,6 +45,22 @@ describe("Connect", () => {
     expect(start).toHaveBeenCalled()
   })
 
+  test("falls back to X-Queue-Start when X-Request-Start is absent", async () => {
+    process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+    const second = Math.floor(Date.now() / 1000)
+    jest.spyOn(Date, "now").mockReturnValue(second * 1000)
+    HireFire.configuration.dyno("web")
+
+    const response = await request(app)
+      .get("/")
+      .set("X-Queue-Start", String(second * 1000 - 1234))
+
+    expect(response.status).toBe(200)
+    expect(HireFire.configuration.buffer.flush().web).toEqual({
+      [second]: [1234],
+    })
+  })
+
   test("the former info path now passes through to the app", async () => {
     process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
     HireFire.configuration.dyno("worker", () => 5)

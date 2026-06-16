@@ -4,7 +4,10 @@ const { processRequestQueueTime } = require("../middleware")
 // skip-override lifts that so the onRequest hook covers the whole app.
 async function HireFireMiddlewareFastify(fastify, options) {
   fastify.addHook("onRequest", async (request, reply) => {
-    processRequestQueueTime(request.headers["x-request-start"])
+    // X-Queue-Start is an exact synonym for X-Request-Start (e.g. Render).
+    processRequestQueueTime(
+      request.headers["x-request-start"] || request.headers["x-queue-start"],
+    )
   })
 }
 
