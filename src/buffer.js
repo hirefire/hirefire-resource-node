@@ -58,8 +58,6 @@ class Buffer {
   }
 }
 
-// Insert-side TTL bound: drop seconds past the staleness window (which the
-// server rejects anyway); the size check keeps the common case a single compare.
 function prune(buckets, now, ttl) {
   const keys = Object.keys(buckets)
   if (keys.length <= ttl + 5) return

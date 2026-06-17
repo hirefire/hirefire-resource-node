@@ -1,6 +1,5 @@
 const Usage = require("./cpu/usage")
 
-// Samples this process's CPU utilization as a 0-100% of available CPU.
 class CPU {
   constructor(name, configuration) {
     this._name = String(name)

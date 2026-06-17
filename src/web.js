@@ -1,6 +1,3 @@
-// The http collector for the HTTP-serving process; buffers one request queue
-// time sample per request. The whole HTTP family rides this one feed, and the
-// name need not be "web".
 class Web {
   constructor(name, configuration) {
     this._name = String(name)

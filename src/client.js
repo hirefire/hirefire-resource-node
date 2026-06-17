@@ -15,7 +15,6 @@ class Client {
     this._timeout = timeout
   }
 
-  // Body is pre-encoded JSON (the dispatcher enforces the size cap before this).
   async submitSamples(body) {
     this._requireToken()
 
@@ -41,7 +40,6 @@ class Client {
     }
   }
 
-  // Returns the raw { statusCode, headers } for the Lease to interpret.
   async requestLease(processId) {
     this._requireToken()
 
@@ -51,8 +49,6 @@ class Client {
     })
   }
 
-  // Map every transport failure to RequestError so callers handle one error
-  // type; resolve for any HTTP response (the caller interprets status).
   _execute(path, headers, body) {
     const uri = new URL(this._baseUrl() + path)
     const transport = uri.protocol === "https:" ? https : http

@@ -4,7 +4,6 @@ const Workers = require("./workers")
 const safeLog = require("./log")
 
 class Dispatcher {
-  // Max seconds back a dispatch may claim web liveness.
   static WEB_BACKFILL_LIMIT = 60
 
   // Mirrors the server's request body cap.
@@ -36,17 +35,12 @@ class Dispatcher {
     this._loopPromise = null
   }
 
-  // Idempotent: a second call while running is a no-op. No fork/PID guard —
-  // Node's cluster.fork() re-execs into a fresh process, so a running loop is
-  // never inherited; each process starts its own from configure() or first request.
   start() {
     // Also refuse mid-stop: stop() clears _running before its awaits, so a
     // start() in that window would orphan a second loop.
     if (this._running || this._stopping) return false
 
     this._running = true
-    // Backstop: anything escaping the guarded loop is logged and stops the
-    // dispatcher rather than becoming an unhandled rejection (a crash on Node >=15).
     this._loopPromise = this._loop().catch((error) => {
       this._running = false
       this._logger().error(
@@ -82,8 +76,6 @@ class Dispatcher {
     return this._running
   }
 
-  // Sequential tick → sleep → tick, never overlapping. The sleep timer is
-  // unref'd so HireFire never keeps an otherwise-idle process alive.
   async _loop() {
     while (this._running) {
       await this._tick()
@@ -134,7 +126,6 @@ class Dispatcher {
   }
 
   async _dispatch() {
-    // flush is inside the try so a dispatch can never reject and escape the loop.
     let data
 
     try {
@@ -186,7 +177,6 @@ class Dispatcher {
       this._webWatermark = Math.max(...Object.keys(samples).map(Number))
       entries.push({ name: this._web.name, samples })
     } else if (this._web && Object.keys(data.web).length > 0) {
-      // Not the http process: deliver real samples but synthesize no liveness.
       entries.push({ name: this._web.name, samples: data.web })
     }
 
@@ -199,8 +189,6 @@ class Dispatcher {
     return entries
   }
 
-  // Claim every second since the last delivered one (no samples => empty => 0
-  // traffic), capped at WEB_BACKFILL_LIMIT. First dispatch claims only now.
   _backfillWebSeconds(samples) {
     const now = Math.floor(Date.now() / 1000)
     let from = this._lastWebSecond !== null ? this._lastWebSecond + 1 : now
@@ -219,8 +207,6 @@ class Dispatcher {
     return this._configuration.buffer
   }
 
-  // Wraps the user-supplied logger so a missing method or a throw inside it can
-  // never crash the dispatch loop or its terminal crash backstop.
   _logger() {
     const logger = this._configuration.logger
     return {

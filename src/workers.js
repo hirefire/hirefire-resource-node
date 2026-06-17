@@ -1,6 +1,5 @@
 const safeLog = require("./log")
 
-// A collection of declared job collectors that knows how to sample them all.
 class Workers {
   constructor(configuration) {
     this._configuration = configuration
@@ -27,7 +26,6 @@ class Workers {
     return this._workers[Symbol.iterator]()
   }
 
-  // Samplers are user code: isolate failures and validate values per worker.
   async sample() {
     for (const worker of this._workers) {
       try {

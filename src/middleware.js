@@ -2,8 +2,6 @@ const HireFire = require(".")
 
 const REQUEST_QUEUE_TIME_LIMIT = 60000
 
-// Observe-only: the push model serves no endpoint, so this never produces a
-// response.
 function processRequestQueueTime(requestStart) {
   if (!requestStart) return
 

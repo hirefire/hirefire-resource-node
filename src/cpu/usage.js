@@ -1,7 +1,6 @@
 const fs = require("fs")
 const os = require("os")
 
-// Best-effort reads of container CPU usage and the normalization divisor.
 const Usage = {
   CGROUP_V2_USAGE: "/sys/fs/cgroup/cpu.stat",
   CGROUP_V1_USAGE: "/sys/fs/cgroup/cpuacct/cpuacct.usage",
@@ -21,14 +20,10 @@ const Usage = {
     1073741824: 2.0, // 1 GB: standard-2x
   },
 
-  // Cumulative whole-container CPU seconds, first available source wins.
   totalSeconds() {
     return this.reading().seconds
   },
 
-  // Returns { seconds, source }; the source label lets the consumer reseed when
-  // the answering source changes, since counters from different sources aren't
-  // comparable and differencing across a switch would fabricate a spike.
   reading() {
     const sources = [
       ["cgroupV2", () => this.cgroupV2Seconds()],
@@ -113,7 +108,6 @@ const Usage = {
       : null
   },
 
-  // Wrapped so a clock failure yields null, honoring the finite-or-null contract.
   processSeconds() {
     try {
       const { user, system } = process.cpuUsage()
@@ -123,8 +117,6 @@ const Usage = {
     }
   },
 
-  // CPUs to normalize against: the platform's guarantee, not the host core
-  // count. First source wins.
   availableCpus() {
     return (
       this.cgroupV2Quota() ??
@@ -167,7 +159,6 @@ const Usage = {
     return this.CEDAR_SHARED_ENTITLEMENTS[parseInt(limit)] ?? null
   },
 
-  // Render's explicit core count, gated on RENDER so it never fires elsewhere.
   renderEntitlement() {
     if (!process.env.RENDER) return null
 

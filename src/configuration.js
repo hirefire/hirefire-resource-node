@@ -35,8 +35,6 @@ class DuplicateDynoError extends Error {
   }
 }
 
-// Public tracking values mapped to internal collectors. dyno only adds "cpu";
-// its "web" name implies http on its own (handled in dyno()).
 const SERVICE_COLLECTORS = { http: "http", cpu: "cpu" }
 const DYNO_COLLECTORS = { cpu: "cpu" }
 
@@ -63,8 +61,6 @@ class Configuration {
     this._token = value
   }
 
-  // Legacy / Heroku front door, 1.x-compatible. Tracks "cpu" explicitly; the
-  // "web" name implies http on its own (the Heroku Procfile convention).
   dyno(name, ...args) {
     name = coerceName(name)
     const { tracking, sampler } = parseArgs(args)
@@ -96,8 +92,6 @@ class Configuration {
     this._register(name, collector, sampler)
   }
 
-  // Universal / platform-neutral front door: the name implies nothing, so http
-  // must be tracked explicitly with { tracking: "http" }.
   service(name, ...args) {
     name = coerceName(name)
     const { tracking, sampler } = parseArgs(args)
@@ -190,8 +184,6 @@ class Configuration {
     )
   }
 
-  // Hard gate: a CPU collector runs only on the process whose identity matches
-  // its name; an unresolved identity disables it (logged, never raised).
   _activeCpuCollectors() {
     if (this.cpu.length === 0) return []
 
@@ -213,8 +205,6 @@ class Configuration {
     )
   }
 
-  // Soft gate: may this process synthesize web liveness (heartbeats/backfill)?
-  // An unresolved identity still allows it.
   _webLiveness() {
     if (!this.web) return true
 
@@ -225,8 +215,6 @@ class Configuration {
     )
   }
 
-  // Memoized: both gates share one resolution, and the Heroku app-wide config
-  // var conflict is warned at most once.
   _resolvedIdentity() {
     if (this._identityResolved) return this._identity
 
@@ -259,8 +247,6 @@ function coerceName(name) {
   return name
 }
 
-// Arguments after the name are overloaded: a function is the sampler, an object
-// carries { tracking }. A bare positional value is a misuse.
 function parseArgs(args) {
   let tracking
   let sampler

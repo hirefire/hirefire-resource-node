@@ -1,5 +1,3 @@
-// Resolves this process's name (to match against a declared dyno name). First
-// non-empty source wins; null means unresolved.
 const Identity = {
   resolve() {
     return this.explicit() || this.herokuDyno() || this.renderService() || null
@@ -26,8 +24,6 @@ const Identity = {
     return presence(process.env.RENDER_SERVICE_NAME)
   },
 
-  // True when an explicit name disagrees with the DYNO prefix: a dashboard-set
-  // (app-wide) HIREFIRE_SERVICE_NAME would make every dyno identify the same.
   herokuConflict() {
     const explicit = this.explicit()
     const dyno = this.herokuDyno()
