@@ -256,6 +256,32 @@ describe("CPU.Usage", () => {
       })
       expect(Usage.availableCpus()).toBeCloseTo(0.9, 4)
     })
+
+    test("reads the render entitlement from RENDER_CPU_COUNT", () => {
+      process.env.RENDER = "true"
+      process.env.RENDER_CPU_COUNT = "0.5" // Render exposes a fractional core count
+      stubReads({})
+      expect(Usage.availableCpus()).toBeCloseTo(0.5, 4)
+    })
+
+    test("render entitlement ignored off render", () => {
+      process.env.RENDER_CPU_COUNT = "8" // set, but RENDER unset
+      stubReads({})
+      expect(Usage.availableCpus()).toBe(Usage.processorCount())
+    })
+
+    test("render without a cpu count falls through to the processor count", () => {
+      process.env.RENDER = "true" // RENDER set, but no RENDER_CPU_COUNT
+      stubReads({})
+      expect(Usage.availableCpus()).toBe(Usage.processorCount())
+    })
+
+    test("cgroup quota wins over the render entitlement", () => {
+      process.env.RENDER = "true"
+      process.env.RENDER_CPU_COUNT = "8" // would be wrong if it won
+      stubReads({ [Usage.CGROUP_V2_QUOTA]: "50000 100000" }) // 0.5 core
+      expect(Usage.availableCpus()).toBeCloseTo(0.5, 4)
+    })
   })
 
   describe("clockTicks", () => {

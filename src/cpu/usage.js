@@ -130,6 +130,7 @@ const Usage = {
       this.cgroupV2Quota() ??
       this.cgroupV1Quota() ??
       this.herokuEntitlement() ??
+      this.renderEntitlement() ??
       this.processorCount()
     )
   },
@@ -164,6 +165,14 @@ const Usage = {
     if (!limit) return null
 
     return this.CEDAR_SHARED_ENTITLEMENTS[parseInt(limit)] ?? null
+  },
+
+  // Render's explicit core count, gated on RENDER so it never fires elsewhere.
+  renderEntitlement() {
+    if (!process.env.RENDER) return null
+
+    const count = parseFloat(process.env.RENDER_CPU_COUNT)
+    return count > 0 ? count : null
   },
 
   processorCount() {

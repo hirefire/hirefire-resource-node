@@ -1,7 +1,13 @@
 const HireFire = require("../src")
 const nock = require("nock")
 
-const IDENTITY_ENV = ["HIREFIRE_SERVICE_NAME", "DYNO", "RENDER_SERVICE_NAME"]
+const IDENTITY_ENV = [
+  "HIREFIRE_SERVICE_NAME",
+  "DYNO",
+  "RENDER_SERVICE_NAME",
+  "RENDER",
+  "RENDER_CPU_COUNT",
+]
 
 // A logger that swallows everything; tests that assert on logging override it
 // with jest spies.
