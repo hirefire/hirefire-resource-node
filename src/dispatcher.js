@@ -9,6 +9,11 @@ class Dispatcher {
   // Mirrors the server's request body cap.
   static PAYLOAD_SIZE_LIMIT = 65536
 
+  // Seconds between buffer dispatches; server-adjustable via the
+  // HireFire-Dispatch-Frequency response header. Clamped to [1, 30].
+  static DEFAULT_DISPATCH_FREQUENCY = 1
+  static MAX_DISPATCH_FREQUENCY = 30
+
   constructor(
     configuration,
     {
@@ -30,6 +35,8 @@ class Dispatcher {
     this._lastWebSecond = null
     this._webWatermark = undefined
     this._interval = 1
+    this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
+    this._nextDispatchAt = null
     this._sleepTimer = null
     this._sleepResolve = null
     this._loopPromise = null
@@ -104,6 +111,7 @@ class Dispatcher {
   }
 
   // Stage-isolated so one failure can't starve dispatch, which drains the buffer.
+  // Sampling runs every tick; only dispatch is throttled.
   async _tick() {
     await this._guard(() => this._lease.requestIfDue())
     await this._guard(() =>
@@ -112,7 +120,18 @@ class Dispatcher {
     for (const collector of this._cpu) {
       await this._guard(() => collector.sample())
     }
+    await this._dispatchIfDue()
+  }
+
+  // First run dispatches immediately; the next time is set after dispatch so a
+  // just-learned frequency applies next tick. A guarded dispatch never rejects, so
+  // a failure still waits a full window.
+  async _dispatchIfDue() {
+    if (this._nextDispatchAt !== null && Date.now() < this._nextDispatchAt)
+      return
+
     await this._dispatch()
+    this._nextDispatchAt = Date.now() + this._dispatchFrequency * 1000
   }
 
   async _guard(fn) {
@@ -142,7 +161,8 @@ class Dispatcher {
         this._logger().info(`[HireFire] Dispatching metrics: ${body}`)
       }
 
-      await this._client.submitSamples(body)
+      const response = await this._client.submitSamples(body)
+      this._applyDispatchFrequency(response)
       // Advance only after a successful submit; failed seconds re-claim next time.
       if (this._webWatermark !== undefined)
         this._lastWebSecond = this._webWatermark
@@ -154,6 +174,18 @@ class Dispatcher {
         `[HireFire] Dispatch error: ${error?.message ?? error}`,
       )
     }
+  }
+
+  // A non-positive or unparseable (NaN) value keeps the prior frequency, so a bad
+  // response can't collapse the interval and storm ingest. Clamp the rest; the
+  // response is null on 401.
+  _applyDispatchFrequency(response) {
+    if (!response || !response.headers) return
+
+    const value = parseInt(response.headers["hirefire-dispatch-frequency"])
+    if (!Number.isFinite(value) || value <= 0) return
+
+    this._dispatchFrequency = Math.min(value, Dispatcher.MAX_DISPATCH_FREQUENCY)
   }
 
   // Drop rather than repopulate (a retry would re-send the same oversized

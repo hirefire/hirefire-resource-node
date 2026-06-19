@@ -531,6 +531,84 @@ describe("Dispatcher", () => {
     expect(leaseRequested).toBe(false)
   })
 
+  function stubIngestWithDispatchFrequency(value) {
+    nock(BASE)
+      .persist()
+      .post("/metrics/ingest")
+      .reply(200, "", { "HireFire-Dispatch-Frequency": String(value) })
+  }
+
+  test("dispatch frequency defaults to one without the header", async () => {
+    const bodies = captureIngestBodies()
+    const dispatcher = configureWebOnly()
+
+    freezeTime(1000)
+    await dispatcher._tick()
+    freezeTime(1001)
+    await dispatcher._tick()
+
+    expect(bodies.length).toBe(2) // every tick dispatches
+  })
+
+  test("honors a server-supplied dispatch frequency", async () => {
+    let count = 0
+    nock(BASE)
+      .persist()
+      .post("/metrics/ingest")
+      .reply(() => {
+        count++
+        return [200, "", { "HireFire-Dispatch-Frequency": "5" }]
+      })
+    const dispatcher = configureWebOnly()
+
+    freezeTime(1000)
+    await dispatcher._tick() // dispatches, learns 5
+    freezeTime(1002)
+    await dispatcher._tick() // within window — skipped
+    freezeTime(1004)
+    await dispatcher._tick() // still within window — skipped
+    freezeTime(1005)
+    await dispatcher._tick() // window elapsed — dispatches
+
+    expect(count).toBe(2)
+  })
+
+  test("clamps an over-large dispatch frequency to the maximum", async () => {
+    stubIngestWithDispatchFrequency(Dispatcher.MAX_DISPATCH_FREQUENCY + 100)
+    const dispatcher = configureWebOnly()
+
+    freezeTime(1000)
+    await dispatcher._tick()
+
+    expect(dispatcher._dispatchFrequency).toBe(
+      Dispatcher.MAX_DISPATCH_FREQUENCY,
+    )
+  })
+
+  test("ignores a non-positive dispatch frequency", async () => {
+    stubIngestWithDispatchFrequency(0)
+    const dispatcher = configureWebOnly()
+
+    freezeTime(1000)
+    await dispatcher._tick()
+
+    expect(dispatcher._dispatchFrequency).toBe(
+      Dispatcher.DEFAULT_DISPATCH_FREQUENCY,
+    )
+  })
+
+  test("ignores an unparseable dispatch frequency", async () => {
+    stubIngestWithDispatchFrequency("nonsense")
+    const dispatcher = configureWebOnly()
+
+    freezeTime(1000)
+    await dispatcher._tick()
+
+    expect(dispatcher._dispatchFrequency).toBe(
+      Dispatcher.DEFAULT_DISPATCH_FREQUENCY,
+    )
+  })
+
   test("dispatch failure without web data does not repopulate", async () => {
     stubLease(true)
     nock(BASE).persist().post("/metrics/ingest").reply(500)
