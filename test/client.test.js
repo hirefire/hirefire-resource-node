@@ -80,6 +80,7 @@ describe("Client", () => {
     const scope = nock(BASE, {
       reqheaders: {
         "hirefire-token": "test-token-value",
+        "hirefire-agent": `Node-${VERSION}`,
         "hirefire-process-id": "abc123",
       },
     })
@@ -104,7 +105,7 @@ describe("Client", () => {
     await expect(slowClient.requestLease("abc123")).rejects.toThrow("timed out")
   })
 
-  test("requestLease omits the agent header", async () => {
+  test("requestLease sends the agent header", async () => {
     let sentAgent = "unset"
     const scope = nock(BASE)
       .post("/metrics/lease")
@@ -116,7 +117,7 @@ describe("Client", () => {
     await client.requestLease("abc123")
 
     expect(scope.isDone()).toBe(true)
-    expect(sentAgent).toBeUndefined() // ingest sends HireFire-Agent; the lease does not
+    expect(sentAgent).toBe(`Node-${VERSION}`)
   })
 
   test("raises without a token", async () => {

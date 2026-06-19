@@ -45,6 +45,7 @@ class Client {
 
     return this._execute("/metrics/lease", {
       "HireFire-Token": this._token(),
+      "HireFire-Agent": `Node-${VERSION}`,
       "HireFire-Process-ID": processId,
     })
   }
