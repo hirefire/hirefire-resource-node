@@ -1,7 +1,5 @@
 const { processRequestQueueTime } = require("../middleware")
 
-// X-Queue-Start is an exact synonym for X-Request-Start (e.g. Render emits it);
-// prefer X-Request-Start when both are present.
 function readRequestStart(nextRequest) {
   return (
     nextRequest.headers.get("X-Request-Start") ||

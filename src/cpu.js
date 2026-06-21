@@ -24,16 +24,12 @@ class CPU {
     this._lastTime = time
     this._lastSource = source
 
-    // The first reading only seeds the baseline; so does a usage-source change
-    // (a delta across a switch would fabricate a spike).
     if (usage === null || previousUsage === null || source !== previousSource)
       return null
 
     const wallDelta = time - previousTime
     const usageDelta = usage - previousUsage
 
-    // Skip rather than fabricate: the clock stepped back, or the usage counter
-    // went backward.
     if (wallDelta <= 0 || usageDelta < 0) return null
 
     const available = Usage.availableCpus()

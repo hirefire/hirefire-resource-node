@@ -6,11 +6,8 @@ const safeLog = require("./log")
 class Dispatcher {
   static WEB_BACKFILL_LIMIT = 60
 
-  // Mirrors the server's request body cap.
   static PAYLOAD_SIZE_LIMIT = 65536
 
-  // Seconds between buffer dispatches; server-adjustable via the
-  // HireFire-Dispatch-Frequency response header. Clamped to [1, 30].
   static DEFAULT_DISPATCH_FREQUENCY = 1
   static MAX_DISPATCH_FREQUENCY = 30
 
@@ -43,8 +40,6 @@ class Dispatcher {
   }
 
   start() {
-    // Also refuse mid-stop: stop() clears _running before its awaits, so a
-    // start() in that window would orphan a second loop.
     if (this._running || this._stopping) return false
 
     this._running = true
@@ -65,14 +60,13 @@ class Dispatcher {
 
     this._running = false
     this._stopping = true
-    this._wakeSleep() // resolve any pending sleep so the loop exits promptly
+    this._wakeSleep()
 
-    // Clear the handle before awaiting so a concurrent start() can't be orphaned.
     const loopPromise = this._loopPromise
     this._loopPromise = null
-    await loopPromise // wait for the in-flight tick to finish (Ruby's join)
+    await loopPromise
 
-    await this._guard(() => this._dispatch()) // final flush, never rejecting
+    await this._guard(() => this._dispatch())
 
     this._stopping = false
     this._logger().info("[HireFire] Dispatcher stopped.")
@@ -110,8 +104,6 @@ class Dispatcher {
     }
   }
 
-  // Stage-isolated so one failure can't starve dispatch, which drains the buffer.
-  // Sampling runs every tick; only dispatch is throttled.
   async _tick() {
     await this._guard(() => this._lease.requestIfDue())
     await this._guard(() =>
@@ -123,9 +115,6 @@ class Dispatcher {
     await this._dispatchIfDue()
   }
 
-  // First run dispatches immediately; the next time is set after dispatch so a
-  // just-learned frequency applies next tick. A guarded dispatch never rejects, so
-  // a failure still waits a full window.
   async _dispatchIfDue() {
     if (this._nextDispatchAt !== null && Date.now() < this._nextDispatchAt)
       return
@@ -138,8 +127,6 @@ class Dispatcher {
     try {
       await fn()
     } catch (error) {
-      // error?.message ?? error so a non-Error throw (throw null, a rejected
-      // string) can't make the guard itself throw and escape the loop.
       this._logger().error(`[HireFire] ${error?.message ?? error}`)
     }
   }
@@ -163,7 +150,6 @@ class Dispatcher {
 
       const response = await this._client.submitSamples(body)
       this._applyDispatchFrequency(response)
-      // Advance only after a successful submit; failed seconds re-claim next time.
       if (this._webWatermark !== undefined)
         this._lastWebSecond = this._webWatermark
     } catch (error) {
@@ -176,9 +162,6 @@ class Dispatcher {
     }
   }
 
-  // A non-positive or unparseable (NaN) value keeps the prior frequency, so a bad
-  // response can't collapse the interval and storm ingest. Clamp the rest; the
-  // response is null on 401.
   _applyDispatchFrequency(response) {
     if (!response || !response.headers) return
 
@@ -188,8 +171,6 @@ class Dispatcher {
     this._dispatchFrequency = Math.min(value, Dispatcher.MAX_DISPATCH_FREQUENCY)
   }
 
-  // Drop rather than repopulate (a retry would re-send the same oversized
-  // payload); advancing the watermark leaves a gap instead of backfilling false zeros.
   _dropOversizedPayload(body) {
     if (this._webWatermark !== undefined)
       this._lastWebSecond = this._webWatermark
@@ -228,7 +209,7 @@ class Dispatcher {
       from = now - Dispatcher.WEB_BACKFILL_LIMIT
     if (from > now) from = now
 
-    const result = { ...samples } // keep synthesized claims out of the retry buffer
+    const result = { ...samples }
     for (let second = from; second <= now; second++) {
       if (result[second] === undefined) result[second] = []
     }

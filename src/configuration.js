@@ -137,7 +137,6 @@ class Configuration {
   }
 
   _register(name, collector, sampler) {
-    // Case-insensitive: names differing only in case would gate as one identity.
     if (
       this._names.some(
         (existing) => existing.toLowerCase() === name.toLowerCase(),
@@ -148,8 +147,6 @@ class Configuration {
       )
     }
 
-    // Reserve the name only after the collector validates and builds, so a
-    // rejected declaration leaves no trace and a corrected retry still succeeds.
     switch (collector) {
       case "http":
         this._rejectSampler(name, sampler)

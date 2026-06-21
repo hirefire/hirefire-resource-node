@@ -43,8 +43,6 @@ class Workers {
 
         this._configuration.buffer.sampleWorker(worker.name, value)
       } catch (error) {
-        // JS allows throwing non-Errors (throw null, Promise.reject("x")), so
-        // reading .name/.message blindly could itself throw and break isolation.
         const reason =
           error instanceof Error
             ? `${error.name}: ${error.message}`
@@ -56,7 +54,6 @@ class Workers {
     }
   }
 
-  // A throwing/incomplete user logger must not break sampler isolation.
   _logger() {
     const logger = this._configuration.logger
     return { error: (message) => safeLog(logger, "error", message) }

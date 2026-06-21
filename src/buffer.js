@@ -1,10 +1,5 @@
-// Thread-safe storage for web, worker, and CPU metric samples. Node's single
-// event loop means no mutex: every method is synchronous, so flush swaps the
-// buffers out atomically before any I/O is awaited.
 class Buffer {
   constructor(ttl = 60) {
-    // _cpu has a null prototype so a declared name like "__proto__" can't
-    // pollute Object.prototype.
     this._web = {}
     this._workers = new Map()
     this._cpu = Object.create(null)
@@ -18,7 +13,6 @@ class Buffer {
     this._web[timestamp].push(sample)
   }
 
-  // Latest-wins per name: worker samples are gauges, so only the most recent matters.
   sampleWorker(name, sample) {
     this._workers.set(name, sample)
   }
@@ -51,8 +45,6 @@ class Buffer {
     Object.entries(data).forEach(([timestamp, samples]) => {
       if (parseInt(timestamp) < now - this._ttl) return
       const bucket = (this._web[timestamp] = this._web[timestamp] || [])
-      // A loop, not push(...samples): the spread would RangeError on a very large
-      // array, and this runs inside the dispatch catch which must not throw.
       for (const sample of samples) bucket.push(sample)
     })
   }

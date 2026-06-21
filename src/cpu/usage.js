@@ -10,14 +10,11 @@ const Usage = {
   CEDAR_MEMORY_LIMIT: "/sys/fs/cgroup/memory/memory.limit_in_bytes",
   PROC_DIR: "/proc",
 
-  // No portable sysconf in Node; 100 is the universal USER_HZ default.
   CLOCK_TICKS: 100,
 
-  // Cedar shared dynos expose no CPU limit; the memory limit fingerprints the
-  // size, which implies the entitlement. Other sizes fall through.
   CEDAR_SHARED_ENTITLEMENTS: {
-    536870912: 1.0, // 512 MB: eco / basic / standard-1x
-    1073741824: 2.0, // 1 GB: standard-2x
+    536870912: 1.0,
+    1073741824: 2.0,
   },
 
   totalSeconds() {
@@ -38,8 +35,6 @@ const Usage = {
     return { seconds: null, source: null }
   },
 
-  // Returns null, not NaN: NaN isn't nullish, so it would defeat the ?? source
-  // chain and stick as a permanent baseline.
   cgroupV2Seconds() {
     const content = this.read(this.CGROUP_V2_USAGE)
     if (!content) return null
@@ -56,8 +51,6 @@ const Usage = {
     return Number.isFinite(ns) ? ns / 1000000000.0 : null
   },
 
-  // Heroku exposes no cpu cgroup; /proc is PID-namespaced to the dyno, so
-  // summing every visible process gives whole-dyno CPU.
   procNamespaceSeconds() {
     const paths = this.procStatPaths()
     if (paths.length === 0) return null
@@ -88,8 +81,6 @@ const Usage = {
       .map((entry) => `${this.PROC_DIR}/${entry}/stat`)
   },
 
-  // utime + stime ticks; parse after the last ")" since comm may contain spaces
-  // and parens, which puts utime at index 11 and stime at index 12.
   statTicks(content) {
     const close = content.lastIndexOf(")")
     if (close === -1) return null
@@ -102,7 +93,6 @@ const Usage = {
 
     const utime = parseInt(fields[11])
     const stime = parseInt(fields[12])
-    // Non-numeric fields return null so a bad PID is skipped, not summed as NaN.
     return Number.isFinite(utime) && Number.isFinite(stime)
       ? utime + stime
       : null
@@ -136,20 +126,15 @@ const Usage = {
 
     const quotaValue = parseFloat(quota)
     const periodValue = parseFloat(period)
-    // > 0 rejects NaN, zero, and negatives, so a malformed quota falls through
-    // instead of dividing (matches cgroupV1Quota).
     return quotaValue > 0 && periodValue > 0 ? quotaValue / periodValue : null
   },
 
   cgroupV1Quota() {
     const quota = parseInt(this.read(this.CGROUP_V1_QUOTA))
     const period = parseFloat(this.read(this.CGROUP_V1_PERIOD))
-    // x > 0 rejects unreadable (NaN), zero, and the v1 "-1" unlimited marker, so
-    // a malformed value falls through instead of dividing (matches cgroupV2Quota).
     return quota > 0 && period > 0 ? quota / period : null
   },
 
-  // Gated on DYNO: a v1 memory limit says nothing about CPU off Heroku.
   herokuEntitlement() {
     if (!process.env.DYNO) return null
 
@@ -174,7 +159,7 @@ const Usage = {
       const count = os.cpus().length
       return count > 0 ? count : 1
     } catch {
-      return 1 // a sane divisor if the OS query fails; availableCpus stays positive
+      return 1
     }
   },
 

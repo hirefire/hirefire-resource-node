@@ -68,7 +68,7 @@ class Client {
 
     return new Promise((resolve, reject) => {
       const request = transport.request(options, (response) => {
-        response.resume() // discard the body; only status + headers matter
+        response.resume()
         response.on("end", () => {
           resolve({
             statusCode: response.statusCode,
@@ -100,8 +100,6 @@ class Client {
   }
 
   _baseUrl() {
-    // Strip trailing slashes so a custom HIREFIRE_DATA_URL doesn't yield a
-    // "//metrics/ingest" path.
     const url = process.env.HIREFIRE_DATA_URL || "https://data.hirefire.io"
     return url.replace(/\/+$/, "")
   }
