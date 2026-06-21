@@ -1,11 +1,11 @@
-## v1.3.0
+# Changelog
 
-Push-based metrics. The library now collects worker, web request-queue-time, and CPU metrics and pushes them outbound to `data.hirefire.io`, replacing the 1.x hybrid (HireFire polled the app's `/hirefire/<token>/info` endpoint for worker metrics; web request-queue-time was pushed to `logdrain.hirefire.io`). **This release is backwards-compatible: every existing 1.x configuration keeps working unchanged — upgrade by bumping the package.**
+All notable changes to this project are documented in this file.
 
-### Upgrading
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
 
-- **No configuration change is required.** `config.dyno("web")` and `config.dyno("worker", () => ...)` parse and route exactly as before. The backend detects the agent version on the first push and transparently reads the pushed metrics instead of polling. `HIREFIRE_TOKEN`, `HIREFIRE_VERBOSE`, and all middleware adapters (Express, Koa, Connect, Fastify, Next.js) are retained.
-- **Restricted-egress networks must allowlist `data.hirefire.io` (outbound).** This is the one non-transparent part of the upgrade. The wire path changes: worker metrics flip from **inbound** (HireFire polled your app) to **outbound** (the library pushes to `data.hirefire.io`), so worker-only apps no longer need a reachable web process — but it is a new egress path. Web request-queue-time moves its destination from `logdrain.hirefire.io` to `data.hirefire.io`. If you allowlist outbound destinations (or previously whitelisted HireFire's inbound poller IPs), add `data.hirefire.io` before upgrading, or metrics will silently stop flowing while your config still looks correct. Open-egress apps (the vast majority) need no action.
+## [Unreleased]
 
 ### Added
 
@@ -25,25 +25,35 @@ Push-based metrics. The library now collects worker, web request-queue-time, and
 
 - The library no longer serves the `/hirefire/<token>/info` endpoint; worker metrics are pushed instead. The backend keeps the legacy pull path for pre-1.3.0 agents, so the transition is resolved server-side with no config change.
 - Removed the `async-mutex` runtime dependency — the library now has **zero runtime dependencies**. Buffer access is synchronous on Node's single-threaded event loop, so no lock is needed.
-- `HIREFIRE_DISPATCH_URL` (the 1.x web logdrain override) is removed; the push base URL is `HIREFIRE_DATA_URL` (default `https://data.hirefire.io`). In practice neither is set by end users.
+- `HIREFIRE_DISPATCH_URL` (the 1.x web logdrain override) is removed; the push base URL is `HIREFIRE_DATA_URL` (default `https://data.hirefire.io`). Restricted-egress networks must allowlist `data.hirefire.io` (outbound) or metrics silently stop.
 - Widened the supported Node range to `>=16`.
 
-## v1.2.0
+## [1.2.0] - 2026-02-03
+
+### Added
 
 - Add support for [Next.js](https://nextjs.org).
 
-## v1.1.1
+## [1.1.1] - 2025-05-06
+
+### Added
 
 - Add connectionOptions to BullMQ jobQueueSize
 
-## v1.1.0
+## [1.1.0] - 2024-04-21
+
+### Added
 
 - Add support for [Fastify](https://fastify.dev).
 
-## v1.0.1
+## [1.0.1] - 2024-03-13
+
+### Added
 
 - Add support for dashes in `Worker` names to match the Procfile process naming format. `Worker` is implicitly used when configuring HireFire using the `Configuration#dyno` method.
 
-## v1.0.0
+## [1.0.0] - 2024-01-24
+
+### Added
 
 - Initial release.
