@@ -14,7 +14,8 @@ async function jobQueueLatency(...args) {
 }
 
 /**
- * Calculates the total job queue size across specified queues.
+ * Calculates the total job queue size across the specified queues. If no queues are specified, it
+ * measures size across all queues.
  *
  * @async
  * @param {...string} queues - Names of the queues for size measurement.
@@ -40,10 +41,10 @@ async function jobQueueLatency(...args) {
  * // Calculate size across "default" and "mailer" queues
  * await jobQueueSize("default", "mailer")
  * @example
- * // Calculate Size using the options.connection property
+ * // Calculate size using the options.connection property
  * await jobQueueSize("default", { connection: "redis://localhost:6379/0" })
  * @example
- * // Calculate Size using the options.connectionOptions property
+ * // Calculate size using the options.connectionOptions property
  * await jobQueueSize("default", { connectionOptions: { tls: { rejectUnauthorized: false } } })
  */
 async function jobQueueSize(...args) {
