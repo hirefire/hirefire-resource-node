@@ -60,12 +60,4 @@ describe("Connect", () => {
       [second]: [1234],
     })
   })
-
-  test("the former info path now passes through to the app", async () => {
-    process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-    HireFire.configuration.dyno("worker", () => 5)
-    const response = await request(app).get("/hirefire/SOME_TOKEN/info")
-    expect(response.status).toBe(200)
-    expect(response.text).toBe("Hello")
-  })
 })

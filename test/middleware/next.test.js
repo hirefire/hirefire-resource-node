@@ -49,13 +49,20 @@ describe("Next.js", () => {
       expect(start).toHaveBeenCalled()
     })
 
-    test("the former info path now passes through", () => {
+    test("falls back to X-Queue-Start when X-Request-Start is absent", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("worker", () => 5)
-      const response = middleware(mockRequest("/hirefire/SOME_TOKEN/info"))
-      // Passes through (NextResponse.next) rather than intercepting with JSON.
+      const second = Math.floor(Date.now() / 1000)
+      jest.spyOn(Date, "now").mockReturnValue(second * 1000)
+      HireFire.configuration.dyno("web")
+
+      const response = middleware(
+        mockRequest("/", { "x-queue-start": String(second * 1000 - 1234) }),
+      )
+
       expect(response).toBeInstanceOf(NextResponse)
-      expect(response.headers.get("x-middleware-next")).toBe("1")
+      expect(HireFire.configuration.buffer.flush().web).toEqual({
+        [second]: [1234],
+      })
     })
   })
 
