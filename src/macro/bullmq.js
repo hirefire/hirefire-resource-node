@@ -3,12 +3,11 @@ const { unpack } = require("../utility")
 const { jobQueueLatencyUnsupported } = require("../errors")
 
 /**
- * Measures job queue latency. Currently, this functionality is not supported for BullMQ.
+ * Job queue latency is not supported for BullMQ — calling this always throws.
  *
  * @async
- * @param {...any} args - Any number of arguments (ignored in function).
- * @throws {JobQueueLatencyUnsupportedError} - Indicates that the module does not support job queue latency measurements.
- * @returns {Promise<void>} - The function is asynchronous, but its return value is not used.
+ * @param {...any} args - Ignored.
+ * @throws {JobQueueLatencyUnsupportedError} Always, since BullMQ does not support latency measurement.
  */
 async function jobQueueLatency(...args) {
   jobQueueLatencyUnsupported("BullMQ")

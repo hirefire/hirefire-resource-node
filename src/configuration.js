@@ -61,6 +61,26 @@ class Configuration {
     this._token = value
   }
 
+  /**
+   * Declares a service. Exactly like {@link Configuration#service}, plus the convention that a
+   * process named "web" implies `{ tracking: "http" }`.
+   *
+   * Resolution: `{ tracking: "cpu" }` tracks CPU; a sampler function tracks job metrics; the name
+   * "web" (case-insensitive) tracks http on its own. `"cpu"` is the only `tracking` value `dyno`
+   * accepts — for an http process under a non-"web" name, use `service(name, { tracking: "http" })`.
+   *
+   * @param {string} name - The process name; must be non-empty.
+   * @param {...(Function|{tracking: string})} args - A sampler function, or `{ tracking: "cpu" }`.
+   * @returns {void}
+   * @throws {MissingSamplerError} A non-"web" name given with neither `{ tracking: "cpu" }` nor a sampler.
+   * @throws {UnexpectedSamplerError} A sampler given alongside `{ tracking: "cpu" }`.
+   * @throws {UnknownCollectorError} `tracking` given anything other than `"cpu"`.
+   * @throws {DuplicateDynoError} The name was already declared, or a second http process was declared.
+   * @example
+   * config.dyno("web") // "web" implies http
+   * config.dyno("worker", () => jobQueueSize("default"))
+   * config.dyno("encoder", { tracking: "cpu" })
+   */
   dyno(name, ...args) {
     name = coerceName(name)
     const { tracking, sampler } = parseArgs(args)
@@ -92,6 +112,33 @@ class Configuration {
     this._register(name, collector, sampler)
   }
 
+  /**
+   * Declares what a process tracks. The name is a label with no implicit meaning, so what to track
+   * is always explicit. Pass exactly one of an options object with `tracking` or a sampler
+   * function:
+   *
+   * - `{ tracking: "http" }` — web request queue-time metrics, sampled from this process's own HTTP
+   *   traffic by the framework middleware (at most one http process per app process).
+   * - a sampler function returning the current value — job queue metrics, typically via a queue
+   *   macro (e.g. `jobQueueLatency`).
+   * - `{ tracking: "cpu" }` — this process's CPU utilization.
+   *
+   * {@link Configuration#dyno} is this method plus the convention that the name "web"
+   * implies `"http"`.
+   *
+   * @param {string} name - The process name; must be non-empty.
+   * @param {...(Function|{tracking: string})} args - A sampler function, or an options object with
+   *   `tracking` set to `"http"` or `"cpu"`. Pass exactly one.
+   * @returns {void}
+   * @throws {MissingSamplerError} Neither `tracking` nor a sampler was given.
+   * @throws {UnexpectedSamplerError} A sampler given alongside `{ tracking: "http" }` or `"cpu"`.
+   * @throws {UnknownCollectorError} `tracking` given an unsupported value.
+   * @throws {DuplicateDynoError} The name was already declared, or a second http process was declared.
+   * @example
+   * config.service("web", { tracking: "http" })
+   * config.service("worker", () => jobQueueSize("default"))
+   * config.service("encoder", { tracking: "cpu" })
+   */
   service(name, ...args) {
     name = coerceName(name)
     const { tracking, sampler } = parseArgs(args)
