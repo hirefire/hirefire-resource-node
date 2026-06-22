@@ -1,4 +1,3 @@
-const sinon = require("sinon")
 const { Queue } = require("bullmq")
 const { jobQueueLatency, jobQueueSize } = require("../../src/macro/bullmq")
 const { JobQueueLatencyUnsupportedError } = require("../../src/errors")
@@ -7,7 +6,7 @@ const IORedis = require("ioredis")
 const redisURL = `redis://127.0.0.1:${process.env.REDIS_PORT || "6379"}/15`
 
 describe("BullMQ", () => {
-  let defaultQueue, mailerQueue, clock, redis
+  let defaultQueue, mailerQueue, redis
 
   beforeAll(async () => {
     redis = new IORedis(redisURL)
@@ -21,11 +20,14 @@ describe("BullMQ", () => {
     redis.flushdb()
     defaultQueue = new Queue("default", { connection: redis })
     mailerQueue = new Queue("mailer", { connection: redis })
-    clock = sinon.useFakeTimers(Date.now())
+    jest.useFakeTimers({
+      doNotFake: ["nextTick", "setImmediate"],
+      now: Date.now(),
+    })
   })
 
   afterEach(async () => {
-    clock.restore()
+    jest.useRealTimers()
     await defaultQueue.close()
     await mailerQueue.close()
   })
@@ -55,15 +57,15 @@ describe("BullMQ", () => {
     await defaultQueue.add("pastScheduledJob", {}, { delay: 15_000 })
     await defaultQueue.add("pastScheduledJob", {}, { delay: 30_000 })
     await defaultQueue.add("pastScheduledJob")
-    clock.tick(1)
+    jest.advanceTimersByTime(1)
     expect(await jobQueueSize({ connection: redisURL })).toBe(1)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
-    clock.tick(15_000)
+    jest.advanceTimersByTime(15_000)
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
-    clock.tick(15_000)
+    jest.advanceTimersByTime(15_000)
     expect(await jobQueueSize({ connection: redisURL })).toBe(3)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(3)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
