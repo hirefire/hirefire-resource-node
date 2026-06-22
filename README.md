@@ -2,19 +2,23 @@
 
 This library integrates Node.js applications with HireFire's Dyno Managers (Heroku Dyno Autoscalers). Instructions specific to supported web frameworks and worker libraries are provided during the setup process.
 
+**Supported runtimes:** Node.js 22+
+
 **Supported web frameworks:**
 
-- Express
-- Koa
-- Connect
-- Fastify
-- Next.js
+- Express 4+
+- Koa 2+
+- Connect 3+
+- Fastify 4+
+- Next.js 14+
 - Sails
 - Nest
 
 **Supported worker libraries:**
 
-- BullMQ
+- BullMQ 4+
+
+We run our test suites against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
 
 ---
 
