@@ -23,9 +23,19 @@
       "test": "test/middleware/koa.test.js"
     },
     {
+      "package": "@nestjs/platform-express",
+      "majors": [10, 11],
+      "test": "test/middleware/nest.test.js"
+    },
+    {
       "package": "next",
       "majors": [14, 15, 16],
       "test": "test/middleware/next.test.js"
+    },
+    {
+      "package": "sails",
+      "majors": [1],
+      "test": "test/middleware/sails.test.js"
     },
     {
       "package": "bullmq",

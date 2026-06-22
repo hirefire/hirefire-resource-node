@@ -13,8 +13,8 @@ This library integrates Node.js applications with HireFire's Dyno Managers (Hero
 - Connect 3+
 - Fastify 4+
 - Next.js 14+
-- Sails
-- Nest
+- Sails 1+
+- Nest 10+
 
 **Supported worker libraries:**
 
