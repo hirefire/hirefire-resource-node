@@ -1,15 +1,14 @@
 require("../support")
 const HireFire = require("../../src")
 const Dispatcher = require("../../src/dispatcher")
-const { NextResponse } = require("next/server")
+const { NextRequest, NextResponse } = require("next/server")
 
 const { middleware, withHireFire } = require("../../src/middleware/next")
 
-function mockRequest(pathname, headers = {}) {
-  return {
-    nextUrl: { pathname },
-    headers: { get: (name) => headers[name.toLowerCase()] || null },
-  }
+// Drive the middleware with a real NextRequest, the object Next's runtime hands
+// the middleware export — not a hand-rolled stand-in.
+function request(headers = {}) {
+  return new NextRequest("http://localhost/", { headers })
 }
 
 describe("Next.js", () => {
@@ -23,7 +22,7 @@ describe("Next.js", () => {
     test("passes through without a token", () => {
       HireFire.configuration.dyno("web")
       const response = middleware(
-        mockRequest("/", { "x-request-start": String(Date.now() - 1000) }),
+        request({ "X-Request-Start": String(Date.now() - 1000) }),
       )
       expect(response).toBeInstanceOf(NextResponse)
       expect(response.headers.get("x-middleware-next")).toBe("1")
@@ -38,7 +37,7 @@ describe("Next.js", () => {
       HireFire.configuration.dyno("web")
 
       const response = middleware(
-        mockRequest("/", { "x-request-start": String(second * 1000 - 1234) }),
+        request({ "X-Request-Start": String(second * 1000 - 1234) }),
       )
 
       expect(response).toBeInstanceOf(NextResponse)
@@ -56,7 +55,7 @@ describe("Next.js", () => {
       HireFire.configuration.dyno("web")
 
       const response = middleware(
-        mockRequest("/", { "x-queue-start": String(second * 1000 - 1234) }),
+        request({ "X-Queue-Start": String(second * 1000 - 1234) }),
       )
 
       expect(response).toBeInstanceOf(NextResponse)
@@ -67,17 +66,18 @@ describe("Next.js", () => {
   })
 
   describe("withHireFire", () => {
-    test("calls the user middleware", () => {
+    test("calls the user middleware and returns its response", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      const userMiddleware = jest.fn(() => ({ type: "user-response" }))
+      const userResponse = NextResponse.next()
+      const userMiddleware = jest.fn(() => userResponse)
       const wrapped = withHireFire(userMiddleware)
-      const request = mockRequest("/some-page")
+      const nextRequest = request()
       const event = { waitUntil: jest.fn() }
 
-      const response = wrapped(request, event)
+      const response = wrapped(nextRequest, event)
 
-      expect(response.type).toBe("user-response")
-      expect(userMiddleware).toHaveBeenCalledWith(request, event)
+      expect(response).toBe(userResponse)
+      expect(userMiddleware).toHaveBeenCalledWith(nextRequest, event)
     })
 
     test("samples web metrics before calling the user middleware", () => {
@@ -85,17 +85,16 @@ describe("Next.js", () => {
       const second = Math.floor(Date.now() / 1000)
       jest.spyOn(Date, "now").mockReturnValue(second * 1000)
       HireFire.configuration.dyno("web")
-      const userMiddleware = jest.fn(() => ({ type: "user-response" }))
+      const userMiddleware = jest.fn(() => NextResponse.next())
       const wrapped = withHireFire(userMiddleware)
 
       const response = wrapped(
-        mockRequest("/some-page", {
-          "x-request-start": String(second * 1000 - 567),
-        }),
-        {},
+        request({ "X-Request-Start": String(second * 1000 - 567) }),
+        { waitUntil: jest.fn() },
       )
 
-      expect(response.type).toBe("user-response")
+      expect(response).toBeInstanceOf(NextResponse)
+      expect(userMiddleware).toHaveBeenCalled()
       expect(HireFire.configuration.buffer.flush().web).toEqual({
         [second]: [567],
       })
