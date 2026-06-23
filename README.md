@@ -26,7 +26,7 @@ The test suite runs against these minimum versions and the current latest releas
 
 Since 2011, HireFire has helped over 1,500 companies autoscale more than 5,000 [Heroku] applications across 10,000+ web and worker dynos.
 
-HireFire scales both web and worker dynos, including on the Standard tier, on whichever signal fits the workload: request queue time or throughput for web, job wait time or backlog for workers, and CPU utilization for compute-bound or fiber-based processes. Each measures real demand, so capacity follows actual load up and down.
+HireFire autoscales both web and worker dynos, on all dyno tiers, using whichever signal fits the workload: request queue time or requests per minute for web dynos, job queue latency or job queue size for worker dynos, and CPU utilization for compute-bound web or worker dynos. Each tracks real demand, so dynos are added when you need them and removed when you don't. You pay only for what you use.
 
 Learn more at the [home page][HireFire].
 
@@ -34,7 +34,7 @@ Learn more at the [home page][HireFire].
 
 ## Development
 
-Requires [Docker](https://www.docker.com/). Redis for the BullMQ macro tests runs in a container. `bin/services up` starts it on a Docker-assigned free host port recorded in a git-ignored `.env` (read by the test suite); `bin/services down` stops it and removes `.env`.
+Requires [Docker](https://www.docker.com/). Redis for the BullMQ macro tests runs in a container. `bin/services up` starts it on a Docker-assigned free host port recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops it and removes `.env`.
 
 - Run `bin/setup` to prepare the environment.
 - Run `bin/services up` / `bin/services down` to start / stop the Redis container.
