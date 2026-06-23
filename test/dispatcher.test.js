@@ -79,10 +79,10 @@ describe("Dispatcher", () => {
     expect(dispatcher.running()).toBe(false)
     expect(dispatcher.start()).toBe(true)
     expect(dispatcher.running()).toBe(true)
-    expect(dispatcher.start()).toBe(false) // idempotent
+    expect(dispatcher.start()).toBe(false)
     expect(await dispatcher.stop()).toBe(true)
     expect(dispatcher.running()).toBe(false)
-    expect(await dispatcher.stop()).toBe(false) // idempotent
+    expect(await dispatcher.stop()).toBe(false)
   })
 
   test("dispatches web metrics", async () => {
@@ -170,11 +170,11 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureWebOnly()
     freezeTime(1000)
-    await dispatcher._tick() // 200: watermark 1000
+    await dispatcher._tick()
     freezeTime(1003)
-    await dispatcher._tick() // 500: watermark holds
+    await dispatcher._tick()
     freezeTime(1005)
-    await dispatcher._tick() // 200: reclaims 1001..1005
+    await dispatcher._tick()
 
     expect(Object.keys(bodies[2][0].samples).sort()).toEqual([
       "1001",
@@ -252,10 +252,10 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick() // watermark 1000
+    await dispatcher._tick()
     freezeTime(1010)
     for (let i = 0; i < 15000; i++) config().buffer.sampleWeb(12345)
-    await dispatcher._tick() // oversized: dropped, watermark advances to 1010
+    await dispatcher._tick()
     freezeTime(1012)
     await dispatcher._tick()
 
@@ -346,7 +346,7 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     await dispatcher._tick()
     freezeTime(1001)
-    await dispatcher._tick() // 500: sample dropped, not re-buffered
+    await dispatcher._tick()
 
     expect(config().buffer.flush().cpu).toEqual({})
   })
@@ -547,7 +547,7 @@ describe("Dispatcher", () => {
     freezeTime(1001)
     await dispatcher._tick()
 
-    expect(bodies.length).toBe(2) // every tick dispatches
+    expect(bodies.length).toBe(2)
   })
 
   test("honors a server-supplied dispatch frequency", async () => {
@@ -562,13 +562,13 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick() // dispatches, learns 5
+    await dispatcher._tick()
     freezeTime(1002)
-    await dispatcher._tick() // within window: skipped
+    await dispatcher._tick()
     freezeTime(1004)
-    await dispatcher._tick() // still within window: skipped
+    await dispatcher._tick()
     freezeTime(1005)
-    await dispatcher._tick() // window elapsed: dispatches
+    await dispatcher._tick()
 
     expect(count).toBe(2)
   })
@@ -614,7 +614,7 @@ describe("Dispatcher", () => {
     nock(BASE).persist().post("/metrics/ingest").reply(500)
 
     const dispatcher = configureWorkersOnly()
-    await dispatcher._tick() // 500: workers-only, so web data is empty
+    await dispatcher._tick()
 
     expect(config().buffer.flush().web).toEqual({})
     expect(loggedError("Dispatch error")).toBe(true)

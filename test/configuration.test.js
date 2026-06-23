@@ -36,8 +36,6 @@ describe("Configuration", () => {
     expect(config.cpu).toEqual([])
   })
 
-  // dyno: legacy / Heroku front door (full truth table)
-
   test("dyno web configures http", () => {
     config.dyno("web")
     expect(config.web).toBeInstanceOf(Web)
@@ -102,8 +100,6 @@ describe("Configuration", () => {
     )
   })
 
-  // service: universal / platform-neutral front door (full truth table)
-
   test("service http configures http", () => {
     config.service("web", { tracking: "http" })
     expect(config.web).toBeInstanceOf(Web)
@@ -151,8 +147,6 @@ describe("Configuration", () => {
       Configuration.UnknownCollectorError,
     )
   })
-
-  // Shared invariants across both front doors
 
   test("empty name raises", () => {
     expect(() => config.dyno(null, { tracking: "cpu" })).toThrow()
@@ -218,8 +212,6 @@ describe("Configuration", () => {
     expect(config.web.name).toBe("web")
   })
 
-  // Memoized collaborators
-
   test("dispatcher returns an instance", () => {
     expect(config.dispatcher).toBeInstanceOf(Dispatcher)
   })
@@ -249,8 +241,6 @@ describe("Configuration", () => {
   test("buffer is memoized", () => {
     expect(config.buffer).toBe(config.buffer)
   })
-
-  // Identity gating
 
   test("cpu collector active when identity matches", () => {
     process.env.HIREFIRE_SERVICE_NAME = "clock"
@@ -342,8 +332,6 @@ describe("Configuration", () => {
     config.dispatcher // both gates run, but resolution (and the warning) is memoized
     expect(config.logger.warn).toHaveBeenCalledTimes(1)
   })
-
-  // Misc configuration
 
   test("logQueueMetrics defaults to false", () => {
     expect(config.logQueueMetrics).toBe(false)

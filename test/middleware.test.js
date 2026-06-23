@@ -109,10 +109,8 @@ describe("middleware", () => {
 
     test("normalizes every precision variant to the same queue time", () => {
       freezeTime(1700000001)
-      // The same instant (epoch 1700000000.250) in each unit a router may emit.
-      // All must normalize to the identical 750ms. The 250ms fraction exercises
-      // the sub-millisecond path in every unit, including nanoseconds (whose
-      // value exceeds a double's exact-integer range).
+      // The same instant in every unit a router may emit, all normalizing to 750ms.
+      // The 250ms fraction tests the sub-ms path, including ns (beyond a double's exact int range).
       expect(calculateRequestQueueTime("t=1700000000.250")).toBe(750) // seconds
       expect(calculateRequestQueueTime("1700000000250")).toBe(750) // milliseconds
       expect(calculateRequestQueueTime("1700000000250000")).toBe(750) // microseconds

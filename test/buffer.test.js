@@ -107,7 +107,7 @@ describe("Buffer", () => {
     buffer.sampleCpu("clock", 50.0)
 
     expect(buffer.flush().cpu).toEqual({ clock: { 1000: [50.0] } })
-    expect(buffer.flush().cpu).toEqual({}) // second flush is reset
+    expect(buffer.flush().cpu).toEqual({})
   })
 
   test("sample cpu groups values within a second", () => {

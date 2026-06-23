@@ -130,7 +130,7 @@ describe("Lease", () => {
   test("ttl update applies to the current window", async () => {
     grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "30" })
     await lease.requestIfDue()
-    expect(lease._expiresAt).toBe(1030000) // frozen 1000s + 30s
+    expect(lease._expiresAt).toBe(1030000)
   })
 
   test("raises on a server error", async () => {
@@ -188,12 +188,12 @@ describe("Lease", () => {
   test("sampleIfDue skips when not yet due", async () => {
     grant()
     await lease.requestIfDue()
-    await lease.sampleIfDue(() => {}) // first sample: due immediately
+    await lease.sampleIfDue(() => {})
 
     let sampled = false
     await lease.sampleIfDue(() => {
       sampled = true
-    }) // second: not yet due
+    })
     expect(sampled).toBe(false)
   })
 
@@ -221,7 +221,7 @@ describe("Lease", () => {
     })
     await lease.requestIfDue()
     await lease.sampleIfDue(() => {})
-    expect(lease._nextSampleAt).toBe(1010000) // frozen 1000s + 10s
+    expect(lease._nextSampleAt).toBe(1010000)
   })
 
   test("retains the sample frequency when the header is absent", async () => {
