@@ -36,7 +36,7 @@ class Workers {
             `[HireFire] The sampler for dyno "${worker.name}" returned ` +
               `${inspect(
                 value,
-              )}; expected a non-negative number. Sample dropped.`,
+              )}, expected a non-negative number. Sample dropped.`,
           )
           continue
         }

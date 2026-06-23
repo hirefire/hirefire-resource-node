@@ -9,7 +9,7 @@ const IDENTITY_ENV = [
   "RENDER_CPU_COUNT",
 ]
 
-// A logger that swallows everything; tests that assert on logging override it
+// A logger that swallows everything. Tests that assert on logging override it
 // with jest spies.
 function silentLogger() {
   return { info() {}, warn() {}, error() {}, log() {} }

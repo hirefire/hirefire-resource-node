@@ -65,11 +65,12 @@ class Configuration {
    * Declares a service. Exactly like {@link Configuration#service}, plus the convention that a
    * process named "web" implies `{ tracking: "http" }`.
    *
-   * Resolution: `{ tracking: "cpu" }` tracks CPU; a sampler function tracks job metrics; the name
-   * "web" (case-insensitive) tracks http on its own. `"cpu"` is the only `tracking` value `dyno`
-   * accepts — for an http process under a non-"web" name, use `service(name, { tracking: "http" })`.
+   * Resolution: `{ tracking: "cpu" }` tracks CPU, a sampler function tracks job metrics, and the
+   * name "web" (case-insensitive) tracks http on its own. `"cpu"` is the only `tracking` value
+   * `dyno` accepts. For an http process under a non-"web" name, use
+   * `service(name, { tracking: "http" })`.
    *
-   * @param {string} name - The process name; must be non-empty.
+   * @param {string} name - The process name. Must be non-empty.
    * @param {...(Function|{tracking: string})} args - A sampler function, or `{ tracking: "cpu" }`.
    * @returns {void}
    * @throws {MissingSamplerError} A non-"web" name given with neither `{ tracking: "cpu" }` nor a sampler.
@@ -93,7 +94,7 @@ class Configuration {
           `Unknown value ${inspect(
             tracking,
           )} for config.dyno("${name}", { tracking: ... }). ` +
-            `config.dyno only tracks "cpu"; pass a sampler function for job metrics, ` +
+            `config.dyno only tracks "cpu". Pass a sampler function for job metrics, ` +
             `or use config.service to track "http" explicitly.`,
         )
       }
@@ -104,8 +105,8 @@ class Configuration {
     } else {
       throw new MissingSamplerError(
         `config.dyno("${name}") could not be resolved: it needs a sampler function ` +
-          `(job metrics) or { tracking: "cpu" }. Only the "web" name implies http on its own; ` +
-          `use config.service("${name}", { tracking: "http" }) for an http process under another name.`,
+          `(job metrics) or { tracking: "cpu" }. Only the "web" name implies http on its own. ` +
+          `Use config.service("${name}", { tracking: "http" }) for an http process under another name.`,
       )
     }
 
@@ -117,16 +118,16 @@ class Configuration {
    * is always explicit. Pass exactly one of an options object with `tracking` or a sampler
    * function:
    *
-   * - `{ tracking: "http" }` — web request queue-time metrics, sampled from this process's own HTTP
+   * - `{ tracking: "http" }`: web request queue-time metrics, sampled from this process's own HTTP
    *   traffic by the framework middleware (at most one http process per app process).
-   * - a sampler function returning the current value — job queue metrics, typically via a queue
+   * - a sampler function returning the current value: job queue metrics, typically via a queue
    *   macro (e.g. `jobQueueLatency`).
-   * - `{ tracking: "cpu" }` — this process's CPU utilization.
+   * - `{ tracking: "cpu" }`: this process's CPU utilization.
    *
    * {@link Configuration#dyno} is this method plus the convention that the name "web"
    * implies `"http"`.
    *
-   * @param {string} name - The process name; must be non-empty.
+   * @param {string} name - The process name. Must be non-empty.
    * @param {...(Function|{tracking: string})} args - A sampler function, or an options object with
    *   `tracking` set to `"http"` or `"cpu"`. Pass exactly one.
    * @returns {void}
@@ -304,7 +305,7 @@ function parseArgs(args) {
       throw new TypeError(
         `Invalid argument ${inspect(
           arg,
-        )} for config.dyno/config.service; pass a sampler ` +
+        )} for config.dyno/config.service. Pass a sampler ` +
           `function for job metrics, or an options object like { tracking: "cpu" }.`,
       )
     }

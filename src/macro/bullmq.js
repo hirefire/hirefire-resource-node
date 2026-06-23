@@ -3,7 +3,7 @@ const { unpack } = require("../utility")
 const { jobQueueLatencyUnsupported } = require("../errors")
 
 /**
- * Job queue latency is not supported for BullMQ — calling this always throws.
+ * Job queue latency is not supported for BullMQ. Calling this always throws.
  *
  * @async
  * @param {...any} args - Ignored.

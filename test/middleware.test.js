@@ -109,8 +109,8 @@ describe("middleware", () => {
 
     test("normalizes every precision variant to the same queue time", () => {
       freezeTime(1700000001)
-      // The same instant (epoch 1700000000.250) in each unit a router may emit;
-      // all must normalize to the identical 750ms. The 250ms fraction exercises
+      // The same instant (epoch 1700000000.250) in each unit a router may emit.
+      // All must normalize to the identical 750ms. The 250ms fraction exercises
       // the sub-millisecond path in every unit, including nanoseconds (whose
       // value exceeds a double's exact-integer range).
       expect(calculateRequestQueueTime("t=1700000000.250")).toBe(750) // seconds
@@ -148,7 +148,7 @@ describe("middleware", () => {
 
     test("keeps a high-but-plausible queue time", () => {
       freezeTime(1700000000)
-      // 50s — severe overload but under the limit, so still reported.
+      // 50s: severe overload but under the limit, so still reported.
       expect(calculateRequestQueueTime("1699999950000")).toBe(50000)
     })
 

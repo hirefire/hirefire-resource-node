@@ -36,7 +36,7 @@ describe("Configuration", () => {
     expect(config.cpu).toEqual([])
   })
 
-  // dyno — legacy / Heroku front door (full truth table)
+  // dyno: legacy / Heroku front door (full truth table)
 
   test("dyno web configures http", () => {
     config.dyno("web")
@@ -102,7 +102,7 @@ describe("Configuration", () => {
     )
   })
 
-  // service — universal / platform-neutral front door (full truth table)
+  // service: universal / platform-neutral front door (full truth table)
 
   test("service http configures http", () => {
     config.service("web", { tracking: "http" })

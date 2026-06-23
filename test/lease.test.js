@@ -188,12 +188,12 @@ describe("Lease", () => {
   test("sampleIfDue skips when not yet due", async () => {
     grant()
     await lease.requestIfDue()
-    await lease.sampleIfDue(() => {}) // first sample — due immediately
+    await lease.sampleIfDue(() => {}) // first sample: due immediately
 
     let sampled = false
     await lease.sampleIfDue(() => {
       sampled = true
-    }) // second — not yet due
+    }) // second: not yet due
     expect(sampled).toBe(false)
   })
 
@@ -237,7 +237,7 @@ describe("Lease", () => {
       "HireFire-Sample-Frequency": "abc",
     })
     await lease.requestIfDue()
-    // A NaN frequency would collapse the sample interval; the default is kept.
+    // A NaN frequency would collapse the sample interval. The default is kept.
     expect(lease.sampleFrequency).toBe(15)
   })
 

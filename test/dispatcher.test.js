@@ -170,11 +170,11 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureWebOnly()
     freezeTime(1000)
-    await dispatcher._tick() // 200 — watermark 1000
+    await dispatcher._tick() // 200: watermark 1000
     freezeTime(1003)
-    await dispatcher._tick() // 500 — watermark holds
+    await dispatcher._tick() // 500: watermark holds
     freezeTime(1005)
-    await dispatcher._tick() // 200 — reclaims 1001..1005
+    await dispatcher._tick() // 200: reclaims 1001..1005
 
     expect(Object.keys(bodies[2][0].samples).sort()).toEqual([
       "1001",
@@ -255,7 +255,7 @@ describe("Dispatcher", () => {
     await dispatcher._tick() // watermark 1000
     freezeTime(1010)
     for (let i = 0; i < 15000; i++) config().buffer.sampleWeb(12345)
-    await dispatcher._tick() // oversized — dropped, watermark advances to 1010
+    await dispatcher._tick() // oversized: dropped, watermark advances to 1010
     freezeTime(1012)
     await dispatcher._tick()
 
@@ -346,7 +346,7 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     await dispatcher._tick()
     freezeTime(1001)
-    await dispatcher._tick() // 500 — sample dropped, not re-buffered
+    await dispatcher._tick() // 500: sample dropped, not re-buffered
 
     expect(config().buffer.flush().cpu).toEqual({})
   })
@@ -564,11 +564,11 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     await dispatcher._tick() // dispatches, learns 5
     freezeTime(1002)
-    await dispatcher._tick() // within window — skipped
+    await dispatcher._tick() // within window: skipped
     freezeTime(1004)
-    await dispatcher._tick() // still within window — skipped
+    await dispatcher._tick() // still within window: skipped
     freezeTime(1005)
-    await dispatcher._tick() // window elapsed — dispatches
+    await dispatcher._tick() // window elapsed: dispatches
 
     expect(count).toBe(2)
   })
@@ -614,7 +614,7 @@ describe("Dispatcher", () => {
     nock(BASE).persist().post("/metrics/ingest").reply(500)
 
     const dispatcher = configureWorkersOnly()
-    await dispatcher._tick() // 500 — workers-only, so web data is empty
+    await dispatcher._tick() // 500: workers-only, so web data is empty
 
     expect(config().buffer.flush().web).toEqual({})
     expect(loggedError("Dispatch error")).toBe(true)
@@ -624,7 +624,7 @@ describe("Dispatcher", () => {
     captureIngestBodies()
     const dispatcher = configureWebOnly()
     jest.spyOn(dispatcher._lease, "requestIfDue").mockImplementation(() => {
-      throw null // JS allows throwing non-Errors; the guard must still absorb it
+      throw null // JS allows throwing non-Errors, and the guard must still absorb it
     })
 
     await expect(dispatcher._tick()).resolves.toBeUndefined()
@@ -667,7 +667,7 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
     dispatcher.start()
 
-    const stopping = dispatcher.stop() // runs up to its first await; _stopping set
+    const stopping = dispatcher.stop() // runs up to its first await, _stopping set
     expect(dispatcher.start()).toBe(false) // refused mid-stop: no second loop
     await stopping
     expect(dispatcher.running()).toBe(false)
@@ -681,7 +681,7 @@ describe("Dispatcher", () => {
     })
 
     // An escaping rejection here would reach the unguarded loop as an unhandled
-    // rejection (a process crash on Node >=15); the tick must absorb it instead.
+    // rejection (a process crash on Node >=15). The tick must absorb it instead.
     await expect(dispatcher._tick()).resolves.toBeUndefined()
     expect(loggedError("Dispatch error")).toBe(true)
   })
