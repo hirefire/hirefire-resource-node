@@ -17,16 +17,49 @@
   "license": "MIT",
   "files": [
     "CHANGELOG.md",
-    "src"
+    "src",
+    "types"
   ],
+  "types": "./types/index.d.ts",
   "exports": {
-    ".": "./src/index.js",
-    "./middleware/connect": "./src/middleware/connect.js",
-    "./middleware/express": "./src/middleware/express.js",
-    "./middleware/koa": "./src/middleware/koa.js",
-    "./middleware/fastify": "./src/middleware/fastify.js",
-    "./middleware/next": "./src/middleware/next.js",
-    "./macro/bullmq": "./src/macro/bullmq.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./middleware/connect": {
+      "types": "./types/middleware/connect.d.ts",
+      "default": "./src/middleware/connect.js"
+    },
+    "./middleware/express": {
+      "types": "./types/middleware/express.d.ts",
+      "default": "./src/middleware/express.js"
+    },
+    "./middleware/koa": {
+      "types": "./types/middleware/koa.d.ts",
+      "default": "./src/middleware/koa.js"
+    },
+    "./middleware/fastify": {
+      "types": "./types/middleware/fastify.d.ts",
+      "default": "./src/middleware/fastify.js"
+    },
+    "./middleware/next": {
+      "types": "./types/middleware/next.d.ts",
+      "default": "./src/middleware/next.js"
+    },
+    "./macro/bullmq": {
+      "types": "./types/macro/bullmq.d.ts",
+      "default": "./src/macro/bullmq.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "middleware/*": [
+        "./types/middleware/*.d.ts"
+      ],
+      "macro/*": [
+        "./types/macro/*.d.ts"
+      ]
+    }
   },
   "repository": {
     "type": "git",
@@ -40,7 +73,9 @@
     "test:core": "bin/run-cell core",
     "check": "prettier --check --no-semi .",
     "format": "prettier --write --no-semi .",
-    "doc": "jsdoc"
+    "doc": "jsdoc",
+    "build:types": "tsc",
+    "prepack": "npm run build:types"
   },
   "jest": {
     "setupFiles": [
@@ -55,6 +90,7 @@
     "jsdoc": "^4.0.2",
     "nock": "^13.3.0",
     "prettier": "^3.1.0",
-    "supertest": "^6.3.3"
+    "supertest": "^6.3.3",
+    "typescript": "^6.0.3"
   }
 }

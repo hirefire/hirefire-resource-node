@@ -7,6 +7,7 @@ const { jobQueueLatencyUnsupported } = require("../errors")
  *
  * @async
  * @param {...any} args - Ignored.
+ * @returns {Promise<never>} Never resolves: the call always throws.
  * @throws {JobQueueLatencyUnsupportedError} Always, since BullMQ does not support latency measurement.
  */
 async function jobQueueLatency(...args) {
@@ -14,22 +15,32 @@ async function jobQueueLatency(...args) {
 }
 
 /**
+ * @typedef {object} BullMQOptions
+ * @property {string | object} [connection] - IORedis connection: a URL string or an IORedis
+ *   options object. When omitted, the `REDIS_TLS_URL`, `REDIS_URL`, `REDISTOGO_URL`,
+ *   `REDISCLOUD_URL`, `OPENREDIS_URL` environment variables are tried in order, then
+ *   `redis://localhost:6379/0`.
+ * @property {object} [connectionOptions] - Passed as the second argument to the IORedis
+ *   constructor, for further customization (e.g. TLS options, retry strategies).
+ */
+
+/**
+ * @overload
+ * @param {...string} queues - Queue names. Omit to measure across all queues.
+ * @returns {Promise<number>} Cumulative job queue size across the specified queues.
+ */
+/**
+ * @overload
+ * @param {...(string | BullMQOptions)} queuesAndOptions - Queue names, optionally followed by a
+ *   {@link BullMQOptions} object.
+ * @returns {Promise<number>} Cumulative job queue size across the specified queues.
+ */
+/**
  * Calculates the total job queue size across the specified queues. If no queues are specified, it
  * measures size across all queues.
  *
  * @async
- * @param {...string} queues - Names of the queues for size measurement.
- * @param {object} [options] - Optional options object. The options object can include a
- *                             `connection` property, which is passed to IORedis and is compatible
- *                             with its connection options. If no connection is provided, the
- *                             function will use the value of the `REDIS_TLS_URL`, `REDIS_URL`,
- *                             `REDISTOGO_URL`, `REDISCLOUD_URL`, `OPENREDIS_URL` environment
- *                             variables, in the order specified. If none of these environment
- *                             variables are set, it defaults to `redis://localhost:6379/0`. The
- *                             `options` object can also include a `connectionOptions` property,
- *                             which is passed as the second argument to the `IORedis` constructor,
- *                             allowing for further customization of the Redis connection (e.g., TLS
- *                             options, retry strategies).
+ * @param {...any} args - Queue names, optionally followed by a {@link BullMQOptions} object.
  * @returns {Promise<number>} Cumulative job queue size across the specified queues.
  * @example
  * // Calculate size across all queues

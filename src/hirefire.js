@@ -30,6 +30,13 @@ class HireFire {
     return this.configuration
   }
 
+  /**
+   * Stops any running dispatcher and replaces the configuration with a fresh, empty one. Mainly
+   * for tests and reconfiguration between runs.
+   *
+   * @returns {Promise<boolean>} Resolves once any running dispatcher has stopped. Resolves to
+   *   `false` when no dispatcher was running.
+   */
   reset() {
     const dispatcher = this.configuration._dispatcher
     this.configuration = new Configuration()

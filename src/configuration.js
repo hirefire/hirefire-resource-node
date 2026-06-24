@@ -53,6 +53,13 @@ class Configuration {
     this._identityResolved = false
   }
 
+  /**
+   * The HireFire API token. Reads the value set in code, else the `HIREFIRE_TOKEN` environment
+   * variable, else `null`. When a token is present after {@link HireFire#configure}, the
+   * dispatcher starts and metrics are reported.
+   *
+   * @type {string | null}
+   */
   get token() {
     return this._token ?? process.env.HIREFIRE_TOKEN ?? null
   }
@@ -62,17 +69,35 @@ class Configuration {
   }
 
   /**
-   * Declares a service. Exactly like {@link Configuration#service}, plus the convention that a
-   * process named "web" implies `{ tracking: "http" }`.
+   * @overload
+   * @param {string} name - The process name. The "web" name (case-insensitive) implies http.
+   * @returns {void}
+   */
+  /**
+   * @overload
+   * @param {string} name - The process name. Must be non-empty.
+   * @param {{ tracking: "cpu" }} options - Track this dyno's CPU utilization.
+   * @returns {void}
+   */
+  /**
+   * @overload
+   * @param {string} name - The process name. Must be non-empty.
+   * @param {() => number | Promise<number>} sampler - Returns the current job metric value.
+   * @returns {void}
+   */
+  /**
+   * Declares a process by dyno name. Like {@link Configuration#service}, but with two Procfile
+   * conventions: the name "web" (case-insensitive) implies http on its own, and `"cpu"` is the
+   * only `tracking` value it accepts.
    *
    * Resolution: `{ tracking: "cpu" }` tracks CPU, a sampler function tracks job metrics, and the
-   * name "web" (case-insensitive) tracks http on its own. `"cpu"` is the only `tracking` value
-   * `dyno` accepts. For an http process under a non-"web" name, use
+   * name "web" tracks http on its own. For an http process under a non-"web" name, use
    * `service(name, { tracking: "http" })`.
    *
    * @param {string} name - The process name. Must be non-empty.
-   * @param {...(Function|{tracking: string})} args - A sampler function, or `{ tracking: "cpu" }`.
+   * @param {...(Function | { tracking: "cpu" })} args - A sampler function, or `{ tracking: "cpu" }`.
    * @returns {void}
+   * @throws {TypeError} The name is empty, or an argument is neither a function nor an options object.
    * @throws {MissingSamplerError} A non-"web" name given with neither `{ tracking: "cpu" }` nor a sampler.
    * @throws {UnexpectedSamplerError} A sampler given alongside `{ tracking: "cpu" }`.
    * @throws {UnknownCollectorError} `tracking` given anything other than `"cpu"`.
@@ -114,6 +139,18 @@ class Configuration {
   }
 
   /**
+   * @overload
+   * @param {string} name - The process name. Must be non-empty.
+   * @param {{ tracking: "http" | "cpu" }} options - Track http request queue time, or CPU.
+   * @returns {void}
+   */
+  /**
+   * @overload
+   * @param {string} name - The process name. Must be non-empty.
+   * @param {() => number | Promise<number>} sampler - Returns the current job metric value.
+   * @returns {void}
+   */
+  /**
    * Declares what a process tracks. The name is a label with no implicit meaning, so what to track
    * is always explicit. Pass exactly one of an options object with `tracking` or a sampler
    * function:
@@ -128,9 +165,10 @@ class Configuration {
    * implies `"http"`.
    *
    * @param {string} name - The process name. Must be non-empty.
-   * @param {...(Function|{tracking: string})} args - A sampler function, or an options object with
-   *   `tracking` set to `"http"` or `"cpu"`. Pass exactly one.
+   * @param {...(Function | { tracking: "http" | "cpu" })} args - A sampler function, or an options
+   *   object with `tracking` set to `"http"` or `"cpu"`. Pass exactly one.
    * @returns {void}
+   * @throws {TypeError} The name is empty, or an argument is neither a function nor an options object.
    * @throws {MissingSamplerError} Neither `tracking` nor a sampler was given.
    * @throws {UnexpectedSamplerError} A sampler given alongside `{ tracking: "http" }` or `"cpu"`.
    * @throws {UnknownCollectorError} `tracking` given an unsupported value.
