@@ -86,9 +86,9 @@ class Configuration {
    * @returns {void}
    */
   /**
-   * Declares a process by dyno name. Like {@link Configuration#service}, but with two Procfile
-   * conventions: the name "web" (case-insensitive) implies http on its own, and `"cpu"` is the
-   * only `tracking` value it accepts.
+   * Declares a service by dyno name. Like {@link Configuration#service}, but the name "web"
+   * (case-insensitive) implies http on its own, and `"cpu"` is the only `tracking` value it
+   * accepts.
    *
    * Resolution: `{ tracking: "cpu" }` tracks CPU, a sampler function tracks job metrics, and the
    * name "web" tracks http on its own. For an http process under a non-"web" name, use
