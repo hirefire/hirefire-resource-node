@@ -2,9 +2,18 @@ const http = require("http")
 const https = require("https")
 const VERSION = require("./version")
 
-// A reused keep-alive socket the peer dropped while idle fails with one of these on the
-// next write. Retrying on a fresh socket is safe: both endpoints are idempotent.
+// A reused keep-alive socket the peer dropped while idle fails with one of these codes on
+// the next write; a desynced reused socket instead reads back a garbled response and yields
+// an HPE_* parser error (the Node analog of Ruby's Net::HTTPBadResponse / Python's
+// BadStatusLine). Retrying on a fresh socket is safe: both endpoints are idempotent.
 const STALE_CONNECTION_CODES = new Set(["ECONNRESET", "ECONNABORTED", "EPIPE"])
+
+function isStaleConnectionCode(code) {
+  return (
+    STALE_CONNECTION_CODES.has(code) ||
+    (typeof code === "string" && code.startsWith("HPE_"))
+  )
+}
 
 class RequestError extends Error {
   constructor(message) {
@@ -141,7 +150,7 @@ class Client {
     )
     // Retry only a reused socket: a fresh connection failing is a real fault, not staleness.
     requestError.retriable =
-      Boolean(reusedSocket) && STALE_CONNECTION_CODES.has(error.code)
+      Boolean(reusedSocket) && isStaleConnectionCode(error.code)
     return requestError
   }
 

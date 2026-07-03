@@ -284,6 +284,20 @@ describe("Lease", () => {
     expect(lease.granted()).toBe(false)
   })
 
+  test("expiry paces off the monotonic clock, not the wall clock", async () => {
+    grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "30" })
+
+    // beforeEach froze both clocks at second 1000; move only the monotonic clock away.
+    jest.spyOn(performance, "now").mockReturnValue(5000000)
+    const monotonicLease = new Lease(CONFIG)
+
+    await monotonicLease.requestIfDue()
+
+    // _expiresAt derives from the monotonic clock (5000000 + 30000), never the wall clock
+    // (1000000 + 30000).
+    expect(monotonicLease._expiresAt).toBe(5030000)
+  })
+
   test("unauthorized ignores frequency and ttl headers", async () => {
     nock(BASE).post("/metrics/lease").reply(401, "", {
       "HireFire-Sample-Frequency": "99",

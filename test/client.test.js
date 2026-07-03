@@ -1,5 +1,6 @@
 require("./support")
 const http = require("http")
+const net = require("net")
 const nock = require("nock")
 const { Client, RequestError } = require("../src/client")
 const VERSION = require("../src/version")
@@ -230,6 +231,38 @@ describe("Client (persistent connection)", () => {
     )
     expect(requests).toBe(1) // a fresh connection failing is a real fault, not retried
     client.close()
+  })
+
+  test("retries once when a reused socket reads back a garbled response", async () => {
+    let requests = 0
+    const raw = net.createServer((socket) => {
+      let buffer = ""
+      socket.on("data", (chunk) => {
+        buffer += chunk.toString()
+        while (buffer.includes("\r\n\r\n")) {
+          buffer = buffer.slice(buffer.indexOf("\r\n\r\n") + 4)
+          requests += 1
+          // Garble the response on the reused socket: the client's HTTP parser errors
+          // (HPE_*), which is retriable only because the socket was reused.
+          socket.write(
+            requests === 2
+              ? "GARBAGE NOT HTTP\r\n\r\n"
+              : "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n",
+          )
+        }
+      })
+    })
+    await new Promise((resolve) => raw.listen(0, "127.0.0.1", resolve))
+    process.env.HIREFIRE_DATA_URL = `http://127.0.0.1:${raw.address().port}`
+    const client = new Client({ token: "t" })
+
+    await client.submitSamples("[]") // opens the socket
+    const response = await client.submitSamples("[]") // garbled on reuse, retry succeeds
+
+    expect(response.statusCode).toBe(200)
+    expect(requests).toBe(3) // open, garbled reuse, retry
+    client.close()
+    await new Promise((resolve) => raw.close(resolve))
   })
 
   test("close finishes the persistent socket", async () => {

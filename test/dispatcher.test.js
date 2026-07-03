@@ -730,6 +730,23 @@ describe("Dispatcher", () => {
     )
   })
 
+  test("dispatch pacing follows the monotonic clock, not the wall clock", async () => {
+    const bodies = captureIngestBodies()
+    const dispatcher = configureWebOnly()
+
+    // Wall clock frozen throughout; the monotonic pacing clock advances independently.
+    jest.spyOn(Date, "now").mockReturnValue(1000000)
+    let mono = 500000
+    jest.spyOn(performance, "now").mockImplementation(() => mono)
+
+    await dispatcher._dispatchTick() // first dispatch, next due at monotonic 501000
+    mono = 502000 // monotonic advances past the 1s interval, wall clock unchanged
+    await dispatcher._dispatchTick() // dispatches again on the same wall second
+
+    // Two dispatches on one frozen wall second: pacing follows the monotonic clock.
+    expect(bodies.length).toBe(2)
+  })
+
   test("dispatch failure without web data does not repopulate", async () => {
     stubLease(true)
     nock(BASE).persist().post("/metrics/ingest").reply(500)

@@ -151,11 +151,17 @@ class Dispatcher {
   }
 
   async _dispatchIfDue() {
-    if (this._nextDispatchAt !== null && Date.now() < this._nextDispatchAt)
+    // Pace off the monotonic clock (performance.now, ms) so a wall-clock step (e.g. NTP)
+    // cannot skew the cadence. Sample timestamps stay wall-clock (_backfillWebSeconds),
+    // which the server keys on.
+    if (
+      this._nextDispatchAt !== null &&
+      performance.now() < this._nextDispatchAt
+    )
       return
 
     await this._dispatch()
-    this._nextDispatchAt = Date.now() + this._dispatchFrequency * 1000
+    this._nextDispatchAt = performance.now() + this._dispatchFrequency * 1000
   }
 
   async _guard(fn) {

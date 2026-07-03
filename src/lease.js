@@ -13,8 +13,10 @@ class Lease {
     this._client = new Client(configuration)
     this._ttl = 15
     this._granted = false
-    this._expiresAt = Date.now()
-    this._nextSampleAt = Date.now()
+    // Pace off the monotonic clock (performance.now, ms) so a wall-clock step (e.g. NTP)
+    // cannot skew renewal.
+    this._expiresAt = performance.now()
+    this._nextSampleAt = performance.now()
     this._sampleFrequency = 15
   }
 
@@ -31,16 +33,16 @@ class Lease {
   }
 
   async sampleIfDue(fn) {
-    if (!this._granted || Date.now() < this._nextSampleAt) return
+    if (!this._granted || performance.now() < this._nextSampleAt) return
 
-    this._nextSampleAt = Date.now() + this._sampleFrequency * 1000
+    this._nextSampleAt = performance.now() + this._sampleFrequency * 1000
     await fn()
   }
 
   async requestIfDue() {
-    if (!this._enabled || Date.now() < this._expiresAt) return
+    if (!this._enabled || performance.now() < this._expiresAt) return
 
-    this._expiresAt = Date.now() + this._ttl * 1000
+    this._expiresAt = performance.now() + this._ttl * 1000
 
     let response
     try {
@@ -75,7 +77,7 @@ class Lease {
         toInteger(headers["hirefire-lease-ttl"]),
         Lease.TTL_BOUNDS,
       )
-      this._expiresAt = Date.now() + this._ttl * 1000
+      this._expiresAt = performance.now() + this._ttl * 1000
     }
 
     this._granted = headers["hirefire-lease-granted"] === "true"

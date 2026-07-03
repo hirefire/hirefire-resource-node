@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `HIREFIRE_DISPATCH_URL` (the 1.x web logdrain override) is removed. The push base URL is `HIREFIRE_DATA_URL` (default `https://data.hirefire.io`). Restricted-egress networks must allowlist `data.hirefire.io` (outbound) or metrics silently stop.
 - Widened the supported Node range to `>=16`.
 
+### Fixed
+
+- Internal dispatch pacing, lease renewal, and the CPU utilization delta now measure elapsed time on a monotonic clock, so a system clock adjustment (e.g. an NTP step) no longer skews the dispatch cadence, lease renewal, or a CPU reading. The metric timestamps themselves stay wall-clock, as the server requires.
+- A reused keep-alive socket that reads back a garbled response (an `HPE_*` HTTP-parser error) is now reconnected and retried once, like a reset socket, matching the Ruby and Python clients.
+
 ## [1.2.0] - 2026-02-03
 
 ### Added

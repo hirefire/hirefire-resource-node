@@ -135,8 +135,8 @@ describe("CPU", () => {
     expect(configuration.buffer.flush().cpu).toEqual({})
   })
 
-  test("non-positive wall delta skips the sample", () => {
-    // Same instant + positive usage delta isolates the wallDelta <= 0 guard.
+  test("non-positive elapsed delta skips the sample", () => {
+    // Same instant + positive usage delta isolates the elapsedDelta <= 0 backstop.
     mockReadings(10.0, 10.5)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
@@ -145,6 +145,27 @@ describe("CPU", () => {
     collector.sample()
     expect(collector.sample()).toBeNull()
     expect(configuration.buffer.flush().cpu).toEqual({})
+  })
+
+  test("elapsed delta uses the monotonic clock not wall time", () => {
+    mockReadings(10.0, 10.5)
+    jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
+
+    const collector = cpu()
+    // Wall clock (Date.now) frozen at the same second for both reads: a wall-clock
+    // elapsed delta would be 0 and skip. The monotonic clock (performance.now) advances
+    // 1s, so 0.5 CPU-seconds over it => 50%, bucketed by the (frozen) wall second.
+    freezeTime(1000)
+    jest
+      .spyOn(performance, "now")
+      .mockReturnValueOnce(100_000)
+      .mockReturnValueOnce(101_000)
+    collector.sample()
+    collector.sample()
+
+    expect(configuration.buffer.flush().cpu).toEqual({
+      clock: { 1000: [50.0] },
+    })
   })
 
   test("skips the sample when available cpus is null", () => {

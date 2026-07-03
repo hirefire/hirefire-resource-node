@@ -15,11 +15,14 @@ function silentLogger() {
   return { info() {}, warn() {}, error() {}, log() {} }
 }
 
-// Equivalent of the Ruby suite's Timecop.freeze: pin Date.now to a fixed Unix
-// second without faking setTimeout (so HTTP mocks and the dispatcher loop are
-// unaffected). Call again to advance.
+// Equivalent of the Ruby suite's Timecop.freeze: pin the wall clock (Date.now) to a
+// fixed Unix second without faking setTimeout (so HTTP mocks and the dispatcher loop are
+// unaffected). Also pins the monotonic pacing clock (performance.now) to the same instant,
+// so a Timecop-style time jump drives dispatch/lease pacing just as it drives the
+// wall-clock sample timestamps. Call again to advance.
 function freezeTime(seconds) {
   jest.spyOn(Date, "now").mockReturnValue(seconds * 1000)
+  jest.spyOn(performance, "now").mockReturnValue(seconds * 1000)
 }
 
 async function resetState() {
