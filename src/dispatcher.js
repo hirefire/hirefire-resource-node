@@ -34,8 +34,7 @@ class Dispatcher {
     this._interval = 1
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
     this._nextDispatchAt = null
-    this._sleepTimer = null
-    this._sleepResolve = null
+    this._sleepers = new Set()
     this._loopPromise = null
   }
 
@@ -43,14 +42,15 @@ class Dispatcher {
     if (this._running || this._stopping) return false
 
     this._running = true
-    this._loopPromise = this._loop().catch((error) => {
-      this._running = false
-      this._logger().error(
-        `[HireFire] Dispatcher loop stopped unexpectedly: ${
-          error?.message ?? error
-        }`,
-      )
-    })
+
+    // Two independent loops so a slow or hung worker sampler can never stall
+    // web/CPU delivery. The worker loop only exists when workers are configured.
+    const loops = [this._loop(() => this._dispatchTick())]
+    if (this._workers.any()) {
+      loops.push(this._loop(() => this._workerTick()))
+    }
+    this._loopPromise = Promise.all(loops)
+
     this._logger().info("[HireFire] Starting dispatcher.")
     return true
   }
@@ -60,13 +60,17 @@ class Dispatcher {
 
     this._running = false
     this._stopping = true
-    this._wakeSleep()
+    this._wakeSleepers()
 
     const loopPromise = this._loopPromise
     this._loopPromise = null
     await loopPromise
 
     await this._guard(() => this._dispatch())
+
+    // Close after the final dispatch, which reopens the client.
+    this._client.close()
+    this._lease.close()
 
     this._stopping = false
     this._logger().info("[HireFire] Dispatcher stopped.")
@@ -77,9 +81,20 @@ class Dispatcher {
     return this._running
   }
 
-  async _loop() {
+  _loop(tick) {
+    return this._runLoop(tick).catch((error) => {
+      this._running = false
+      this._logger().error(
+        `[HireFire] Dispatcher loop stopped unexpectedly: ${
+          error?.message ?? error
+        }`,
+      )
+    })
+  }
+
+  async _runLoop(tick) {
     while (this._running) {
-      await this._tick()
+      await tick()
       if (!this._running) break
       await this._sleep(this._interval * 1000)
     }
@@ -87,32 +102,43 @@ class Dispatcher {
 
   _sleep(ms) {
     return new Promise((resolve) => {
-      this._sleepResolve = resolve
-      this._sleepTimer = setTimeout(resolve, ms)
-      if (this._sleepTimer.unref) this._sleepTimer.unref()
+      const sleeper = { resolve, timer: null }
+      sleeper.timer = setTimeout(() => {
+        this._sleepers.delete(sleeper)
+        resolve()
+      }, ms)
+      if (sleeper.timer.unref) sleeper.timer.unref()
+      this._sleepers.add(sleeper)
     })
   }
 
-  _wakeSleep() {
-    if (this._sleepTimer) {
-      clearTimeout(this._sleepTimer)
-      this._sleepTimer = null
+  _wakeSleepers() {
+    for (const sleeper of this._sleepers) {
+      clearTimeout(sleeper.timer)
+      sleeper.resolve()
     }
-    if (this._sleepResolve) {
-      this._sleepResolve()
-      this._sleepResolve = null
-    }
+    this._sleepers.clear()
   }
 
+  // A single combined pass, used by tests. The running loops call the two halves
+  // separately so they make independent forward progress.
   async _tick() {
-    await this._guard(() => this._lease.requestIfDue())
-    await this._guard(() =>
-      this._lease.sampleIfDue(() => this._workers.sample()),
-    )
+    await this._workerTick()
+    await this._dispatchTick()
+  }
+
+  async _dispatchTick() {
     for (const collector of this._cpu) {
       await this._guard(() => collector.sample())
     }
     await this._dispatchIfDue()
+  }
+
+  async _workerTick() {
+    await this._guard(() => this._lease.requestIfDue())
+    await this._guard(() =>
+      this._lease.sampleIfDue(() => this._workers.sample()),
+    )
   }
 
   async _dispatchIfDue() {

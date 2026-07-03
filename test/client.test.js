@@ -1,4 +1,5 @@
 require("./support")
+const http = require("http")
 const nock = require("nock")
 const { Client, RequestError } = require("../src/client")
 const VERSION = require("../src/version")
@@ -158,5 +159,94 @@ describe("Client", () => {
     await client.submitSamples(BODY)
 
     expect(scope.isDone()).toBe(true)
+  })
+})
+
+// A real loopback server, since nock short-circuits before a socket exists and so
+// cannot exercise keep-alive reuse or a mid-request socket reset.
+describe("Client (persistent connection)", () => {
+  let server
+  let connections = new Set()
+
+  async function listen(handler) {
+    connections = new Set()
+    server = http.createServer(handler)
+    server.on("connection", (socket) => {
+      connections.add(socket)
+      socket.on("close", () => connections.delete(socket))
+    })
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+    process.env.HIREFIRE_DATA_URL = `http://127.0.0.1:${server.address().port}`
+  }
+
+  afterEach(async () => {
+    for (const socket of connections) socket.destroy()
+    if (server) await new Promise((resolve) => server.close(resolve))
+    server = undefined
+  })
+
+  test("reuses one socket across requests", async () => {
+    await listen((req, res) => req.resume().on("end", () => res.end()))
+    const client = new Client({ token: "t" })
+
+    await client.submitSamples("[]")
+    await client.submitSamples("[]")
+
+    expect(connections.size).toBe(1) // the second request rode the kept-alive socket
+    client.close()
+  })
+
+  test("reconnects and retries once after a stale keep-alive socket", async () => {
+    let requests = 0
+    await listen((req, res) => {
+      requests += 1
+      const attempt = requests
+      req.resume().on("end", () => {
+        // The reused socket is dropped mid-request, like a peer's idle timeout.
+        if (attempt === 2) req.socket.destroy()
+        else res.end()
+      })
+    })
+    const client = new Client({ token: "t" })
+
+    await client.submitSamples("[]") // opens the socket
+    const response = await client.submitSamples("[]") // resets on reuse, retry succeeds
+
+    expect(response.statusCode).toBe(200)
+    expect(requests).toBe(3) // open, reset, retry
+    client.close()
+  })
+
+  test("does not retry a cold connection failure", async () => {
+    let requests = 0
+    await listen((req) => {
+      requests += 1
+      req.resume().on("end", () => req.socket.destroy()) // fail the first (cold) request
+    })
+    const client = new Client({ token: "t" })
+
+    await expect(client.submitSamples("[]")).rejects.toBeInstanceOf(
+      RequestError,
+    )
+    expect(requests).toBe(1) // a fresh connection failing is a real fault, not retried
+    client.close()
+  })
+
+  test("close finishes the persistent socket", async () => {
+    await listen((req, res) => req.resume().on("end", () => res.end()))
+    const client = new Client({ token: "t" })
+    await client.submitSamples("[]")
+    expect(connections.size).toBe(1)
+    const [socket] = connections
+    const closed = new Promise((resolve) => socket.on("close", resolve))
+
+    client.close()
+    await closed // the server observes the socket finish, not a leak
+
+    expect(connections.size).toBe(0)
+  })
+
+  test("close is safe without a connection", () => {
+    expect(() => new Client({ token: "t" }).close()).not.toThrow()
   })
 })

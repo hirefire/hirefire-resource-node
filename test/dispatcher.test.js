@@ -499,6 +499,38 @@ describe("Dispatcher", () => {
     expect(dispatcher.running()).toBe(false)
   })
 
+  test("a hung worker sampler does not stall web dispatch", async () => {
+    stubLease(true)
+    let dispatched
+    const webDispatched = new Promise((resolve) => (dispatched = resolve))
+    nock(BASE)
+      .persist()
+      .post("/metrics/ingest")
+      .reply(() => {
+        dispatched()
+        return [200]
+      })
+
+    // The worker sampler never settles, so the worker loop parks on it forever.
+    let release
+    const hang = new Promise((resolve) => (release = resolve))
+    config().dyno("web")
+    config().dyno("worker", () => hang)
+    const dispatcher = config().dispatcher
+    dispatcher._interval = 0.01
+
+    try {
+      dispatcher.start()
+      // Resolves only because the dispatch loop runs independently of the parked
+      // worker loop. A single combined loop would deadlock here and time out.
+      await webDispatched
+      expect(dispatcher.running()).toBe(true)
+    } finally {
+      release(0)
+      await dispatcher.stop()
+    }
+  })
+
   test("stop flushes the buffer", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
@@ -511,6 +543,21 @@ describe("Dispatcher", () => {
 
     expect(bodies.length).toBe(1)
     expect(bodies[0][0].samples).toEqual({ 1000: [7] })
+  })
+
+  test("stop closes the persistent connections", async () => {
+    // Workers-only with an empty buffer: stop's final dispatch is a no-op, so the
+    // only thing under test is that both keep-alive clients are released.
+    const dispatcher = configureWorkersOnly()
+    const clientClose = jest.spyOn(dispatcher._client, "close")
+    const leaseClose = jest.spyOn(dispatcher._lease, "close")
+    // Mark running without spawning the loops, so the only dispatch is stop's.
+    dispatcher._running = true
+
+    await dispatcher.stop()
+
+    expect(clientClose).toHaveBeenCalled()
+    expect(leaseClose).toHaveBeenCalled()
   })
 
   test("web-only dispatch never requests a lease", async () => {
@@ -633,7 +680,10 @@ describe("Dispatcher", () => {
 
   test("the loop's terminal catch contains an unexpected tick failure", async () => {
     const dispatcher = configureWebOnly()
-    jest.spyOn(dispatcher, "_tick").mockRejectedValue(new Error("unexpected"))
+    // The dispatch loop runs _dispatchTick directly (web-only has no worker loop).
+    jest
+      .spyOn(dispatcher, "_dispatchTick")
+      .mockRejectedValue(new Error("unexpected"))
 
     dispatcher.start()
     await dispatcher._loopPromise // the terminal catch settles this, never rejects

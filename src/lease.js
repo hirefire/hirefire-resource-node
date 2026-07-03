@@ -2,6 +2,11 @@ const crypto = require("crypto")
 const { Client, RequestError } = require("./client")
 
 class Lease {
+  // Bound server-supplied cadence: a zero or garbled header must not collapse it to a
+  // per-tick storm. The floors differ: a 1s sample is tolerable, a sub-5s TTL churns renewals.
+  static SAMPLE_FREQUENCY_BOUNDS = [1, 3600]
+  static TTL_BOUNDS = [5, 3600]
+
   constructor(configuration, { enabled = true } = {}) {
     this._enabled = enabled
     this._processId = crypto.randomUUID()
@@ -58,19 +63,37 @@ class Lease {
 
     const headers = response.headers
 
-    const frequency = parseInt(headers["hirefire-sample-frequency"])
-    if (Number.isFinite(frequency) && frequency > 0) {
-      this._sampleFrequency = frequency
+    if (headers["hirefire-sample-frequency"] !== undefined) {
+      this._sampleFrequency = clamp(
+        toInteger(headers["hirefire-sample-frequency"]),
+        Lease.SAMPLE_FREQUENCY_BOUNDS,
+      )
     }
 
-    const ttl = parseInt(headers["hirefire-lease-ttl"])
-    if (Number.isFinite(ttl) && ttl > 0) {
-      this._ttl = ttl
+    if (headers["hirefire-lease-ttl"] !== undefined) {
+      this._ttl = clamp(
+        toInteger(headers["hirefire-lease-ttl"]),
+        Lease.TTL_BOUNDS,
+      )
       this._expiresAt = Date.now() + this._ttl * 1000
     }
 
     this._granted = headers["hirefire-lease-granted"] === "true"
   }
+
+  close() {
+    this._client.close()
+  }
+}
+
+// Mirrors Ruby String#to_i: a leading integer, or 0 when there is none.
+function toInteger(value) {
+  const parsed = parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function clamp(value, [min, max]) {
+  return Math.min(Math.max(value, min), max)
 }
 
 module.exports = Lease

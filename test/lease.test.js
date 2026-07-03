@@ -231,20 +231,51 @@ describe("Lease", () => {
     expect(lease.sampleFrequency).toBe(15) // default retained
   })
 
-  test("ignores a malformed sample frequency", async () => {
+  test("clamps a garbled sample frequency to the floor", async () => {
     grant({
       "HireFire-Lease-Granted": "true",
-      "HireFire-Sample-Frequency": "abc",
+      "HireFire-Sample-Frequency": "0", // a bad header must not sample every tick
     })
     await lease.requestIfDue()
-    // A NaN frequency would collapse the sample interval. The default is kept.
-    expect(lease.sampleFrequency).toBe(15)
+    expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[0])
   })
 
-  test("ignores a non-positive lease ttl", async () => {
+  test("clamps a garbled ttl to the floor", async () => {
+    // A zero (or non-numeric) TTL must not re-request the lease every tick.
     grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "0" })
     await lease.requestIfDue()
-    expect(lease._ttl).toBe(15) // default retained, no instant-expiry storm
+    expect(lease._ttl).toBe(Lease.TTL_BOUNDS[0])
+  })
+
+  test("clamps a sub-floor ttl to the floor", async () => {
+    grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "1" })
+    await lease.requestIfDue()
+    expect(lease._ttl).toBe(Lease.TTL_BOUNDS[0]) // a 1s TTL would churn renewals
+  })
+
+  test("clamps an over-large sample frequency to the ceiling", async () => {
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "999999",
+    })
+    await lease.requestIfDue()
+    expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[1])
+  })
+
+  test("clamps an over-large ttl to the ceiling", async () => {
+    // Without a cap a huge TTL would stop renewals, so the lease never fails over.
+    grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "999999" })
+    await lease.requestIfDue()
+    expect(lease._ttl).toBe(Lease.TTL_BOUNDS[1])
+  })
+
+  test("closes the underlying client", async () => {
+    grant()
+    await lease.requestIfDue()
+    expect(lease._client._agent).not.toBeNull() // opened by the poll
+
+    lease.close()
+    expect(lease._client._agent).toBeNull()
   })
 
   test("grants only on a literal true", async () => {

@@ -1,22 +1,32 @@
 const HireFire = require(".")
+const safeLog = require("./log")
 
 const REQUEST_QUEUE_TIME_LIMIT = 60000
 
 function processRequestQueueTime(requestStart) {
   if (!requestStart) return
 
-  const requestQueueTime = calculateRequestQueueTime(requestStart)
-  if (requestQueueTime === null) return
+  try {
+    const requestQueueTime = calculateRequestQueueTime(requestStart)
+    if (requestQueueTime === null) return
 
-  const configuration = HireFire.configuration
+    const configuration = HireFire.configuration
 
-  if (configuration.web && configuration.token) {
-    configuration.web.sample(requestQueueTime)
-    configuration.dispatcher.start()
-  }
+    if (configuration.web && configuration.token) {
+      configuration.web.sample(requestQueueTime)
+      configuration.dispatcher.start()
+    }
 
-  if (configuration.logQueueMetrics) {
-    console.log(`[hirefire:router] queue=${requestQueueTime}ms`)
+    if (configuration.logQueueMetrics) {
+      console.log(`[hirefire:router] queue=${requestQueueTime}ms`)
+    }
+  } catch (error) {
+    // Never raise the library's own bookkeeping into the host app's request.
+    safeLog(
+      HireFire.configuration.logger,
+      "error",
+      `[HireFire] Middleware error: ${error?.message ?? error}`,
+    )
   }
 }
 

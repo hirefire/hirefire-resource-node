@@ -84,6 +84,25 @@ describe("middleware", () => {
       processRequestQueueTime("1700000000000")
       expect(log).not.toHaveBeenCalled()
     })
+
+    test("an internal failure is swallowed, not raised into the request", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      HireFire.configuration.dyno("web")
+      const errorLog = jest
+        .spyOn(HireFire.configuration.logger, "error")
+        .mockImplementation(() => {})
+      // An internal failure (here start throwing) must be logged, never raised
+      // into the host application's request.
+      start.mockImplementation(() => {
+        throw new Error("boom")
+      })
+      freezeTime(1700000001)
+
+      expect(() => processRequestQueueTime("1700000000000")).not.toThrow()
+      expect(errorLog).toHaveBeenCalledWith(
+        expect.stringContaining("Middleware error"),
+      )
+    })
   })
 
   describe("calculateRequestQueueTime", () => {
