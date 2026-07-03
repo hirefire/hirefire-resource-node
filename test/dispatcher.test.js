@@ -92,7 +92,7 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     config().buffer.sampleWeb(12)
     config().buffer.sampleWeb(8)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[0][0].name).toBe("web")
     expect(Object.values(bodies[0][0].samples)[0]).toEqual([12, 8])
@@ -105,7 +105,7 @@ describe("Dispatcher", () => {
 
     freezeTime(1000)
     config().buffer.sampleWeb(12)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining("Dispatching metrics"),
@@ -116,7 +116,7 @@ describe("Dispatcher", () => {
     stubLease()
     const bodies = captureIngestBodies()
     const dispatcher = config().dispatcher
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies).toEqual([])
   })
@@ -126,7 +126,7 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[0][0].samples).toEqual({ 1000: [] })
   })
@@ -136,9 +136,9 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1003)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[1][0].samples).toEqual({ 1001: [], 1002: [], 1003: [] })
   })
@@ -148,10 +148,10 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1003)
     config().buffer.sampleWeb(5)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[1][0].samples).toEqual({ 1001: [], 1002: [], 1003: [5] })
   })
@@ -170,11 +170,11 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureWebOnly()
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1003)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1005)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(Object.keys(bodies[2][0].samples).sort()).toEqual([
       "1001",
@@ -190,9 +190,9 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1100)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     const keys = Object.keys(bodies[1][0].samples).map(Number)
     expect(Math.min(...keys)).toBe(1100 - Dispatcher.WEB_BACKFILL_LIMIT)
@@ -205,7 +205,8 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
 
     const dispatcher = configureWorkersOnly()
-    await dispatcher._tick()
+    await dispatcher._workerTick()
+    await dispatcher._dispatchTick()
 
     expect(bodies).toEqual([])
     expect(loggedError("401")).toBe(false)
@@ -217,7 +218,7 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
     freezeTime(1000)
     config().buffer.sampleWeb(7)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(config().buffer.flush().web).toEqual({})
     expect(loggedError("Dispatch error")).toBe(false)
@@ -229,7 +230,7 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
     freezeTime(1000)
     config().buffer.sampleWeb(7)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(config().buffer.flush().web).toEqual({ 1000: [7] })
   })
@@ -240,7 +241,7 @@ describe("Dispatcher", () => {
 
     freezeTime(1000)
     for (let i = 0; i < 15000; i++) config().buffer.sampleWeb(12345)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies).toEqual([])
     expect(config().buffer.flush().web).toEqual({})
@@ -252,15 +253,54 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1010)
     for (let i = 0; i < 15000; i++) config().buffer.sampleWeb(12345)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1012)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies.length).toBe(2)
     expect(Object.keys(bodies[1][0].samples).sort()).toEqual(["1011", "1012"])
+  })
+
+  test("dispatch tick does not run worker sampling", async () => {
+    stubLease(true)
+    const bodies = captureIngestBodies()
+    let sampled = false
+
+    freezeTime(1000)
+    config().dyno("web")
+    config().dyno("worker", () => {
+      sampled = true
+      return 42
+    })
+    const dispatcher = config().dispatcher
+    config().buffer.sampleWeb(5)
+
+    await dispatcher._dispatchTick()
+
+    expect(bodies[0].map((e) => e.name)).toEqual(["web"])
+    expect(sampled).toBe(false)
+  })
+
+  test("worker tick samples without dispatching and a later tick delivers it", async () => {
+    stubLease(true)
+    const bodies = captureIngestBodies()
+
+    freezeTime(1000)
+    config().dyno("worker", () => 42)
+    const dispatcher = config().dispatcher
+
+    await dispatcher._workerTick()
+    expect(bodies).toEqual([])
+
+    await dispatcher._dispatchTick()
+
+    expect(bodies.length).toBe(1)
+    expect(bodies[0].some((e) => e.name === "worker" && e.sample === 42)).toBe(
+      true,
+    )
   })
 
   test("combined web and worker dispatch", async () => {
@@ -270,7 +310,8 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     const dispatcher = configureWebAndWorkers()
     config().buffer.sampleWeb(5)
-    await dispatcher._tick()
+    await dispatcher._workerTick()
+    await dispatcher._dispatchTick()
 
     const entries = bodies[0]
     expect(entries.some((e) => e.name === "web" && "samples" in e)).toBe(true)
@@ -284,7 +325,8 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
 
     const dispatcher = configureWorkersOnly()
-    await dispatcher._tick()
+    await dispatcher._workerTick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[0].some((e) => e.name === "worker" && e.sample === 42)).toBe(
       true,
@@ -296,7 +338,8 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
 
     const dispatcher = configureWorkersOnly()
-    await dispatcher._tick()
+    await dispatcher._workerTick()
+    await dispatcher._dispatchTick()
 
     expect(bodies).toEqual([])
   })
@@ -311,9 +354,9 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureCpuOnly("clock")
     freezeTime(1000)
-    await dispatcher._tick() // seeds baseline only
+    await dispatcher._dispatchTick() // seeds baseline only
     freezeTime(1001)
-    await dispatcher._tick() // 0.5 core over 1s => 50%
+    await dispatcher._dispatchTick() // 0.5 core over 1s => 50%
 
     expect(bodies.length).toBe(1)
     expect(bodies[0][0].name).toBe("clock")
@@ -329,7 +372,7 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureCpuOnly("clock")
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies).toEqual([])
   })
@@ -344,9 +387,9 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureCpuOnly("clock")
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1001)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(config().buffer.flush().cpu).toEqual({})
   })
@@ -359,7 +402,7 @@ describe("Dispatcher", () => {
     const dispatcher = config().dispatcher
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies).toEqual([])
   })
@@ -373,7 +416,7 @@ describe("Dispatcher", () => {
 
     freezeTime(1000)
     config().buffer.sampleWeb(12)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[0][0].samples).toEqual({ 1000: [12] })
   })
@@ -385,9 +428,9 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1002)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[0][0].samples).toEqual({ 1000: [] })
     expect(bodies[1][0].samples).toEqual({ 1001: [], 1002: [] })
@@ -399,7 +442,7 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[0][0].samples).toEqual({ 1000: [] })
   })
@@ -414,7 +457,7 @@ describe("Dispatcher", () => {
     const dispatcher = config().dispatcher
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies[0].map((e) => e.name)).toEqual(["web"])
   })
@@ -429,7 +472,8 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     const dispatcher = configureWebAndWorkers()
     config().buffer.sampleWeb(12)
-    await dispatcher._tick()
+    await dispatcher._workerTick()
+    await dispatcher._dispatchTick()
 
     expect(bodies.length).toBe(1)
     expect(loggedError("Network error")).toBe(true)
@@ -445,7 +489,8 @@ describe("Dispatcher", () => {
       throw new Error("Redis down")
     })
     const dispatcher = config().dispatcher
-    await dispatcher._tick()
+    await dispatcher._workerTick()
+    await dispatcher._dispatchTick()
 
     expect(bodies.length).toBe(1)
     expect(bodies[0].map((e) => e.name)).toEqual(["web"])
@@ -560,6 +605,35 @@ describe("Dispatcher", () => {
     expect(leaseClose).toHaveBeenCalled()
   })
 
+  test("stop is bounded when a loop is parked on a hung sampler", async () => {
+    stubLease(true)
+    captureIngestBodies()
+
+    // A sampler that never settles parks the worker loop, so only stop()'s bound ends it.
+    let reached
+    const parked = new Promise((resolve) => (reached = resolve))
+    config().dyno("web")
+    config().dyno("worker", () => {
+      reached()
+      return new Promise(() => {})
+    })
+    const dispatcher = config().dispatcher
+    dispatcher._interval = 0.01
+    dispatcher._stopJoinTimeoutMs = 50 // 50ms for a fast test (real default 5s)
+
+    const clientClose = jest.spyOn(dispatcher._client, "close")
+    const leaseClose = jest.spyOn(dispatcher._lease, "close")
+
+    dispatcher.start()
+    await parked // the worker loop is now stuck on the hung sampler
+
+    // stop() must not wait on the parked loop forever: it proceeds after the join bound
+    // and still runs the final dispatch and cleanup.
+    expect(await dispatcher.stop()).toBe(true)
+    expect(clientClose).toHaveBeenCalled()
+    expect(leaseClose).toHaveBeenCalled()
+  })
+
   test("web-only dispatch never requests a lease", async () => {
     let leaseRequested = false
     nock(BASE)
@@ -573,7 +647,7 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureWebOnly()
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(leaseRequested).toBe(false)
   })
@@ -590,9 +664,9 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1001)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(bodies.length).toBe(2)
   })
@@ -609,13 +683,13 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1002)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1004)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
     freezeTime(1005)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(count).toBe(2)
   })
@@ -625,7 +699,7 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(dispatcher._dispatchFrequency).toBe(
       Dispatcher.MAX_DISPATCH_FREQUENCY,
@@ -637,7 +711,7 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(dispatcher._dispatchFrequency).toBe(
       Dispatcher.DEFAULT_DISPATCH_FREQUENCY,
@@ -649,7 +723,7 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
 
     freezeTime(1000)
-    await dispatcher._tick()
+    await dispatcher._dispatchTick()
 
     expect(dispatcher._dispatchFrequency).toBe(
       Dispatcher.DEFAULT_DISPATCH_FREQUENCY,
@@ -661,7 +735,8 @@ describe("Dispatcher", () => {
     nock(BASE).persist().post("/metrics/ingest").reply(500)
 
     const dispatcher = configureWorkersOnly()
-    await dispatcher._tick()
+    await dispatcher._workerTick()
+    await dispatcher._dispatchTick()
 
     expect(config().buffer.flush().web).toEqual({})
     expect(loggedError("Dispatch error")).toBe(true)
@@ -674,12 +749,15 @@ describe("Dispatcher", () => {
       throw null // JS allows throwing non-Errors, and the guard must still absorb it
     })
 
-    await expect(dispatcher._tick()).resolves.toBeUndefined()
+    await expect(dispatcher._workerTick()).resolves.toBeUndefined()
     expect(logger.error).toHaveBeenCalled()
   })
 
-  test("the loop's terminal catch contains an unexpected tick failure", async () => {
+  test("a crashed loop is logged but leaves the dispatcher running", async () => {
+    captureIngestBodies()
     const dispatcher = configureWebOnly()
+    const clientClose = jest.spyOn(dispatcher._client, "close")
+    const leaseClose = jest.spyOn(dispatcher._lease, "close")
     // The dispatch loop runs _dispatchTick directly (web-only has no worker loop).
     jest
       .spyOn(dispatcher, "_dispatchTick")
@@ -688,8 +766,44 @@ describe("Dispatcher", () => {
     dispatcher.start()
     await dispatcher._loopPromise // the terminal catch settles this, never rejects
 
-    // A throw escaping the loop must stop the dispatcher, not crash the host.
-    expect(dispatcher.running()).toBe(false)
+    // A dead loop leaves the running flag set (like a dead Ruby thread), so stop() still
+    // runs the final dispatch and cleanup.
+    expect(loggedError("stopped unexpectedly")).toBe(true)
+    expect(dispatcher.running()).toBe(true)
+
+    expect(await dispatcher.stop()).toBe(true)
+    expect(clientClose).toHaveBeenCalled()
+    expect(leaseClose).toHaveBeenCalled()
+  })
+
+  test("a crashed dispatch loop does not stop the worker loop", async () => {
+    captureIngestBodies()
+    const dispatcher = configureWebAndWorkers()
+    dispatcher._interval = 0.01
+    jest
+      .spyOn(dispatcher, "_dispatchTick")
+      .mockRejectedValue(new Error("unexpected"))
+
+    // requestIfDue runs once per worker tick, so a second call proves the worker loop
+    // survived the dispatch-loop crash.
+    let calls = 0
+    let ranTwice
+    const twice = new Promise((resolve) => (ranTwice = resolve))
+    jest
+      .spyOn(dispatcher._lease, "requestIfDue")
+      .mockImplementation(async () => {
+        calls += 1
+        if (calls >= 2) ranTwice()
+      })
+
+    try {
+      dispatcher.start()
+      await twice
+      expect(dispatcher.running()).toBe(true)
+    } finally {
+      await dispatcher.stop()
+    }
+
     expect(loggedError("stopped unexpectedly")).toBe(true)
   })
 
@@ -708,7 +822,7 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     config().buffer.sampleWeb(7)
 
-    await expect(dispatcher._tick()).resolves.toBeUndefined()
+    await expect(dispatcher._dispatchTick()).resolves.toBeUndefined()
   })
 
   test("start is refused while a stop is in progress", async () => {
@@ -732,7 +846,7 @@ describe("Dispatcher", () => {
 
     // An escaping rejection here would reach the unguarded loop as an unhandled
     // rejection (a process crash on Node >=15). The tick must absorb it instead.
-    await expect(dispatcher._tick()).resolves.toBeUndefined()
+    await expect(dispatcher._dispatchTick()).resolves.toBeUndefined()
     expect(loggedError("Dispatch error")).toBe(true)
   })
 })

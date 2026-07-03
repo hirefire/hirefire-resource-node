@@ -36,6 +36,8 @@ class Dispatcher {
     this._nextDispatchAt = null
     this._sleepers = new Set()
     this._loopPromise = null
+    // Mirrors Ruby's thread.join(5).
+    this._stopJoinTimeoutMs = 5000
   }
 
   start() {
@@ -64,7 +66,7 @@ class Dispatcher {
 
     const loopPromise = this._loopPromise
     this._loopPromise = null
-    await loopPromise
+    await this._joinLoops(loopPromise)
 
     await this._guard(() => this._dispatch())
 
@@ -83,13 +85,27 @@ class Dispatcher {
 
   _loop(tick) {
     return this._runLoop(tick).catch((error) => {
-      this._running = false
+      // Leave _running set (a dead Ruby thread does the same) so the other loop keeps going
+      // and stop() still cleans up.
       this._logger().error(
         `[HireFire] Dispatcher loop stopped unexpectedly: ${
           error?.message ?? error
         }`,
       )
     })
+  }
+
+  // Bounded wait: a sampler parked forever must not block stop()'s final dispatch and
+  // cleanup. Ruby's thread.join(5) proceeds the same way on timeout.
+  _joinLoops(loopPromise) {
+    if (!loopPromise) return Promise.resolve()
+    return Promise.race([
+      loopPromise,
+      new Promise((resolve) => {
+        const timer = setTimeout(resolve, this._stopJoinTimeoutMs)
+        if (timer.unref) timer.unref()
+      }),
+    ])
   }
 
   async _runLoop(tick) {
@@ -118,13 +134,6 @@ class Dispatcher {
       sleeper.resolve()
     }
     this._sleepers.clear()
-  }
-
-  // A single combined pass, used by tests. The running loops call the two halves
-  // separately so they make independent forward progress.
-  async _tick() {
-    await this._workerTick()
-    await this._dispatchTick()
   }
 
   async _dispatchTick() {
