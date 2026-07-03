@@ -69,7 +69,7 @@ describe("Buffer", () => {
     const web = buffer.flush().web
     const keys = Object.keys(web).map(Number)
     expect(keys.length).toBeLessThanOrEqual(66)
-    expect(Math.min(...keys)).toBe(1006) // seconds beyond the TTL pruned
+    expect(Math.min(...keys)).toBe(1006)
     expect(Math.max(...keys)).toBe(1070)
   })
 
@@ -122,13 +122,11 @@ describe("Buffer", () => {
     freezeTime(1000)
     buffer.sampleCpu("__proto__", 50.0)
 
-    // The write must land in the buffer, not mutate the global prototype.
     expect({}[1000]).toBeUndefined()
     expect(buffer.flush().cpu["__proto__"]).toEqual({ 1000: [50.0] })
   })
 
   test("repopulate web keeps the second exactly at the ttl boundary", () => {
-    // 40 == now - ttl: the boundary second is inside the window (drop is "<").
     freezeTime(100)
     buffer.repopulateWeb({ 40: [5] })
 

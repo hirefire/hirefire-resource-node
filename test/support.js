@@ -9,17 +9,12 @@ const IDENTITY_ENV = [
   "RENDER_CPU_COUNT",
 ]
 
-// A logger that swallows everything. Tests that assert on logging override it
-// with jest spies.
 function silentLogger() {
   return { info() {}, warn() {}, error() {}, log() {} }
 }
 
-// Equivalent of the Ruby suite's Timecop.freeze: pin the wall clock (Date.now) to a
-// fixed Unix second without faking setTimeout (so HTTP mocks and the dispatcher loop are
-// unaffected). Also pins the monotonic pacing clock (performance.now) to the same instant,
-// so a Timecop-style time jump drives dispatch/lease pacing just as it drives the
-// wall-clock sample timestamps. Call again to advance.
+// Timecop.freeze equivalent: pin the wall clock (Date.now) and monotonic pacing clock
+// (performance.now) to a fixed second, without faking setTimeout. Call again to advance.
 function freezeTime(seconds) {
   jest.spyOn(Date, "now").mockReturnValue(seconds * 1000)
   jest.spyOn(performance, "now").mockReturnValue(seconds * 1000)

@@ -354,9 +354,9 @@ describe("Dispatcher", () => {
 
     const dispatcher = configureCpuOnly("clock")
     freezeTime(1000)
-    await dispatcher._dispatchTick() // seeds baseline only
+    await dispatcher._dispatchTick()
     freezeTime(1001)
-    await dispatcher._dispatchTick() // 0.5 core over 1s => 50%
+    await dispatcher._dispatchTick()
 
     expect(bodies.length).toBe(1)
     expect(bodies[0][0].name).toBe("clock")
@@ -453,7 +453,7 @@ describe("Dispatcher", () => {
 
     process.env.HIREFIRE_SERVICE_NAME = "web"
     config().dyno("web")
-    config().dyno("worker", { tracking: "cpu" }) // dormant here: identity is "web"
+    config().dyno("worker", { tracking: "cpu" })
     const dispatcher = config().dispatcher
 
     freezeTime(1000)
@@ -511,10 +511,10 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
     try {
       dispatcher.start()
-      await ran // block until the background loop runs a real tick
+      await ran
       expect(dispatcher.running()).toBe(true)
     } finally {
-      await dispatcher.stop() // always tear the loop down, even on a failure
+      await dispatcher.stop()
     }
     expect(dispatcher.running()).toBe(false)
   })
@@ -533,13 +533,13 @@ describe("Dispatcher", () => {
       })
 
     const dispatcher = configureWebOnly()
-    dispatcher._interval = 0.01 // 10ms between ticks, so the sleep path runs fast
+    dispatcher._interval = 0.01
     try {
       dispatcher.start()
-      await twoTicks // tick -> sleep -> tick proves the loop resumes after sleeping
+      await twoTicks
       expect(count).toBeGreaterThanOrEqual(2)
     } finally {
-      await dispatcher.stop() // stops mid-sleep, exercising the wake path
+      await dispatcher.stop()
     }
     expect(dispatcher.running()).toBe(false)
   })
@@ -556,7 +556,6 @@ describe("Dispatcher", () => {
         return [200]
       })
 
-    // The worker sampler never settles, so the worker loop parks on it forever.
     let release
     const hang = new Promise((resolve) => (release = resolve))
     config().dyno("web")
@@ -566,8 +565,6 @@ describe("Dispatcher", () => {
 
     try {
       dispatcher.start()
-      // Resolves only because the dispatch loop runs independently of the parked
-      // worker loop. A single combined loop would deadlock here and time out.
       await webDispatched
       expect(dispatcher.running()).toBe(true)
     } finally {
@@ -579,7 +576,6 @@ describe("Dispatcher", () => {
   test("stop flushes the buffer", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
-    // Mark running without spawning the loop, so the only dispatch is stop's.
     dispatcher._running = true
 
     freezeTime(1000)
@@ -591,12 +587,9 @@ describe("Dispatcher", () => {
   })
 
   test("stop closes the persistent connections", async () => {
-    // Workers-only with an empty buffer: stop's final dispatch is a no-op, so the
-    // only thing under test is that both keep-alive clients are released.
     const dispatcher = configureWorkersOnly()
     const clientClose = jest.spyOn(dispatcher._client, "close")
     const leaseClose = jest.spyOn(dispatcher._lease, "close")
-    // Mark running without spawning the loops, so the only dispatch is stop's.
     dispatcher._running = true
 
     await dispatcher.stop()
@@ -609,7 +602,6 @@ describe("Dispatcher", () => {
     stubLease(true)
     captureIngestBodies()
 
-    // A sampler that never settles parks the worker loop, so only stop()'s bound ends it.
     let reached
     const parked = new Promise((resolve) => (reached = resolve))
     config().dyno("web")
@@ -619,16 +611,14 @@ describe("Dispatcher", () => {
     })
     const dispatcher = config().dispatcher
     dispatcher._interval = 0.01
-    dispatcher._stopJoinTimeoutMs = 50 // 50ms for a fast test (real default 5s)
+    dispatcher._stopJoinTimeoutMs = 50
 
     const clientClose = jest.spyOn(dispatcher._client, "close")
     const leaseClose = jest.spyOn(dispatcher._lease, "close")
 
     dispatcher.start()
-    await parked // the worker loop is now stuck on the hung sampler
+    await parked
 
-    // stop() must not wait on the parked loop forever: it proceeds after the join bound
-    // and still runs the final dispatch and cleanup.
     expect(await dispatcher.stop()).toBe(true)
     expect(clientClose).toHaveBeenCalled()
     expect(leaseClose).toHaveBeenCalled()
@@ -734,16 +724,14 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
 
-    // Wall clock frozen throughout; the monotonic pacing clock advances independently.
     jest.spyOn(Date, "now").mockReturnValue(1000000)
     let mono = 500000
     jest.spyOn(performance, "now").mockImplementation(() => mono)
 
-    await dispatcher._dispatchTick() // first dispatch, next due at monotonic 501000
-    mono = 502000 // monotonic advances past the 1s interval, wall clock unchanged
-    await dispatcher._dispatchTick() // dispatches again on the same wall second
+    await dispatcher._dispatchTick()
+    mono = 502000
+    await dispatcher._dispatchTick()
 
-    // Two dispatches on one frozen wall second: pacing follows the monotonic clock.
     expect(bodies.length).toBe(2)
   })
 
@@ -763,7 +751,7 @@ describe("Dispatcher", () => {
     captureIngestBodies()
     const dispatcher = configureWebOnly()
     jest.spyOn(dispatcher._lease, "requestIfDue").mockImplementation(() => {
-      throw null // JS allows throwing non-Errors, and the guard must still absorb it
+      throw null
     })
 
     await expect(dispatcher._workerTick()).resolves.toBeUndefined()
@@ -775,16 +763,13 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
     const clientClose = jest.spyOn(dispatcher._client, "close")
     const leaseClose = jest.spyOn(dispatcher._lease, "close")
-    // The dispatch loop runs _dispatchTick directly (web-only has no worker loop).
     jest
       .spyOn(dispatcher, "_dispatchTick")
       .mockRejectedValue(new Error("unexpected"))
 
     dispatcher.start()
-    await dispatcher._loopPromise // the terminal catch settles this, never rejects
+    await dispatcher._loopPromise
 
-    // A dead loop leaves the running flag set (like a dead Ruby thread), so stop() still
-    // runs the final dispatch and cleanup.
     expect(loggedError("stopped unexpectedly")).toBe(true)
     expect(dispatcher.running()).toBe(true)
 
@@ -801,8 +786,6 @@ describe("Dispatcher", () => {
       .spyOn(dispatcher, "_dispatchTick")
       .mockRejectedValue(new Error("unexpected"))
 
-    // requestIfDue runs once per worker tick, so a second call proves the worker loop
-    // survived the dispatch-loop crash.
     let calls = 0
     let ranTwice
     const twice = new Promise((resolve) => (ranTwice = resolve))
@@ -827,8 +810,6 @@ describe("Dispatcher", () => {
   test("a throwing logger cannot crash a dispatch", async () => {
     nock(BASE).persist().post("/metrics/ingest").reply(500)
     const dispatcher = configureWebOnly()
-    // A logger whose .error() throws must not turn a dispatch failure (which
-    // logs) into an unhandled rejection that crashes the host.
     config().logger = {
       info() {},
       warn() {},
@@ -848,8 +829,8 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
     dispatcher.start()
 
-    const stopping = dispatcher.stop() // runs up to its first await, _stopping set
-    expect(dispatcher.start()).toBe(false) // refused mid-stop: no second loop
+    const stopping = dispatcher.stop()
+    expect(dispatcher.start()).toBe(false)
     await stopping
     expect(dispatcher.running()).toBe(false)
   })
@@ -858,11 +839,9 @@ describe("Dispatcher", () => {
     captureIngestBodies()
     const dispatcher = configureWebOnly()
     jest.spyOn(config().buffer, "flush").mockImplementation(() => {
-      throw null // even a non-Error throw must be absorbed, never rejected
+      throw null
     })
 
-    // An escaping rejection here would reach the unguarded loop as an unhandled
-    // rejection (a process crash on Node >=15). The tick must absorb it instead.
     await expect(dispatcher._dispatchTick()).resolves.toBeUndefined()
     expect(loggedError("Dispatch error")).toBe(true)
   })

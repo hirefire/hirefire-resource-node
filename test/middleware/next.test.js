@@ -5,8 +5,6 @@ const { NextRequest, NextResponse } = require("next/server")
 
 const { middleware, withHireFire } = require("../../src/middleware/next")
 
-// Drive the middleware with a real NextRequest, the object Next's runtime hands
-// the middleware export, not a hand-rolled stand-in.
 function request(headers = {}) {
   return new NextRequest("http://localhost/", { headers })
 }

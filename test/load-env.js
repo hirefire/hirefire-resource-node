@@ -1,7 +1,6 @@
 const fs = require("fs")
 const path = require("path")
 
-// Load .env (written by bin/services up) so the macro suite reaches this checkout's services.
 const envPath = path.join(__dirname, "..", ".env")
 
 if (fs.existsSync(envPath)) {

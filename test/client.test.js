@@ -72,8 +72,6 @@ describe("Client", () => {
   })
 
   test("maps a socket ETIMEDOUT to a timeout error", async () => {
-    // A kernel-level socket timeout surfaces as an error event with this code,
-    // distinct from the request timeout option but reported the same way.
     nock(BASE).post("/metrics/ingest").replyWithError({ code: "ETIMEDOUT" })
     await expect(client.submitSamples(BODY)).rejects.toThrow("timed out")
   })
@@ -154,7 +152,7 @@ describe("Client", () => {
   test("tolerates a trailing slash in the data url", async () => {
     process.env.HIREFIRE_DATA_URL = "https://custom.hirefire.io/"
     const scope = nock("https://custom.hirefire.io")
-      .post("/metrics/ingest") // not "//metrics/ingest"
+      .post("/metrics/ingest")
       .reply(200)
 
     await client.submitSamples(BODY)
@@ -163,8 +161,6 @@ describe("Client", () => {
   })
 })
 
-// A real loopback server, since nock short-circuits before a socket exists and so
-// cannot exercise keep-alive reuse or a mid-request socket reset.
 describe("Client (persistent connection)", () => {
   let server
   let connections = new Set()
@@ -193,7 +189,7 @@ describe("Client (persistent connection)", () => {
     await client.submitSamples("[]")
     await client.submitSamples("[]")
 
-    expect(connections.size).toBe(1) // the second request rode the kept-alive socket
+    expect(connections.size).toBe(1)
     client.close()
   })
 
@@ -203,18 +199,17 @@ describe("Client (persistent connection)", () => {
       requests += 1
       const attempt = requests
       req.resume().on("end", () => {
-        // The reused socket is dropped mid-request, like a peer's idle timeout.
         if (attempt === 2) req.socket.destroy()
         else res.end()
       })
     })
     const client = new Client({ token: "t" })
 
-    await client.submitSamples("[]") // opens the socket
-    const response = await client.submitSamples("[]") // resets on reuse, retry succeeds
+    await client.submitSamples("[]")
+    const response = await client.submitSamples("[]")
 
     expect(response.statusCode).toBe(200)
-    expect(requests).toBe(3) // open, reset, retry
+    expect(requests).toBe(3)
     client.close()
   })
 
@@ -222,14 +217,14 @@ describe("Client (persistent connection)", () => {
     let requests = 0
     await listen((req) => {
       requests += 1
-      req.resume().on("end", () => req.socket.destroy()) // fail the first (cold) request
+      req.resume().on("end", () => req.socket.destroy())
     })
     const client = new Client({ token: "t" })
 
     await expect(client.submitSamples("[]")).rejects.toBeInstanceOf(
       RequestError,
     )
-    expect(requests).toBe(1) // a fresh connection failing is a real fault, not retried
+    expect(requests).toBe(1)
     client.close()
   })
 
@@ -242,8 +237,6 @@ describe("Client (persistent connection)", () => {
         while (buffer.includes("\r\n\r\n")) {
           buffer = buffer.slice(buffer.indexOf("\r\n\r\n") + 4)
           requests += 1
-          // Garble the response on the reused socket: the client's HTTP parser errors
-          // (HPE_*), which is retriable only because the socket was reused.
           socket.write(
             requests === 2
               ? "GARBAGE NOT HTTP\r\n\r\n"
@@ -256,11 +249,11 @@ describe("Client (persistent connection)", () => {
     process.env.HIREFIRE_DATA_URL = `http://127.0.0.1:${raw.address().port}`
     const client = new Client({ token: "t" })
 
-    await client.submitSamples("[]") // opens the socket
-    const response = await client.submitSamples("[]") // garbled on reuse, retry succeeds
+    await client.submitSamples("[]")
+    const response = await client.submitSamples("[]")
 
     expect(response.statusCode).toBe(200)
-    expect(requests).toBe(3) // open, garbled reuse, retry
+    expect(requests).toBe(3)
     client.close()
     await new Promise((resolve) => raw.close(resolve))
   })
@@ -274,7 +267,7 @@ describe("Client (persistent connection)", () => {
     const closed = new Promise((resolve) => socket.on("close", resolve))
 
     client.close()
-    await closed // the server observes the socket finish, not a leak
+    await closed
 
     expect(connections.size).toBe(0)
   })

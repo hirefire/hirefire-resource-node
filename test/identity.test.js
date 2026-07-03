@@ -79,7 +79,6 @@ describe("Identity", () => {
   })
 
   test("dyno name with a single trailing segment is preserved", () => {
-    // One trailing "-<alnum>" segment is not a Fir pod suffix (needs two).
     process.env.DYNO = "worker-abc123"
     expect(Identity.resolve()).toBe("worker-abc123")
   })

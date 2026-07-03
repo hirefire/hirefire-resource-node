@@ -57,13 +57,12 @@ describe("Workers", () => {
   test("a sampler that throws a non-error is isolated and logged", async () => {
     const configuration = configure()
     configuration.dyno("worker", () => {
-      throw null // reading .name on null would throw inside the catch
+      throw null
     })
     configuration.dyno("mailer", () => 18)
 
     await configuration.workers.sample()
 
-    // Isolation must survive the non-Error throw: mailer still samples.
     expect(configuration.buffer.flush().workers).toEqual([
       { name: "mailer", sample: 18 },
     ])
@@ -94,7 +93,6 @@ describe("Workers", () => {
 
     await configuration.workers.sample()
 
-    // 0 is a valid idle-queue reading, not a sampler failure.
     expect(configuration.buffer.flush().workers).toEqual([
       { name: "worker", sample: 0 },
     ])

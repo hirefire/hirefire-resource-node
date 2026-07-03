@@ -14,8 +14,6 @@ describe("CPU", () => {
     return new CPU(name, configuration)
   }
 
-  // cpu.js reads Usage.reading() => { seconds, source }. A single source is used
-  // across a scenario unless a test specifically exercises a source switch.
   function read(seconds, source = "proc") {
     return { seconds, source: seconds === null ? null : source }
   }
@@ -46,7 +44,6 @@ describe("CPU", () => {
     freezeTime(1001)
     collector.sample()
 
-    // 0.5 CPU-seconds over 1 wall-second on 1 available CPU => 50%.
     expect(configuration.buffer.flush().cpu).toEqual({
       clock: { 1001: [50.0] },
     })
@@ -62,7 +59,6 @@ describe("CPU", () => {
     freezeTime(1001)
     collector.sample()
 
-    // 1 CPU-second over 1s on 4 CPUs => 25%.
     expect(configuration.buffer.flush().cpu).toEqual({
       worker: { 1001: [25.0] },
     })
@@ -90,7 +86,6 @@ describe("CPU", () => {
     const collector = cpu()
     freezeTime(1000)
     collector.sample()
-    // Source dropped 10.0 -> 5.0 between reads: skip, then re-baseline against 5.0.
     freezeTime(1001)
     expect(collector.sample()).toBeNull()
     freezeTime(1002)
@@ -105,18 +100,17 @@ describe("CPU", () => {
     jest
       .spyOn(Usage, "reading")
       .mockReturnValueOnce(read(5.0, "process"))
-      .mockReturnValueOnce(read(500.0, "proc")) // source switched between ticks
+      .mockReturnValueOnce(read(500.0, "proc"))
       .mockReturnValueOnce(read(500.5, "proc"))
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()
     freezeTime(1000)
-    collector.sample() // baseline (process, 5.0)
+    collector.sample()
     freezeTime(1001)
-    // process -> proc: the 495s jump must reseed, not become a clamped 100% spike.
     expect(collector.sample()).toBeNull()
     freezeTime(1002)
-    collector.sample() // proc -> proc: 0.5 over 1s on 1 CPU => 50%
+    collector.sample()
 
     expect(configuration.buffer.flush().cpu).toEqual({
       clock: { 1002: [50.0] },
@@ -136,7 +130,6 @@ describe("CPU", () => {
   })
 
   test("non-positive elapsed delta skips the sample", () => {
-    // Same instant + positive usage delta isolates the elapsedDelta <= 0 backstop.
     mockReadings(10.0, 10.5)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
@@ -152,9 +145,6 @@ describe("CPU", () => {
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
     const collector = cpu()
-    // Wall clock (Date.now) frozen at the same second for both reads: a wall-clock
-    // elapsed delta would be 0 and skip. The monotonic clock (performance.now) advances
-    // 1s, so 0.5 CPU-seconds over it => 50%, bucketed by the (frozen) wall second.
     freezeTime(1000)
     jest
       .spyOn(performance, "now")
@@ -198,11 +188,11 @@ describe("CPU", () => {
 
     const collector = cpu()
     freezeTime(1000)
-    expect(collector.sample()).toBeNull() // source down: no baseline
+    expect(collector.sample()).toBeNull()
     freezeTime(1001)
-    expect(collector.sample()).toBeNull() // source back: seeds baseline
+    expect(collector.sample()).toBeNull()
     freezeTime(1002)
-    collector.sample() // 0.5 over 1s on 1 CPU => 50%
+    collector.sample()
 
     expect(configuration.buffer.flush().cpu).toEqual({
       clock: { 1002: [50.0] },

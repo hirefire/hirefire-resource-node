@@ -35,7 +35,6 @@ describe("CPU.Usage", () => {
         .spyOn(Usage, "procStatPaths")
         .mockReturnValue(["/proc/1/stat", "/proc/2/stat"])
 
-      // (500+250) + (150+100) = 1000 ticks / 100 = 10.0 seconds, whole-dyno.
       expect(Usage.totalSeconds()).toBeCloseTo(10.0, 4)
     })
 
@@ -52,8 +51,6 @@ describe("CPU.Usage", () => {
         [Usage.CGROUP_V2_USAGE]: "usage_usec notanumber",
         [Usage.CGROUP_V1_USAGE]: "3000000000",
       })
-      // NaN is not nullish, so without the guard it would defeat the ?? chain
-      // and stick as a permanent CPU baseline.
       expect(Usage.totalSeconds()).toBeCloseTo(3.0, 4)
     })
 
@@ -83,7 +80,7 @@ describe("CPU.Usage", () => {
     })
 
     test("a throwing clock read falls through to a null reading", () => {
-      stubReads({}) // no cgroup/proc sources
+      stubReads({})
       jest.spyOn(Usage, "procStatPaths").mockReturnValue([])
       jest.spyOn(process, "cpuUsage").mockImplementation(() => {
         throw new Error("clock unavailable")
@@ -102,7 +99,7 @@ describe("CPU.Usage", () => {
       jest
         .spyOn(Usage, "procStatPaths")
         .mockReturnValue(["/proc/1/stat", "/proc/2/stat"])
-      stubReads({}) // files vanished between glob and read => nothing counted
+      stubReads({})
       expect(Usage.procNamespaceSeconds()).toBeNull()
     })
   })
@@ -198,8 +195,6 @@ describe("CPU.Usage", () => {
     })
 
     test("ignores a non-positive v2 quota", () => {
-      // A 0/negative quota must fall through to the next source, not normalize
-      // CPU against it.
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "0 100000" })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
@@ -239,7 +234,7 @@ describe("CPU.Usage", () => {
 
     test("cedar dedicated fingerprint falls through to the processor count", () => {
       process.env.DYNO = "web.1"
-      stubReads({ [Usage.CEDAR_MEMORY_LIMIT]: "2684354560" }) // performance-m
+      stubReads({ [Usage.CEDAR_MEMORY_LIMIT]: "2684354560" })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
@@ -251,7 +246,7 @@ describe("CPU.Usage", () => {
     test("cgroup quota wins over entitlement", () => {
       process.env.DYNO = "web-5fb9c979-lft2l"
       stubReads({
-        [Usage.CGROUP_V2_QUOTA]: "90000 100000", // Fir 1c plan
+        [Usage.CGROUP_V2_QUOTA]: "90000 100000",
         [Usage.CEDAR_MEMORY_LIMIT]: "536870912",
       })
       expect(Usage.availableCpus()).toBeCloseTo(0.9, 4)
@@ -259,27 +254,27 @@ describe("CPU.Usage", () => {
 
     test("reads the render entitlement from RENDER_CPU_COUNT", () => {
       process.env.RENDER = "true"
-      process.env.RENDER_CPU_COUNT = "0.5" // Render exposes a fractional core count
+      process.env.RENDER_CPU_COUNT = "0.5"
       stubReads({})
       expect(Usage.availableCpus()).toBeCloseTo(0.5, 4)
     })
 
     test("render entitlement ignored off render", () => {
-      process.env.RENDER_CPU_COUNT = "8" // set, but RENDER unset
+      process.env.RENDER_CPU_COUNT = "8"
       stubReads({})
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
     test("render without a cpu count falls through to the processor count", () => {
-      process.env.RENDER = "true" // RENDER set, but no RENDER_CPU_COUNT
+      process.env.RENDER = "true"
       stubReads({})
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
     test("cgroup quota wins over the render entitlement", () => {
       process.env.RENDER = "true"
-      process.env.RENDER_CPU_COUNT = "8" // would be wrong if it won
-      stubReads({ [Usage.CGROUP_V2_QUOTA]: "50000 100000" }) // 0.5 core
+      process.env.RENDER_CPU_COUNT = "8"
+      stubReads({ [Usage.CGROUP_V2_QUOTA]: "50000 100000" })
       expect(Usage.availableCpus()).toBeCloseTo(0.5, 4)
     })
   })

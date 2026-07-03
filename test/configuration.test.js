@@ -207,7 +207,6 @@ describe("Configuration", () => {
     expect(() => config.service("web", { tracking: "http" }, () => 1)).toThrow(
       Configuration.UnexpectedSamplerError,
     )
-    // The failed declaration must leave no trace, so a corrected retry succeeds.
     expect(() => config.service("web", { tracking: "http" })).not.toThrow()
     expect(config.web.name).toBe("web")
   })
@@ -329,7 +328,7 @@ describe("Configuration", () => {
     config.logger.warn = jest.fn()
     config.dyno("web")
     config.dyno("clock", { tracking: "cpu" })
-    config.dispatcher // both gates run, but resolution (and the warning) is memoized
+    config.dispatcher
     expect(config.logger.warn).toHaveBeenCalledTimes(1)
   })
 

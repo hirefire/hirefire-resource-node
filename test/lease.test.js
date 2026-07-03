@@ -109,9 +109,8 @@ describe("Lease", () => {
 
     await expect(lease.requestIfDue()).rejects.toBeInstanceOf(RequestError)
     expect(lease.granted()).toBe(false)
-    expect(lease._expiresAt).toBe(1015000) // advanced before the request: a full TTL wait
+    expect(lease._expiresAt).toBe(1015000)
 
-    // Not due again until the TTL elapses, so no second request is attempted.
     await lease.requestIfDue()
     expect(nock.isDone()).toBe(true)
   })
@@ -211,7 +210,7 @@ describe("Lease", () => {
     await lease.sampleIfDue(() => {
       sampled = true
     })
-    expect(sampled).toBe(false) // the raising sample consumed this window
+    expect(sampled).toBe(false)
   })
 
   test("sampleIfDue advances nextSampleAt", async () => {
@@ -228,20 +227,19 @@ describe("Lease", () => {
     grant({ "HireFire-Lease-Granted": "true" })
     await lease.requestIfDue()
     expect(lease.granted()).toBe(true)
-    expect(lease.sampleFrequency).toBe(15) // default retained
+    expect(lease.sampleFrequency).toBe(15)
   })
 
   test("clamps a garbled sample frequency to the floor", async () => {
     grant({
       "HireFire-Lease-Granted": "true",
-      "HireFire-Sample-Frequency": "0", // a bad header must not sample every tick
+      "HireFire-Sample-Frequency": "0",
     })
     await lease.requestIfDue()
     expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[0])
   })
 
   test("clamps a garbled ttl to the floor", async () => {
-    // A zero (or non-numeric) TTL must not re-request the lease every tick.
     grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "0" })
     await lease.requestIfDue()
     expect(lease._ttl).toBe(Lease.TTL_BOUNDS[0])
@@ -250,7 +248,7 @@ describe("Lease", () => {
   test("clamps a sub-floor ttl to the floor", async () => {
     grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "1" })
     await lease.requestIfDue()
-    expect(lease._ttl).toBe(Lease.TTL_BOUNDS[0]) // a 1s TTL would churn renewals
+    expect(lease._ttl).toBe(Lease.TTL_BOUNDS[0])
   })
 
   test("clamps an over-large sample frequency to the ceiling", async () => {
@@ -263,7 +261,6 @@ describe("Lease", () => {
   })
 
   test("clamps an over-large ttl to the ceiling", async () => {
-    // Without a cap a huge TTL would stop renewals, so the lease never fails over.
     grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "999999" })
     await lease.requestIfDue()
     expect(lease._ttl).toBe(Lease.TTL_BOUNDS[1])
@@ -272,7 +269,7 @@ describe("Lease", () => {
   test("closes the underlying client", async () => {
     grant()
     await lease.requestIfDue()
-    expect(lease._client._agent).not.toBeNull() // opened by the poll
+    expect(lease._client._agent).not.toBeNull()
 
     lease.close()
     expect(lease._client._agent).toBeNull()
@@ -287,14 +284,11 @@ describe("Lease", () => {
   test("expiry paces off the monotonic clock, not the wall clock", async () => {
     grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "30" })
 
-    // beforeEach froze both clocks at second 1000; move only the monotonic clock away.
     jest.spyOn(performance, "now").mockReturnValue(5000000)
     const monotonicLease = new Lease(CONFIG)
 
     await monotonicLease.requestIfDue()
 
-    // _expiresAt derives from the monotonic clock (5000000 + 30000), never the wall clock
-    // (1000000 + 30000).
     expect(monotonicLease._expiresAt).toBe(5030000)
   })
 
@@ -306,6 +300,6 @@ describe("Lease", () => {
 
     await lease.requestIfDue()
     expect(lease.granted()).toBe(false)
-    expect(lease.sampleFrequency).toBe(15) // a 401 returns before reading headers
+    expect(lease.sampleFrequency).toBe(15)
   })
 })
