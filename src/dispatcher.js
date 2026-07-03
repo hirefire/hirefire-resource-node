@@ -30,13 +30,11 @@ class Dispatcher {
     this._running = false
     this._stopping = false
     this._lastWebSecond = null
-    this._webWatermark = undefined
     this._interval = 1
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
     this._nextDispatchAt = null
     this._sleepers = new Set()
     this._loopPromise = null
-    // Mirrors Ruby's thread.join(5).
     this._stopJoinTimeoutMs = 5000
   }
 
@@ -45,8 +43,6 @@ class Dispatcher {
 
     this._running = true
 
-    // Two independent loops so a slow or hung worker sampler can never stall
-    // web/CPU delivery. The worker loop only exists when workers are configured.
     const loops = [this._loop(() => this._dispatchTick())]
     if (this._workers.any()) {
       loops.push(this._loop(() => this._workerTick()))
@@ -70,7 +66,6 @@ class Dispatcher {
 
     await this._guard(() => this._dispatch())
 
-    // Close after the final dispatch, which reopens the client.
     this._client.close()
     this._lease.close()
 
@@ -85,8 +80,6 @@ class Dispatcher {
 
   _loop(tick) {
     return this._runLoop(tick).catch((error) => {
-      // Leave _running set (a dead Ruby thread does the same) so the other loop keeps going
-      // and stop() still cleans up.
       this._logger().error(
         `[HireFire] Dispatcher loop stopped unexpectedly: ${
           error?.message ?? error
@@ -95,8 +88,6 @@ class Dispatcher {
     })
   }
 
-  // Bounded wait: a sampler parked forever must not block stop()'s final dispatch and
-  // cleanup. Ruby's thread.join(5) proceeds the same way on timeout.
   _joinLoops(loopPromise) {
     if (!loopPromise) return Promise.resolve()
     return Promise.race([
@@ -151,9 +142,6 @@ class Dispatcher {
   }
 
   async _dispatchIfDue() {
-    // Pace off the monotonic clock (performance.now, ms) so a wall-clock step (e.g. NTP)
-    // cannot skew the cadence. Sample timestamps stay wall-clock (_backfillWebSeconds),
-    // which the server keys on.
     if (
       this._nextDispatchAt !== null &&
       performance.now() < this._nextDispatchAt
@@ -177,12 +165,12 @@ class Dispatcher {
 
     try {
       data = this._buffer().flush()
-      const payload = this._buildPayload(data)
-      if (payload.length === 0) return
+      const { entries, watermark } = this._buildPayload(data)
+      if (entries.length === 0) return
 
-      const body = JSON.stringify(payload)
+      const body = JSON.stringify(entries)
       if (Buffer.byteLength(body) > Dispatcher.PAYLOAD_SIZE_LIMIT) {
-        return this._dropOversizedPayload(body)
+        return this._dropOversizedPayload(body, watermark)
       }
 
       if (process.env.HIREFIRE_VERBOSE) {
@@ -191,8 +179,7 @@ class Dispatcher {
 
       const response = await this._client.submitSamples(body)
       this._applyDispatchFrequency(response)
-      if (this._webWatermark !== undefined)
-        this._lastWebSecond = this._webWatermark
+      if (watermark !== undefined) this._lastWebSecond = watermark
     } catch (error) {
       if (data && data.web && Object.keys(data.web).length > 0) {
         this._buffer().repopulateWeb(data.web)
@@ -212,9 +199,8 @@ class Dispatcher {
     this._dispatchFrequency = Math.min(value, Dispatcher.MAX_DISPATCH_FREQUENCY)
   }
 
-  _dropOversizedPayload(body) {
-    if (this._webWatermark !== undefined)
-      this._lastWebSecond = this._webWatermark
+  _dropOversizedPayload(body, watermark) {
+    if (watermark !== undefined) this._lastWebSecond = watermark
     this._logger().error(
       `[HireFire] Dropped metrics payload: ${Buffer.byteLength(
         body,
@@ -225,10 +211,11 @@ class Dispatcher {
 
   _buildPayload(data) {
     const entries = []
+    let watermark
 
     if (this._web && this._webLiveness) {
       const samples = this._backfillWebSeconds(data.web)
-      this._webWatermark = Math.max(...Object.keys(samples).map(Number))
+      watermark = Math.max(...Object.keys(samples).map(Number))
       entries.push({ name: this._web.name, samples })
     } else if (this._web && Object.keys(data.web).length > 0) {
       entries.push({ name: this._web.name, samples: data.web })
@@ -240,7 +227,7 @@ class Dispatcher {
       entries.push({ name, samples })
     }
 
-    return entries
+    return { entries, watermark }
   }
 
   _backfillWebSeconds(samples) {

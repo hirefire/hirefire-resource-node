@@ -2,10 +2,6 @@ const http = require("http")
 const https = require("https")
 const VERSION = require("./version")
 
-// A reused keep-alive socket the peer dropped while idle fails with one of these codes on
-// the next write; a desynced reused socket instead reads back a garbled response and yields
-// an HPE_* parser error (the Node analog of Ruby's Net::HTTPBadResponse / Python's
-// BadStatusLine). Retrying on a fresh socket is safe: both endpoints are idempotent.
 const STALE_CONNECTION_CODES = new Set(["ECONNRESET", "ECONNABORTED", "EPIPE"])
 
 function isStaleConnectionCode(code) {
@@ -127,9 +123,6 @@ class Client {
     })
   }
 
-  // A dedicated keep-alive agent per client, not Node's shared global agent, so reuse is
-  // guaranteed and isolated from app traffic. Idle sockets are never evicted on a timer, so
-  // a peer-dropped socket is recovered by the retry in _execute, not a client-side timeout.
   _agentFor(transport) {
     if (!this._agent) {
       this._agent = new transport.Agent({
@@ -148,7 +141,6 @@ class Client {
     const requestError = new RequestError(
       `Network error (${error.code || error.name}: ${error.message}).`,
     )
-    // Retry only a reused socket: a fresh connection failing is a real fault, not staleness.
     requestError.retriable =
       Boolean(reusedSocket) && isStaleConnectionCode(error.code)
     return requestError

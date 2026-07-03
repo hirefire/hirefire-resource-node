@@ -21,7 +21,6 @@ function processRequestQueueTime(requestStart) {
       console.log(`[hirefire:router] queue=${requestQueueTime}ms`)
     }
   } catch (error) {
-    // Never raise the library's own bookkeeping into the host app's request.
     safeLog(
       HireFire.configuration.logger,
       "error",

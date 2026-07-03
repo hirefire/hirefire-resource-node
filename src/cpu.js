@@ -14,9 +14,6 @@ class CPU {
   }
 
   sample() {
-    // Measure the interval on the monotonic clock (performance.now, ms to s) so a
-    // wall-clock step (e.g. NTP) cannot distort the utilization delta. The buffered
-    // sample's bucket timestamp stays wall-clock.
     const time = performance.now() / 1000.0
     const { seconds: usage, source } = Usage.reading()
 
@@ -33,7 +30,6 @@ class CPU {
     const elapsedDelta = time - previousTime
     const usageDelta = usage - previousUsage
 
-    // elapsedDelta <= 0 is a backstop: the monotonic clock never steps back.
     if (elapsedDelta <= 0 || usageDelta < 0) return null
 
     const available = Usage.availableCpus()

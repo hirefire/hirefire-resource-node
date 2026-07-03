@@ -2,8 +2,6 @@ const crypto = require("crypto")
 const { Client, RequestError } = require("./client")
 
 class Lease {
-  // Bound server-supplied cadence: a zero or garbled header must not collapse it to a
-  // per-tick storm. The floors differ: a 1s sample is tolerable, a sub-5s TTL churns renewals.
   static SAMPLE_FREQUENCY_BOUNDS = [1, 3600]
   static TTL_BOUNDS = [5, 3600]
 
@@ -13,8 +11,6 @@ class Lease {
     this._client = new Client(configuration)
     this._ttl = 15
     this._granted = false
-    // Pace off the monotonic clock (performance.now, ms) so a wall-clock step (e.g. NTP)
-    // cannot skew renewal.
     this._expiresAt = performance.now()
     this._nextSampleAt = performance.now()
     this._sampleFrequency = 15
@@ -88,7 +84,6 @@ class Lease {
   }
 }
 
-// Mirrors Ruby String#to_i: a leading integer, or 0 when there is none.
 function toInteger(value) {
   const parsed = parseInt(value, 10)
   return Number.isFinite(parsed) ? parsed : 0
