@@ -239,6 +239,15 @@ describe("Lease", () => {
     expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[0])
   })
 
+  test("clamps a non-numeric sample frequency to the floor", async () => {
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "abc",
+    })
+    await lease.requestIfDue()
+    expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[0])
+  })
+
   test("clamps a garbled ttl to the floor", async () => {
     grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "0" })
     await lease.requestIfDue()

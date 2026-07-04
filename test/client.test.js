@@ -159,6 +159,17 @@ describe("Client", () => {
 
     expect(scope.isDone()).toBe(true)
   })
+
+  test("tolerates a path prefix in the data url", async () => {
+    process.env.HIREFIRE_DATA_URL = "https://proxy.example.com/hf"
+    const scope = nock("https://proxy.example.com")
+      .post("/hf/metrics/ingest")
+      .reply(200)
+
+    await client.submitSamples(BODY)
+
+    expect(scope.isDone()).toBe(true)
+  })
 })
 
 describe("Client (persistent connection)", () => {
@@ -225,6 +236,23 @@ describe("Client (persistent connection)", () => {
       RequestError,
     )
     expect(requests).toBe(1)
+    client.close()
+  })
+
+  test("a response stream error is mapped to a request error", async () => {
+    await listen((req, res) => {
+      req.resume().on("end", () => {
+        res.writeHead(200, { "Content-Length": "100" })
+        res.write("partial")
+        res.socket.end()
+      })
+    })
+    const client = new Client({ token: "t" })
+
+    const promise = client.submitSamples("[]")
+    await expect(promise).rejects.toBeInstanceOf(RequestError)
+    await expect(promise).rejects.toThrow(/Network error/)
+
     client.close()
   })
 

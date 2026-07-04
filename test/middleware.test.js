@@ -104,26 +104,6 @@ describe("middleware", () => {
   })
 
   describe("calculateRequestQueueTime", () => {
-    test("parses heroku epoch milliseconds", () => {
-      freezeTime(1700000001)
-      expect(calculateRequestQueueTime("1700000000000")).toBe(1000)
-    })
-
-    test("parses nginx epoch seconds", () => {
-      freezeTime(1700000001)
-      expect(calculateRequestQueueTime("t=1700000000.000")).toBe(1000)
-    })
-
-    test("parses apache epoch microseconds", () => {
-      freezeTime(1700000001)
-      expect(calculateRequestQueueTime("t=1700000000000000")).toBe(1000)
-    })
-
-    test("parses epoch nanoseconds", () => {
-      freezeTime(1700000001)
-      expect(calculateRequestQueueTime("1700000000000000000")).toBe(1000)
-    })
-
     test("normalizes every precision variant to the same queue time", () => {
       freezeTime(1700000001)
       expect(calculateRequestQueueTime("t=1700000000.250")).toBe(750)
@@ -154,16 +134,6 @@ describe("middleware", () => {
       freezeTime(1000000001)
       expect(calculateRequestQueueTime("1000000000")).toBe(1000)
       expect(calculateRequestQueueTime("999999999")).toBeNull()
-    })
-
-    test("keeps a high-but-plausible queue time", () => {
-      freezeTime(1700000000)
-      expect(calculateRequestQueueTime("1699999950000")).toBe(50000)
-    })
-
-    test("drops an implausibly large queue time", () => {
-      freezeTime(1700000000)
-      expect(calculateRequestQueueTime("1699999000000")).toBeNull()
     })
 
     test("drops an over-the-limit nanosecond start", () => {

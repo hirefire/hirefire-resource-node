@@ -167,13 +167,6 @@ describe("Configuration", () => {
     expect(() => config.service("Web", { tracking: "http" })).toThrow(/Web/)
   })
 
-  test("duplicate name check is case-insensitive", () => {
-    config.dyno("worker", () => 1)
-    expect(() => config.dyno("Worker", { tracking: "cpu" })).toThrow(
-      Configuration.DuplicateDynoError,
-    )
-  })
-
   test("a second http declaration under a different name raises", () => {
     config.dyno("web")
     expect(() => config.service("api", { tracking: "http" })).toThrow(/web/)

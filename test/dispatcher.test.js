@@ -248,6 +248,21 @@ describe("Dispatcher", () => {
     expect(loggedError("Dropped metrics payload")).toBe(true)
   })
 
+  test("an oversized payload without web data drops without touching the watermark", async () => {
+    stubLease(true)
+    const bodies = captureIngestBodies()
+
+    config().dyno("w".repeat(70000), () => 1)
+    const dispatcher = config().dispatcher
+
+    await dispatcher._workerTick()
+    await dispatcher._dispatchTick()
+
+    expect(bodies).toEqual([])
+    expect(loggedError("Dropped metrics payload")).toBe(true)
+    expect(dispatcher._lastWebSecond).toBeNull()
+  })
+
   test("oversized drop advances the watermark past the hole", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()

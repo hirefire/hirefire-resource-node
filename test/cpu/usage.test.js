@@ -102,6 +102,19 @@ describe("CPU.Usage", () => {
       stubReads({})
       expect(Usage.procNamespaceSeconds()).toBeNull()
     })
+
+    test("a garbled proc stat entry is skipped and the rest are counted", () => {
+      stubReads({
+        "/proc/1/stat":
+          "1 (ruby) S 0 1 1 0 -1 0 0 0 0 0 500 250 0 0 20 0 1 0 9 0 0",
+        "/proc/2/stat": "garbled entry without fields",
+      })
+      jest
+        .spyOn(Usage, "procStatPaths")
+        .mockReturnValue(["/proc/1/stat", "/proc/2/stat"])
+
+      expect(Usage.procNamespaceSeconds()).toBeCloseTo(7.5, 4)
+    })
   })
 
   describe("procStatPaths", () => {
@@ -235,6 +248,12 @@ describe("CPU.Usage", () => {
     test("cedar dedicated fingerprint falls through to the processor count", () => {
       process.env.DYNO = "web.1"
       stubReads({ [Usage.CEDAR_MEMORY_LIMIT]: "2684354560" })
+      expect(Usage.availableCpus()).toBe(Usage.processorCount())
+    })
+
+    test("heroku entitlement without a readable memory limit falls through", () => {
+      process.env.DYNO = "web.1"
+      stubReads({ [Usage.CEDAR_MEMORY_LIMIT]: null })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
