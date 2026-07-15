@@ -83,8 +83,8 @@ const DYNO_COLLECTORS = { cpu: "cpu" }
 class Configuration {
   constructor() {
     /**
-     * Logger used for HireFire diagnostic messages. Defaults to `console`. Set to `null` to
-     * silence diagnostic logs.
+     * Logger used for HireFire diagnostic messages. Defaults to `console`. Set to `null`
+     * (or a logger missing the log methods) to silence diagnostics.
      * @type {Logger | null}
      */
     this.logger = console
@@ -106,8 +106,7 @@ class Configuration {
      */
     this.cpu = []
     /**
-     * When true, the HTTP middleware prints `[hirefire:router] queue=…ms` to stdout for each
-     * request queue-time sample.
+     * When true, the HTTP middleware prints `[hirefire:router] queue=…ms` for each sample.
      * @type {boolean}
      */
     this.logQueueMetrics = false
@@ -160,8 +159,8 @@ class Configuration {
    * accepts.
    *
    * Resolution: `{ tracking: "cpu" }` tracks CPU, a sampler function tracks job metrics, and the
-   * name "web" tracks http on its own. For an http process under a non-"web" name, use
-   * `service(name, { tracking: "http" })`.
+   * name "web" (case-insensitive) tracks http on its own. For an http process under a non-"web"
+   * name, use `service(name, { tracking: "http" })`.
    *
    * @overload
    * @param {string} name - The process name. The "web" name (case-insensitive) implies http.
@@ -307,7 +306,7 @@ class Configuration {
   }
 
   /**
-   * Periodic reporter that flushes buffered metrics to the HireFire API.
+   * Periodic reporter that samples workers/CPU and flushes buffered metrics to the API.
    *
    * @returns {import("./dispatcher")}
    */

@@ -16,13 +16,18 @@ class Workers {
   }
 
   /**
+   * Adds a worker collector to the collection.
+   *
    * @param {import("./worker")} worker
+   * @returns {void}
    */
   add(worker) {
     this._workers.push(worker)
   }
 
   /**
+   * Whether the collection has at least one worker.
+   *
    * @returns {boolean}
    */
   any() {
@@ -30,6 +35,8 @@ class Workers {
   }
 
   /**
+   * Number of worker collectors in the collection.
+   *
    * @returns {number}
    */
   count() {

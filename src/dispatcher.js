@@ -64,6 +64,10 @@ class Dispatcher {
   /**
    * Stops the dispatcher loops and closes transport resources.
    *
+   * Joins local loop tasks for up to 5 seconds each, then performs a best-effort final flush
+   * before closing the HTTP client and lease connection. Loop generations prevent a hung loop
+   * that outlives the join from resuming work after a later {@link Dispatcher#start}.
+   *
    * @returns {Promise<boolean>} Resolves to `true` once the dispatcher has stopped. Resolves to
    *   `false` when the dispatcher was not running.
    */

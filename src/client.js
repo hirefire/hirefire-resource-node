@@ -168,7 +168,7 @@ class Client {
     if (this._token()) return
 
     throw new RequestError(
-      "The HIREFIRE_TOKEN environment variable is not set. " +
+      "The HIREFIRE_TOKEN environment variable is not set.\n" +
         "Set it to your HireFire token to enable metric dispatch.",
     )
   }
