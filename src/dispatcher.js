@@ -4,7 +4,7 @@ const Workers = require("./workers")
 const safeLog = require("./log")
 
 /**
- * Periodic reporter that flushes buffered metrics to the HireFire API.
+ * Periodic reporter that samples workers/CPU and flushes buffered metrics to the API.
  */
 class Dispatcher {
   static WEB_BACKFILL_LIMIT = 60

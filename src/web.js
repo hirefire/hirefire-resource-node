@@ -15,6 +15,12 @@ class Web {
     return this._name
   }
 
+  /**
+   * Records a request queue-time sample (milliseconds) into the buffer.
+   *
+   * @param {number} requestQueueTime - Queue time in milliseconds.
+   * @returns {void}
+   */
   sample(requestQueueTime) {
     this._configuration.buffer.sampleWeb(requestQueueTime)
   }

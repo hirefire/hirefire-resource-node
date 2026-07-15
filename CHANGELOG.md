@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- JSDoc on `RequestError`, the collector `sample` methods (`Web`, `Worker`, `Workers`, `CPU`), and a fuller `Dispatcher` class summary, matching the Ruby YARD coverage those symbols already had.
 - TypeScript type declarations (`.d.ts`) ship with the package, so editors and TypeScript projects get autocomplete and type-checking for the public API without a separate `@types` install. The library itself stays plain JavaScript: the declarations are generated from its JSDoc. Overloaded APIs (`service`, `dyno`, `jobQueueSize`) carry their full descriptions, throws, and examples in the shipped declarations. The public `Configuration` surface is typed accurately (`web` nullable, `cpu` as `CPU[]`, documented fields and getters, typed error constructors), and `config.logger` is a duck-typed `Logger | null` (optional `error` / `warn` / `info` methods) rather than the full Node `Console` type, so custom loggers type-check under strict TypeScript.
 - `hirefire-resource/configuration` package subpath exports the `Configuration` class and its error classes (`MissingSamplerError`, `UnexpectedSamplerError`, `UnknownCollectorError`, `DuplicateDynoError`) for typed catch clauses, without changing the default singleton export.
 - `hirefire-resource/macro/bullmq` exports `JobQueueLatencyUnsupportedError`, so TypeScript consumers can import it alongside `jobQueueLatency` for typed `instanceof` checks.

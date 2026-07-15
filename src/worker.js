@@ -15,6 +15,11 @@ class Worker {
     return this._name
   }
 
+  /**
+   * Returns the current job metric value from the configured sampler.
+   *
+   * @returns {Promise<number>}
+   */
   async sample() {
     return this._sampler()
   }

@@ -53,6 +53,11 @@ class Workers {
   }
 
   /**
+   * Samples every worker and buffers valid metric values.
+   *
+   * A value is valid when it is a non-boolean, non-negative, finite number. Invalid or raised
+   * sampler results are logged and skipped, not re-raised.
+   *
    * @returns {Promise<void>}
    */
   async sample() {

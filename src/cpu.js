@@ -20,6 +20,15 @@ class CPU {
     return this._name
   }
 
+  /**
+   * Samples CPU utilization and buffers a percentage when a delta is available.
+   *
+   * The first sample only seeds a baseline. Later samples no-op when the usage source changes,
+   * elapsed time is non-positive, usage went backwards, or available CPUs cannot be determined.
+   * A successful sample is clamped to 0-100 and rounded to two decimal places.
+   *
+   * @returns {void}
+   */
   sample() {
     const time = performance.now() / 1000.0
     const { seconds: usage, source } = Usage.reading()
