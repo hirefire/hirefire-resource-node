@@ -1,5 +1,5 @@
 const IORedis = require("ioredis")
-const { unpack } = require("../utility")
+const { unpack, normalizeQueues } = require("../utility")
 const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
@@ -65,6 +65,7 @@ async function jobQueueLatency(...args) {
  */
 async function jobQueueSize(...args) {
   let { queues, options } = unpack(args)
+  queues = normalizeQueues(queues)
 
   const redis = new IORedis(
     options.connection ||
