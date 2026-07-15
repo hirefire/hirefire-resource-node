@@ -347,8 +347,6 @@ class Configuration {
         this.web = new Web(name, this)
         break
       case "job":
-        if (!sampler)
-          throw new MissingSamplerError(`Missing sampler for "${name}".`)
         this.workers.add(new Worker(name, sampler))
         break
       case "cpu":
