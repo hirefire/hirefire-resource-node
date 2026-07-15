@@ -67,4 +67,13 @@ jobs:
           node-version: 26
           registry-url: "https://registry.npmjs.org"
       - run: npm ci
+      - name: Verify tag matches package version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$expected" ]; then
+            echo "Tag $TAG does not match package version $expected"
+            exit 1
+          fi
       - run: npm publish --access public
