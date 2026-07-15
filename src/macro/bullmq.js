@@ -85,7 +85,7 @@ async function jobQueueSize(...args) {
 
     let totalCount = 0
     const pipeline = redis.pipeline()
-    const now = Date.now() * 0x1000 // Match BullMQ's delayed job timestamp score encoding.
+    const now = Date.now() * 0x1000
 
     for (const queue of queues) {
       pipeline.lindex(`bull:${queue}:wait`, -1)
