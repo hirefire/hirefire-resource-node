@@ -9,7 +9,7 @@ Usage: bin/run-cell <package> <major> <testfile>
 
 Runs one matrix cell: installs <package>@<major> (--no-save) and runs <testfile>.
 "core" runs the full suite minus the version-pinned integration files.
-Cells are defined in test/matrix.json; run them all with bin/matrix.
+Cells are defined in test/matrix.json. Run them all with bin/matrix.
 
 Example: bin/run-cell express 5 test/middleware/express.test.js
 EOF
@@ -20,7 +20,7 @@ package="${1:-}"
 [ -n "$package" ] || usage
 
 if [ "$package" = "core" ]; then
-  # Ignore every integration test claimed by the matrix; core runs the rest.
+  # Ignore every integration test claimed by the matrix. Core runs the rest.
   ignore="$(jq -r '[.integrations[] | select(.package != "core") | .test] | join("|")' test/matrix.json)"
   exec npx --no-install jest --testPathIgnorePatterns "$ignore"
 fi
