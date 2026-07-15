@@ -76,6 +76,19 @@ describe("Configuration", () => {
     )
   })
 
+  test("dyno treats tracking null like not given", () => {
+    config.dyno("web", { tracking: null })
+    expect(config.web).toBeInstanceOf(Web)
+    expect(config.web.name).toBe("web")
+  })
+
+  test("dyno with tracking null and a sampler configures a worker", async () => {
+    config.dyno("worker", { tracking: null }, () => 1.23)
+    const workers = [...config.workers]
+    expect(workers.length).toBe(1)
+    expect(await workers[0].sample()).toBe(1.23)
+  })
+
   test("dyno rejects http-family acronyms", () => {
     expect(() => config.dyno("web", { tracking: "rqt" })).toThrow(
       Configuration.UnknownCollectorError,
@@ -140,6 +153,19 @@ describe("Configuration", () => {
     expect(() => config.service("worker")).toThrow(
       Configuration.MissingSamplerError,
     )
+  })
+
+  test("service treats tracking null like not given", () => {
+    expect(() => config.service("worker", { tracking: null })).toThrow(
+      Configuration.MissingSamplerError,
+    )
+  })
+
+  test("service with tracking null and a sampler configures a worker", async () => {
+    config.service("worker", { tracking: null }, () => 1.23)
+    const workers = [...config.workers]
+    expect(workers.length).toBe(1)
+    expect(await workers[0].sample()).toBe(1.23)
   })
 
   test("service rejects an unknown keyword", () => {

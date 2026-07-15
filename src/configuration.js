@@ -201,7 +201,7 @@ class Configuration {
     const { tracking, sampler } = parseArgs(args)
 
     let collector
-    if (tracking !== undefined) {
+    if (tracking != null) {
       collector = DYNO_COLLECTORS[String(tracking)]
       if (!collector) {
         throw new UnknownCollectorError(
@@ -274,7 +274,7 @@ class Configuration {
     const { tracking, sampler } = parseArgs(args)
 
     let collector
-    if (tracking !== undefined) {
+    if (tracking != null) {
       collector = SERVICE_COLLECTORS[String(tracking)]
       if (!collector) {
         throw new UnknownCollectorError(
