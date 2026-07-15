@@ -137,9 +137,9 @@ class Configuration {
   /**
    * The HireFire API token. Returns the value assigned in code when it is not nullish, else the
    * `HIREFIRE_TOKEN` environment variable, else `null`. Assigning `null` (or `undefined`) clears
-   * the in-code value so the environment variable is consulted again; it does not force the token
-   * off when `HIREFIRE_TOKEN` is set. When a token is present after {@link HireFire#configure}, the
-   * dispatcher starts and metrics are reported.
+   * the in-code value so the environment variable is consulted again. It does not force the token
+   * off when `HIREFIRE_TOKEN` is set. A token present when {@link HireFire#configure} runs starts
+   * the dispatcher and enables reporting.
    *
    * @type {string | null}
    */

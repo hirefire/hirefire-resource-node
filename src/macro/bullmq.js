@@ -11,7 +11,7 @@ const {
  *
  * @async
  * @param {...any} args - Ignored.
- * @returns {Promise<never>} Always rejects with {@link JobQueueLatencyUnsupportedError}; never fulfills.
+ * @returns {Promise<never>} Always rejects with {@link JobQueueLatencyUnsupportedError} and never fulfills.
  * @throws {JobQueueLatencyUnsupportedError} Observed when the rejection is awaited or handled with
  *   `.catch` (not thrown synchronously).
  */
