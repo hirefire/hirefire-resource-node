@@ -45,7 +45,7 @@ Learn more at the [home page][HireFire].
 
 ## Development
 
-Requires [Docker](https://www.docker.com/). Redis for the BullMQ macro tests runs in a container. `bin/services up` starts it on a Docker-assigned free host port recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops it and removes `.env`.
+Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Redis for the BullMQ macro tests runs in a container, and mise installs the pinned Node versions from `.tool-versions`. `bin/services up` starts it on a Docker-assigned free host port recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops it and removes `.env`. Because the ports are assigned fresh at startup, multiple worktrees, and any system-wide Redis, run side by side without conflicts.
 
 - Run `bin/setup` to prepare the environment.
 - Run `bin/services up` / `bin/services down` to start / stop the Redis container.

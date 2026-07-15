@@ -32,6 +32,7 @@ class Dispatcher {
     this._lease = new Lease(configuration, { enabled: workers.any() })
     this._running = false
     this._stopping = false
+    this._generation = 0
     this._lastWebSecond = null
     this._interval = 1
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
@@ -49,11 +50,13 @@ class Dispatcher {
   start() {
     if (this._running || this._stopping) return false
 
+    this._generation += 1
+    const generation = this._generation
     this._running = true
 
-    const loops = [this._loop(() => this._dispatchTick())]
+    const loops = [this._loop(generation, () => this._dispatchTick())]
     if (this._workers.any()) {
-      loops.push(this._loop(() => this._workerTick()))
+      loops.push(this._loop(generation, () => this._workerTick()))
     }
     this._loopPromise = Promise.all(loops)
 
@@ -101,8 +104,12 @@ class Dispatcher {
     return this._running
   }
 
-  _loop(tick) {
-    return this._runLoop(tick).catch((error) => {
+  _loopActive(generation) {
+    return this._running && this._generation === generation
+  }
+
+  _loop(generation, tick) {
+    return this._runLoop(generation, tick).catch((error) => {
       this._logger().error(
         `[HireFire] Dispatcher loop stopped unexpectedly: ${
           error?.message ?? error
@@ -122,10 +129,10 @@ class Dispatcher {
     ])
   }
 
-  async _runLoop(tick) {
-    while (this._running) {
+  async _runLoop(generation, tick) {
+    while (this._loopActive(generation)) {
       await tick()
-      if (!this._running) break
+      if (!this._loopActive(generation)) break
       await this._sleep(this._interval * 1000)
     }
   }

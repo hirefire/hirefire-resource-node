@@ -613,6 +613,23 @@ describe("Dispatcher", () => {
     expect(leaseClose).toHaveBeenCalled()
   })
 
+  test("stale loop generation stops after restart", () => {
+    const dispatcher = configureWebOnly()
+    const generation = 1
+    dispatcher._running = true
+    dispatcher._generation = generation
+
+    expect(dispatcher._loopActive(generation)).toBe(true)
+
+    dispatcher._running = false
+    expect(dispatcher._loopActive(generation)).toBe(false)
+
+    dispatcher._generation = 2
+    dispatcher._running = true
+    expect(dispatcher._loopActive(generation)).toBe(false)
+    expect(dispatcher._loopActive(2)).toBe(true)
+  })
+
   test("stop is bounded when a loop is parked on a hung sampler", async () => {
     stubLease(true)
     captureIngestBodies()

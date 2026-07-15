@@ -374,4 +374,17 @@ describe("Configuration", () => {
   test("token defaults to null without env", () => {
     expect(config.token).toBeNull()
   })
+
+  test("token empty string is not overridden by env", () => {
+    process.env.HIREFIRE_TOKEN = "from-env"
+    config.token = ""
+    expect(config.token).toBe("")
+  })
+
+  test("token null falls back to env", () => {
+    process.env.HIREFIRE_TOKEN = "from-env"
+    config.token = "custom-token"
+    config.token = null
+    expect(config.token).toBe("from-env")
+  })
 })

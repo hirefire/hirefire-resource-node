@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Dispatcher loop tasks bind to a start generation, so a hung loop that outlives `stop`'s join cannot resume work after a later `start` (matching the Ruby and Python clients).
 - BullMQ all-queues enumeration uses incremental `SCAN` instead of blocking `KEYS bull:*:…` patterns, so a large Redis keyspace does not stall the sample tick.
 - BullMQ `jobQueueSize` falls back to `disconnect()` when `quit()` rejects in the cleanup path, so a second Redis failure cannot mask the original sampling error or leave reconnect timers running.
 - BullMQ `jobQueueSize` trims and de-duplicates queue names before sampling, matching the adapter contract so repeated or whitespace-padded names no longer double-count.
