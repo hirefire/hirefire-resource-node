@@ -80,23 +80,7 @@ async function jobQueueSize(...args) {
 
   try {
     if (queues.length === 0) {
-      const pipeline = redis.pipeline()
-      pipeline.keys("bull:*:wait")
-      pipeline.keys("bull:*:active")
-      pipeline.keys("bull:*:delayed")
-
-      const results = await pipeline.exec()
-      const keys = results.flatMap(([err, result]) => result || [])
-      const uniqueQueueNames = new Set()
-
-      keys.forEach((key) => {
-        const match = key.match(/^bull:(.*):(wait|active|delayed)$/)
-        if (match) {
-          uniqueQueueNames.add(match[1])
-        }
-      })
-
-      queues = Array.from(uniqueQueueNames)
+      queues = await enumerateQueues(redis)
     }
 
     let totalCount = 0
@@ -133,6 +117,31 @@ async function jobQueueSize(...args) {
       redis.disconnect()
     }
   }
+}
+
+async function enumerateQueues(redis) {
+  const uniqueQueueNames = new Set()
+  let cursor = "0"
+
+  do {
+    const [nextCursor, keys] = await redis.scan(
+      cursor,
+      "MATCH",
+      "bull:*",
+      "COUNT",
+      100,
+    )
+    cursor = nextCursor
+
+    for (const key of keys) {
+      const match = key.match(/^bull:(.*):(wait|active|delayed)$/)
+      if (match) {
+        uniqueQueueNames.add(match[1])
+      }
+    }
+  } while (cursor !== "0")
+
+  return Array.from(uniqueQueueNames)
 }
 
 module.exports = {

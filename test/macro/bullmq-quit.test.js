@@ -18,7 +18,6 @@ describe("BullMQ connection lifecycle", () => {
     quit = jest.fn().mockResolvedValue("OK")
     exec = jest.fn()
     pipeline = {
-      keys: jest.fn().mockReturnThis(),
       lindex: jest.fn().mockReturnThis(),
       llen: jest.fn().mockReturnThis(),
       zcount: jest.fn().mockReturnThis(),
@@ -26,6 +25,7 @@ describe("BullMQ connection lifecycle", () => {
     }
     IORedis.mockImplementation(() => ({
       pipeline: () => pipeline,
+      scan: jest.fn().mockResolvedValue(["0", []]),
       quit,
     }))
   })
@@ -35,12 +35,50 @@ describe("BullMQ connection lifecycle", () => {
   })
 
   test("jobQueueSize quits Redis when all-queues enumeration fails", async () => {
-    exec.mockRejectedValueOnce(new Error("redis down"))
+    const scan = jest.fn().mockRejectedValueOnce(new Error("redis down"))
+    IORedis.mockImplementation(() => ({
+      pipeline: () => pipeline,
+      scan,
+      quit,
+    }))
 
     await expect(
       jobQueueSize({ connection: "redis://localhost:6379/0" }),
     ).rejects.toThrow("redis down")
     expect(quit).toHaveBeenCalledTimes(1)
+  })
+
+  test("jobQueueSize enumerates queues with SCAN not KEYS", async () => {
+    const scan = jest
+      .fn()
+      .mockResolvedValueOnce([
+        "7",
+        ["bull:default:wait", "bull:mailer:active", "bull:other:meta"],
+      ])
+      .mockResolvedValueOnce(["0", ["bull:default:delayed"]])
+    exec.mockResolvedValue([
+      [null, null],
+      [null, 0],
+      [null, 0],
+      [null, 0],
+      [null, null],
+      [null, 0],
+      [null, 0],
+      [null, 0],
+    ])
+    IORedis.mockImplementation(() => ({
+      pipeline: () => pipeline,
+      scan,
+      quit,
+    }))
+
+    await expect(
+      jobQueueSize({ connection: "redis://localhost:6379/0" }),
+    ).resolves.toBe(0)
+    expect(scan).toHaveBeenCalled()
+    expect(pipeline.lindex).toHaveBeenCalledWith("bull:default:wait", -1)
+    expect(pipeline.lindex).toHaveBeenCalledWith("bull:mailer:wait", -1)
+    expect(pipeline.lindex).toHaveBeenCalledTimes(2)
   })
 
   test("jobQueueSize quits Redis when the size pipeline fails", async () => {

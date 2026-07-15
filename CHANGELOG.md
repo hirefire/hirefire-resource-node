@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- BullMQ all-queues enumeration uses incremental `SCAN` instead of blocking `KEYS bull:*:…` patterns, so a large Redis keyspace does not stall the sample tick.
 - BullMQ `jobQueueSize` falls back to `disconnect()` when `quit()` rejects in the cleanup path, so a second Redis failure cannot mask the original sampling error or leave reconnect timers running.
 - BullMQ `jobQueueSize` trims and de-duplicates queue names before sampling, matching the adapter contract so repeated or whitespace-padded names no longer double-count.
 - `config.dyno` / `config.service` treat `{ tracking: null }` like an omitted `tracking` option (matching Ruby `nil` and Python `None`), so it no longer raises `UnknownCollectorError`.
