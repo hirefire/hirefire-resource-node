@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- BullMQ `jobQueueSize` falls back to `disconnect()` when `quit()` rejects in the cleanup path, so a second Redis failure cannot mask the original sampling error or leave reconnect timers running.
 - BullMQ `jobQueueSize` trims and de-duplicates queue names before sampling, matching the adapter contract so repeated or whitespace-padded names no longer double-count.
 - `config.dyno` / `config.service` treat `{ tracking: null }` like an omitted `tracking` option (matching Ruby `nil` and Python `None`), so it no longer raises `UnknownCollectorError`.
 - `jobQueueSize` always closes its IORedis connection when all-queues enumeration fails (for example Redis down or auth error). The enumeration pipeline previously ran outside the `try`/`finally` that called `quit()`, so a rejected `pipeline.exec()` leaked a connection with indefinite-retry timers on every sample tick.

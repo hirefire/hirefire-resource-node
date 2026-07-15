@@ -69,4 +69,21 @@ describe("BullMQ connection lifecycle", () => {
     expect(pipeline.lindex).toHaveBeenCalledTimes(1)
     expect(pipeline.zcount).toHaveBeenCalledTimes(1)
   })
+
+  test("jobQueueSize disconnects when quit rejects after a pipeline failure", async () => {
+    const disconnect = jest.fn()
+    quit.mockRejectedValueOnce(new Error("quit failed"))
+    exec.mockRejectedValueOnce(new Error("redis down"))
+    IORedis.mockImplementation(() => ({
+      pipeline: () => pipeline,
+      quit,
+      disconnect,
+    }))
+
+    await expect(
+      jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
+    ).rejects.toThrow("redis down")
+    expect(quit).toHaveBeenCalledTimes(1)
+    expect(disconnect).toHaveBeenCalledTimes(1)
+  })
 })

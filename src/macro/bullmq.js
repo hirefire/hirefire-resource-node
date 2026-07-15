@@ -127,7 +127,11 @@ async function jobQueueSize(...args) {
 
     return totalCount
   } finally {
-    await redis.quit()
+    try {
+      await redis.quit()
+    } catch {
+      redis.disconnect()
+    }
   }
 }
 
