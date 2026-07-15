@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `jobQueueSize` always closes its IORedis connection when all-queues enumeration fails (for example Redis down or auth error). The enumeration pipeline previously ran outside the `try`/`finally` that called `quit()`, so a rejected `pipeline.exec()` leaked a connection with indefinite-retry timers on every sample tick.
 - `jobQueueSize` always returns a JavaScript `number`, including when IORedis is configured with `stringNumbers: true` (which would otherwise yield string counts that job samplers drop).
 - Internal dispatch pacing, lease renewal, and the CPU utilization delta now measure elapsed time on a monotonic clock, so a system clock adjustment (e.g. an NTP step) no longer skews the dispatch cadence, lease renewal, or a CPU reading. The metric timestamps themselves stay wall-clock, as the server requires.
 - A reused keep-alive socket that reads back a garbled response (an `HPE_*` HTTP-parser error) is now reconnected and retried once, like a reset socket, matching the Ruby and Python clients.

@@ -77,29 +77,28 @@ async function jobQueueSize(...args) {
     options.connectionOptions,
   )
 
-  if (queues.length === 0) {
-    const pipeline = redis.pipeline()
-    pipeline.keys("bull:*:wait")
-    pipeline.keys("bull:*:active")
-    pipeline.keys("bull:*:delayed")
-
-    const results = await pipeline.exec()
-    const keys = results.flatMap(([err, result]) => result || [])
-    const uniqueQueueNames = new Set()
-
-    keys.forEach((key) => {
-      const match = key.match(/^bull:(.*):(wait|active|delayed)$/)
-      if (match) {
-        uniqueQueueNames.add(match[1])
-      }
-    })
-
-    queues = Array.from(uniqueQueueNames)
-  }
-
-  let totalCount = 0
-
   try {
+    if (queues.length === 0) {
+      const pipeline = redis.pipeline()
+      pipeline.keys("bull:*:wait")
+      pipeline.keys("bull:*:active")
+      pipeline.keys("bull:*:delayed")
+
+      const results = await pipeline.exec()
+      const keys = results.flatMap(([err, result]) => result || [])
+      const uniqueQueueNames = new Set()
+
+      keys.forEach((key) => {
+        const match = key.match(/^bull:(.*):(wait|active|delayed)$/)
+        if (match) {
+          uniqueQueueNames.add(match[1])
+        }
+      })
+
+      queues = Array.from(uniqueQueueNames)
+    }
+
+    let totalCount = 0
     const pipeline = redis.pipeline()
     const now = Date.now() * 0x1000 // Match BullMQ's delayed job timestamp score encoding.
 
@@ -124,11 +123,11 @@ async function jobQueueSize(...args) {
         totalCount -= 1
       }
     }
+
+    return totalCount
   } finally {
     await redis.quit()
   }
-
-  return totalCount
 }
 
 module.exports = {
