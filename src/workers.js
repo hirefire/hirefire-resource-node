@@ -1,31 +1,60 @@
 const safeLog = require("./log")
 
+/**
+ * Collection of job-metric Worker collectors declared on the configuration.
+ */
 class Workers {
+  /**
+   * @param {import("./configuration")} configuration
+   */
   constructor(configuration) {
     this._configuration = configuration
+    /**
+     * @type {import("./worker")[]}
+     */
     this._workers = []
   }
 
+  /**
+   * @param {import("./worker")} worker
+   */
   add(worker) {
     this._workers.push(worker)
   }
 
+  /**
+   * @returns {boolean}
+   */
   any() {
     return this._workers.length > 0
   }
 
+  /**
+   * @returns {number}
+   */
   count() {
     return this._workers.length
   }
 
+  /**
+   * @template T
+   * @param {(worker: import("./worker")) => T} fn
+   * @returns {T[]}
+   */
   map(fn) {
     return this._workers.map(fn)
   }
 
+  /**
+   * @returns {IterableIterator<import("./worker")>}
+   */
   [Symbol.iterator]() {
     return this._workers[Symbol.iterator]()
   }
 
+  /**
+   * @returns {Promise<void>}
+   */
   async sample() {
     for (const worker of this._workers) {
       try {

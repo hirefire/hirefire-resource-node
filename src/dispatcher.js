@@ -3,6 +3,9 @@ const Lease = require("./lease")
 const Workers = require("./workers")
 const safeLog = require("./log")
 
+/**
+ * Periodic reporter that flushes buffered metrics to the HireFire API.
+ */
 class Dispatcher {
   static WEB_BACKFILL_LIMIT = 60
 
@@ -38,6 +41,11 @@ class Dispatcher {
     this._stopJoinTimeoutMs = 5000
   }
 
+  /**
+   * Starts the dispatcher loops.
+   *
+   * @returns {boolean} `true` when started, `false` if already running or stopping.
+   */
   start() {
     if (this._running || this._stopping) return false
 
@@ -53,6 +61,12 @@ class Dispatcher {
     return true
   }
 
+  /**
+   * Stops the dispatcher loops and closes transport resources.
+   *
+   * @returns {Promise<boolean>} Resolves to `true` once the dispatcher has stopped. Resolves to
+   *   `false` when the dispatcher was not running.
+   */
   async stop() {
     if (!this._running) return false
 
@@ -74,6 +88,11 @@ class Dispatcher {
     return true
   }
 
+  /**
+   * Whether the dispatcher is currently running.
+   *
+   * @returns {boolean}
+   */
   running() {
     return this._running
   }

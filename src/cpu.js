@@ -1,5 +1,8 @@
 const Usage = require("./cpu/usage")
 
+/**
+ * CPU utilization collector for a declared process.
+ */
 class CPU {
   constructor(name, configuration) {
     this._name = String(name)
@@ -9,6 +12,10 @@ class CPU {
     this._lastSource = null
   }
 
+  /**
+   * The process name this collector reports under.
+   * @returns {string}
+   */
   get name() {
     return this._name
   }

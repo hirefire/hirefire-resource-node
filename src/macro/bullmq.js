@@ -1,14 +1,19 @@
 const IORedis = require("ioredis")
 const { unpack } = require("../utility")
-const { jobQueueLatencyUnsupported } = require("../errors")
+const {
+  JobQueueLatencyUnsupportedError,
+  jobQueueLatencyUnsupported,
+} = require("../errors")
 
 /**
- * Job queue latency is not supported for BullMQ. Calling this always throws.
+ * Job queue latency is not supported for BullMQ. The returned promise always rejects with
+ * {@link JobQueueLatencyUnsupportedError} (it does not throw synchronously).
  *
  * @async
  * @param {...any} args - Ignored.
- * @returns {Promise<never>} Never resolves: the call always throws.
- * @throws {JobQueueLatencyUnsupportedError} Always, since BullMQ does not support latency measurement.
+ * @returns {Promise<never>} Always rejects with {@link JobQueueLatencyUnsupportedError}; never fulfills.
+ * @throws {JobQueueLatencyUnsupportedError} Observed when the rejection is awaited or handled with
+ *   `.catch` (not thrown synchronously).
  */
 async function jobQueueLatency(...args) {
   jobQueueLatencyUnsupported("BullMQ")
@@ -25,22 +30,11 @@ async function jobQueueLatency(...args) {
  */
 
 /**
- * @overload
- * @param {...string} queues - Queue names. Omit to measure across all queues.
- * @returns {Promise<number>} Cumulative job queue size across the specified queues.
- */
-/**
- * @overload
- * @param {...(string | BullMQOptions)} queuesAndOptions - Queue names, optionally followed by a
- *   {@link BullMQOptions} object.
- * @returns {Promise<number>} Cumulative job queue size across the specified queues.
- */
-/**
  * Calculates the total job queue size across the specified queues. If no queues are specified, it
  * measures size across all queues.
  *
- * @async
- * @param {...any} args - Queue names, optionally followed by a {@link BullMQOptions} object.
+ * @overload
+ * @param {...string} queues - Queue names. Omit to measure across all queues.
  * @returns {Promise<number>} Cumulative job queue size across the specified queues.
  * @example
  * // Calculate size across all queues
@@ -51,12 +45,23 @@ async function jobQueueLatency(...args) {
  * @example
  * // Calculate size across "default" and "mailer" queues
  * await jobQueueSize("default", "mailer")
+ */
+/**
+ * @overload
+ * @param {...(string | BullMQOptions)} queuesAndOptions - Queue names, optionally followed by a
+ *   {@link BullMQOptions} object.
+ * @returns {Promise<number>} Cumulative job queue size across the specified queues.
  * @example
  * // Calculate size using the options.connection property
  * await jobQueueSize("default", { connection: "redis://localhost:6379/0" })
  * @example
  * // Calculate size using the options.connectionOptions property
  * await jobQueueSize("default", { connectionOptions: { tls: { rejectUnauthorized: false } } })
+ */
+/**
+ * @async
+ * @param {...any} args
+ * @returns {Promise<number>}
  */
 async function jobQueueSize(...args) {
   let { queues, options } = unpack(args)
@@ -109,9 +114,9 @@ async function jobQueueSize(...args) {
 
     for (let i = 0; i < results.length; i += 4) {
       const lastWaitJob = results[i][1]
-      const waitCount = results[i + 1][1] || 0
-      const activeCount = results[i + 2][1] || 0
-      const delayedCount = results[i + 3][1] || 0
+      const waitCount = Number(results[i + 1][1]) || 0
+      const activeCount = Number(results[i + 2][1]) || 0
+      const delayedCount = Number(results[i + 3][1]) || 0
 
       totalCount += waitCount + activeCount + delayedCount
 
@@ -126,4 +131,8 @@ async function jobQueueSize(...args) {
   return totalCount
 }
 
-module.exports = { jobQueueLatency, jobQueueSize }
+module.exports = {
+  jobQueueLatency,
+  jobQueueSize,
+  JobQueueLatencyUnsupportedError,
+}

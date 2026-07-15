@@ -26,6 +26,10 @@
       "types": "./types/index.d.ts",
       "default": "./src/index.js"
     },
+    "./configuration": {
+      "types": "./types/configuration.d.ts",
+      "default": "./src/configuration.js"
+    },
     "./middleware/connect": {
       "types": "./types/middleware/connect.d.ts",
       "default": "./src/middleware/connect.js"
@@ -53,6 +57,9 @@
   },
   "typesVersions": {
     "*": {
+      "configuration": [
+        "./types/configuration.d.ts"
+      ],
       "middleware/*": [
         "./types/middleware/*.d.ts"
       ],
@@ -73,7 +80,6 @@
     "test:core": "bin/run-cell core",
     "check": "prettier --check --no-semi .",
     "format": "prettier --write --no-semi .",
-    "doc": "jsdoc",
     "build:types": "tsc",
     "prepack": "npm run build:types"
   },
@@ -87,7 +93,6 @@
   },
   "devDependencies": {
     "jest": "^29.3.1",
-    "jsdoc": "^4.0.2",
     "nock": "^13.3.0",
     "prettier": "^3.1.0",
     "supertest": "^6.3.3",

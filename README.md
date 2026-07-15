@@ -22,6 +22,17 @@ This library integrates Node.js applications with HireFire's Heroku Dyno Autosca
 
 The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
 
+**TypeScript:**
+
+The package ships `.d.ts` declarations generated from its JSDoc. No separate `@types` package is needed. The default import is the HireFire singleton. For typed catch of configuration errors, import the `Configuration` class from the configuration subpath (error classes are properties on it):
+
+```js
+const Configuration = require("hirefire-resource/configuration")
+const { MissingSamplerError } = Configuration
+```
+
+For BullMQ, `JobQueueLatencyUnsupportedError` is exported from `hirefire-resource/macro/bullmq`.
+
 ---
 
 Since 2011, HireFire has helped over 1,500 companies autoscale more than 5,000 [Heroku] applications across 10,000+ web and worker dynos.

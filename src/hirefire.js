@@ -1,7 +1,14 @@
 const Configuration = require("./configuration")
 
+/**
+ * HireFire singleton entrypoint: configure processes and report metrics.
+ */
 class HireFire {
   constructor() {
+    /**
+     * The shared configuration for this HireFire instance.
+     * @type {Configuration}
+     */
     this.configuration = new Configuration()
   }
 
@@ -20,7 +27,7 @@ class HireFire {
    * @example
    * hirefire.configure((config) => {
    *   config.service("web", { tracking: "http" })
-   *   config.service("worker", () => jobQueueLatency("default"))
+   *   config.service("worker", () => jobQueueSize("default"))
    *   config.service("encoder", { tracking: "cpu" })
    * })
    */
@@ -35,7 +42,7 @@ class HireFire {
    * for tests and reconfiguration between runs.
    *
    * @returns {Promise<boolean>} Resolves once any running dispatcher has stopped. Resolves to
-   *   `false` when no dispatcher was running.
+   *   `true` when a running dispatcher was stopped, or `false` when no dispatcher was running.
    */
   reset() {
     const dispatcher = this.configuration._dispatcher
