@@ -127,6 +127,13 @@ describe("Client", () => {
     )
   })
 
+  test("raises with an empty token", async () => {
+    const tokenless = new Client({ token: "" })
+    await expect(tokenless.submitSamples("[]")).rejects.toThrow(
+      "HIREFIRE_TOKEN",
+    )
+  })
+
   test("uses a custom data url", async () => {
     process.env.HIREFIRE_DATA_URL = "https://custom.hirefire.io"
     const scope = nock("https://custom.hirefire.io")

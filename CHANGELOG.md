@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- An empty token (`""` in code or `HIREFIRE_TOKEN=""`) is treated as absent: the dispatcher does not start, middleware does not sample, and no empty `HireFire-Token` is sent. Assigning `config.token = ""` also forces reporting off when the env var is set.
 - Dispatcher loop tasks bind to a start generation, so a hung loop that outlives `stop`'s join cannot resume work after a later `start` (matching the Ruby and Python clients).
 - BullMQ all-queues enumeration uses incremental `SCAN` instead of blocking `KEYS bull:*:…` patterns, so a large Redis keyspace does not stall the sample tick.
 - BullMQ `jobQueueSize` falls back to `disconnect()` when `quit()` rejects in the cleanup path, so a second Redis failure cannot mask the original sampling error or leave reconnect timers running.

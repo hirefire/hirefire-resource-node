@@ -135,15 +135,18 @@ class Configuration {
 
   /**
    * The HireFire API token. Returns the value assigned in code when it is not nullish, else the
-   * `HIREFIRE_TOKEN` environment variable, else `null`. Assigning `null` (or `undefined`) clears
-   * the in-code value so the environment variable is consulted again. It does not force the token
-   * off when `HIREFIRE_TOKEN` is set. A token present when {@link HireFire#configure} runs starts
-   * the dispatcher and enables reporting.
+   * `HIREFIRE_TOKEN` environment variable, else `null`. An empty string (in code or from the env)
+   * is treated as absent (`null`), so it neither enables reporting nor is sent on the wire.
+   * Assigning `null` (or `undefined`) clears the in-code value so the environment variable is
+   * consulted again. Assigning an empty string forces the token off even when `HIREFIRE_TOKEN` is
+   * set. A non-empty token present when {@link HireFire#configure} runs starts the dispatcher and
+   * enables reporting.
    *
    * @type {string | null}
    */
   get token() {
-    return this._token ?? process.env.HIREFIRE_TOKEN ?? null
+    const value = this._token ?? process.env.HIREFIRE_TOKEN ?? null
+    return value || null
   }
 
   /**

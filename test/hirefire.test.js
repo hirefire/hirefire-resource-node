@@ -37,6 +37,33 @@ describe("HireFire", () => {
     expect(start).not.toHaveBeenCalled()
   })
 
+  test("configure does not start the dispatcher with an empty token", () => {
+    process.env.HIREFIRE_TOKEN = ""
+    const start = jest
+      .spyOn(Dispatcher.prototype, "start")
+      .mockReturnValue(true)
+
+    const hirefire = new HireFire()
+    hirefire.configure((config) => config.dyno("web"))
+
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  test("configure does not start the dispatcher when the token is forced empty", () => {
+    process.env.HIREFIRE_TOKEN = "from-env"
+    const start = jest
+      .spyOn(Dispatcher.prototype, "start")
+      .mockReturnValue(true)
+
+    const hirefire = new HireFire()
+    hirefire.configure((config) => {
+      config.token = ""
+      config.dyno("web")
+    })
+
+    expect(start).not.toHaveBeenCalled()
+  })
+
   test("reset stops the dispatcher and replaces the configuration", async () => {
     const hirefire = new HireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }
