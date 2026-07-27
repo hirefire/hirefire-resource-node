@@ -1,7 +1,7 @@
 {
   "name": "hirefire-resource",
   "version": "1.3.0",
-  "description": "HireFire integration library for Node.js applications",
+  "description": "Integrates Node.js applications with HireFire autoscalers by pushing app metrics.",
   "keywords": [
     "hirefire",
     "heroku",
@@ -22,6 +22,7 @@
     "src",
     "types"
   ],
+  "main": "./src/index.js",
   "types": "./types/index.d.ts",
   "exports": {
     ".": {
@@ -75,7 +76,11 @@
     "url": "git+https://github.com/hirefire/hirefire-resource-node.git"
   },
   "bugs": {
-    "url": "https://github.com/hirefire/hirefire-resource-node/issues"
+    "url": "https://github.com/hirefire/hirefire-resource-node/issues",
+    "email": "support@hirefire.io"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "test": "bin/matrix",
@@ -91,7 +96,7 @@
     ]
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=20"
   },
   "devDependencies": {
     "jest": "^29.3.1",

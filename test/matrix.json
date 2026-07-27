@@ -1,5 +1,5 @@
 {
-  "node": [22, 24, 26],
+  "node": [20, 22, 24, 26],
   "integrations": [
     { "package": "core", "majors": [null], "test": "core" },
     {
