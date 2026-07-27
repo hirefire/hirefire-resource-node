@@ -31,7 +31,7 @@ describe("CPU", () => {
     const collector = cpu()
     freezeTime(1000)
     expect(collector.sample()).toBeNull()
-    expect(configuration.buffer.flush().cpu).toEqual({})
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
   })
 
   test("second sample buffers normalized percentage", () => {
@@ -44,9 +44,7 @@ describe("CPU", () => {
     freezeTime(1001)
     collector.sample()
 
-    expect(configuration.buffer.flush().cpu).toEqual({
-      clock: { 1001: [50.0] },
-    })
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1001: 50.0 })
   })
 
   test("normalizes by available cpus", () => {
@@ -59,9 +57,33 @@ describe("CPU", () => {
     freezeTime(1001)
     collector.sample()
 
-    expect(configuration.buffer.flush().cpu).toEqual({
-      worker: { 1001: [25.0] },
-    })
+    expect(configuration.buffer.flush().worker.cpu).toEqual({ 1001: 25.0 })
+  })
+
+  test("normalizes by fractional available cpus", () => {
+    mockReadings(0.0, 0.25)
+    jest.spyOn(Usage, "availableCpus").mockReturnValue(0.5)
+
+    const collector = cpu()
+    freezeTime(1000)
+    collector.sample()
+    freezeTime(1001)
+    collector.sample()
+
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1001: 50.0 })
+  })
+
+  test("sample rounds percentage to two decimal places", () => {
+    mockReadings(0.0, 1.0 / 3.0)
+    jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
+
+    const collector = cpu()
+    freezeTime(1000)
+    collector.sample()
+    freezeTime(1001)
+    collector.sample()
+
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1001: 33.33 })
   })
 
   test("clamps to 100 percent", () => {
@@ -74,9 +96,7 @@ describe("CPU", () => {
     freezeTime(1001)
     collector.sample()
 
-    expect(configuration.buffer.flush().cpu).toEqual({
-      clock: { 1001: [100.0] },
-    })
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1001: 100.0 })
   })
 
   test("negative usage delta skips and reseeds the baseline", () => {
@@ -91,9 +111,7 @@ describe("CPU", () => {
     freezeTime(1002)
     collector.sample()
 
-    expect(configuration.buffer.flush().cpu).toEqual({
-      clock: { 1002: [50.0] },
-    })
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1002: 50.0 })
   })
 
   test("a usage source switch only reseeds the baseline", () => {
@@ -112,9 +130,7 @@ describe("CPU", () => {
     freezeTime(1002)
     collector.sample()
 
-    expect(configuration.buffer.flush().cpu).toEqual({
-      clock: { 1002: [50.0] },
-    })
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1002: 50.0 })
   })
 
   test("skips the sample when usage is unavailable", () => {
@@ -126,7 +142,7 @@ describe("CPU", () => {
     collector.sample()
     freezeTime(1001)
     expect(collector.sample()).toBeNull()
-    expect(configuration.buffer.flush().cpu).toEqual({})
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
   })
 
   test("non-positive elapsed delta skips the sample", () => {
@@ -137,7 +153,7 @@ describe("CPU", () => {
     freezeTime(1000)
     collector.sample()
     expect(collector.sample()).toBeNull()
-    expect(configuration.buffer.flush().cpu).toEqual({})
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
   })
 
   test("elapsed delta uses the monotonic clock not wall time", () => {
@@ -153,9 +169,7 @@ describe("CPU", () => {
     collector.sample()
     collector.sample()
 
-    expect(configuration.buffer.flush().cpu).toEqual({
-      clock: { 1000: [50.0] },
-    })
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1000: 50.0 })
   })
 
   test("skips the sample when available cpus is null", () => {
@@ -167,7 +181,7 @@ describe("CPU", () => {
     collector.sample()
     freezeTime(1001)
     expect(collector.sample()).toBeNull()
-    expect(configuration.buffer.flush().cpu).toEqual({})
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
   })
 
   test("skips the sample when available cpus is zero", () => {
@@ -179,7 +193,7 @@ describe("CPU", () => {
     collector.sample()
     freezeTime(1001)
     expect(collector.sample()).toBeNull()
-    expect(configuration.buffer.flush().cpu).toEqual({})
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
   })
 
   test("recovers after an initially unavailable usage source", () => {
@@ -194,8 +208,6 @@ describe("CPU", () => {
     freezeTime(1002)
     collector.sample()
 
-    expect(configuration.buffer.flush().cpu).toEqual({
-      clock: { 1002: [50.0] },
-    })
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1002: 50.0 })
   })
 })

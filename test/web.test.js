@@ -17,6 +17,8 @@ describe("Web", () => {
   test("sample delegates the queue time to the buffer", () => {
     freezeTime(1000)
     new Web("web", configuration).sample(42)
-    expect(configuration.buffer.flush().web).toEqual({ 1000: [42] })
+    expect(configuration.buffer.flush().web.rqt).toEqual({
+      1000: { sum: 42, count: 1 },
+    })
   })
 })

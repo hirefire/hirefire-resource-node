@@ -1,9 +1,9 @@
 const { processRequestQueueTime } = require("../middleware")
 
 function readRequestStart(nextRequest) {
-  return (
-    nextRequest.headers.get("X-Request-Start") ||
-    nextRequest.headers.get("X-Queue-Start")
+  return processRequestQueueTime(
+    nextRequest.headers.get("X-Request-Start"),
+    nextRequest.headers.get("X-Queue-Start"),
   )
 }
 
@@ -19,12 +19,17 @@ function readRequestStart(nextRequest) {
  * `X-Queue-Start`) header and continues the chain via `NextResponse.next()`. Use it as your
  * `middleware` export, or wrap an existing middleware with {@link withHireFire}.
  *
+ * When a token is present, records a queue-time sample under the process HTTP name, marks
+ * HTTP active, and starts the dispatcher (and job-queue loop when lease race entry is true).
+ * Explicit http registration is optional. Failures are logged and swallowed so the host app
+ * is unaffected.
+ *
  * @param {*} nextRequest - The Next.js request.
  * @returns {*} A `NextResponse` that continues the chain.
  */
 function middleware(nextRequest) {
   const { NextResponse } = require("next/server")
-  processRequestQueueTime(readRequestStart(nextRequest))
+  readRequestStart(nextRequest)
   return NextResponse.next()
 }
 
@@ -36,7 +41,7 @@ function middleware(nextRequest) {
  */
 function withHireFire(userMiddleware) {
   return function wrappedMiddleware(nextRequest, event) {
-    processRequestQueueTime(readRequestStart(nextRequest))
+    readRequestStart(nextRequest)
     return userMiddleware(nextRequest, event)
   }
 }

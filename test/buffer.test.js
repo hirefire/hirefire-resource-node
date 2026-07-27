@@ -8,128 +8,188 @@ describe("Buffer", () => {
     buffer = new Buffer()
   })
 
-  test("sample web", () => {
+  test("accumulates rqt sum and count", () => {
     freezeTime(100)
-    buffer.sampleWeb(12)
-    buffer.sampleWeb(8)
-
-    expect(buffer.flush().web).toEqual({ 100: [12, 8] })
-  })
-
-  test("sample web groups by timestamp", () => {
-    freezeTime(100)
-    buffer.sampleWeb(12)
-    freezeTime(101)
-    buffer.sampleWeb(8)
-
-    expect(buffer.flush().web).toEqual({ 100: [12], 101: [8] })
-  })
-
-  test("sample worker", () => {
-    buffer.sampleWorker("worker", 42)
-    buffer.sampleWorker("mailer", 18)
-
-    expect(buffer.flush().workers).toEqual([
-      { name: "worker", sample: 42 },
-      { name: "mailer", sample: 18 },
-    ])
-  })
-
-  test("flush returns all and resets", () => {
-    freezeTime(100)
-    buffer.sampleWeb(5)
-    buffer.sampleWorker("worker", 10)
-
+    buffer.sample("web", "rqt", 10)
+    buffer.sample("web", "rqt", 20)
+    buffer.sample("web", "rqt", 30)
     const data = buffer.flush()
-    expect(data.web).toEqual({ 100: [5] })
-    expect(data.workers).toEqual([{ name: "worker", sample: 10 }])
-
-    const empty = buffer.flush()
-    expect(empty.web).toEqual({})
-    expect(empty.workers).toEqual([])
+    expect(data.web.rqt[100]).toEqual({ sum: 60, count: 3 })
   })
 
-  test("sample worker latest wins per name", () => {
-    buffer.sampleWorker("worker", 42)
-    buffer.sampleWorker("mailer", 18)
-    buffer.sampleWorker("worker", 7)
-
-    expect(buffer.flush().workers).toEqual([
-      { name: "worker", sample: 7 },
-      { name: "mailer", sample: 18 },
-    ])
+  test("groups rqt by timestamp", () => {
+    freezeTime(100)
+    buffer.sample("web", "rqt", 12)
+    freezeTime(101)
+    buffer.sample("web", "rqt", 8)
+    const data = buffer.flush()
+    expect(data.web.rqt[100]).toEqual({ sum: 12, count: 1 })
+    expect(data.web.rqt[101]).toEqual({ sum: 8, count: 1 })
   })
 
-  test("sample web is bounded when dispatch is starved", () => {
+  test("stores non-rqt as bare latest-wins scalar", () => {
+    freezeTime(100)
+    buffer.sample("worker", "jql", 42)
+    buffer.sample("worker", "jql", 7)
+    buffer.sample("web", "cpu", 10.0)
+    buffer.sample("web", "cpu", 37.5)
+    const data = buffer.flush()
+    expect(data.worker.jql[100]).toBe(7)
+    expect(data.web.cpu[100]).toBe(37.5)
+  })
+
+  test("flush returns and resets", () => {
+    freezeTime(100)
+    buffer.sample("web", "rqt", 5)
+    buffer.sample("worker", "jql", 10)
+    const data = buffer.flush()
+    expect(data.web.rqt[100]).toEqual({ sum: 5, count: 1 })
+    expect(data.worker.jql[100]).toBe(10)
+    expect(Object.keys(buffer.flush())).toHaveLength(0)
+  })
+
+  test("repopulate merges sum and count (vector C)", () => {
+    freezeTime(100)
+    buffer.repopulate("web", "rqt", { 100: { sum: 10, count: 1 } })
+    buffer.sample("web", "rqt", 15)
+    buffer.sample("web", "rqt", 15)
+    expect(buffer.flush().web.rqt[100]).toEqual({ sum: 40, count: 3 })
+  })
+
+  test("repopulate ignores array buckets", () => {
+    freezeTime(100)
+    buffer.repopulate("web", "rqt", { 100: [12, 8] })
+    expect(Object.keys(buffer.flush())).toHaveLength(0)
+  })
+
+  test("repopulate respects ttl", () => {
+    freezeTime(100)
+    buffer.repopulate("web", "rqt", {
+      90: { sum: 5, count: 1 },
+      30: { sum: 10, count: 1 },
+    })
+    const data = buffer.flush()
+    expect(data.web.rqt[90]).toEqual({ sum: 5, count: 1 })
+    expect(data.web.rqt[30]).toBeUndefined()
+  })
+
+  test("discardInherited clears all strategies", () => {
+    freezeTime(100)
+    buffer.sample("web", "rqt", 7)
+    buffer.sample("worker", "jql", 5)
+    buffer.discardInherited()
+    expect(Object.keys(buffer.flush())).toHaveLength(0)
+  })
+
+  test("bounds seconds when dispatch is starved", () => {
     for (let second = 1000; second <= 1070; second++) {
       freezeTime(second)
-      buffer.sampleWeb(1)
+      buffer.sample("web", "rqt", 1)
     }
-
-    const web = buffer.flush().web
-    const keys = Object.keys(web).map(Number)
-    expect(keys.length).toBeLessThanOrEqual(66)
-    expect(Math.min(...keys)).toBe(1006)
-    expect(Math.max(...keys)).toBe(1070)
+    const series = buffer.flush().web.rqt
+    expect(Object.keys(series).length).toBeLessThanOrEqual(66)
   })
 
-  test("sample cpu is bounded when dispatch is starved", () => {
-    for (let second = 1000; second <= 1070; second++) {
-      freezeTime(second)
-      buffer.sampleCpu("clock", 50.0)
+  test("sample stops at SAMPLE_COUNT_LIMIT", () => {
+    freezeTime(100)
+    const series = buffer._seriesFor("web", "rqt")
+    series[100] = { sum: 0, count: Buffer.SAMPLE_COUNT_LIMIT }
+    buffer.sample("web", "rqt", 1)
+    const bucket = buffer.flush().web.rqt[100]
+    expect(bucket.count).toBe(Buffer.SAMPLE_COUNT_LIMIT)
+    expect(bucket.sum).toBeCloseTo(0, 4)
+  })
+
+  test("repopulate clamps to SAMPLE_COUNT_LIMIT and scales sum", () => {
+    freezeTime(100)
+    const limit = Buffer.SAMPLE_COUNT_LIMIT
+    buffer.repopulate("web", "rqt", { 100: { sum: limit, count: limit } })
+    buffer.repopulate("web", "rqt", { 100: { sum: 100, count: 100 } })
+    const bucket = buffer.flush().web.rqt[100]
+    expect(bucket.count).toBe(limit)
+    expect(bucket.sum / bucket.count).toBeCloseTo(1.0, 3)
+  })
+
+  test("sample ignores non finite and non numeric", () => {
+    freezeTime(100)
+    buffer.sample("web", "rqt", NaN)
+    buffer.sample("web", "rqt", Infinity)
+    buffer.sample("web", "cpu", /** @type {any} */ ("nope"))
+    buffer.sample("web", "rqt", 5)
+    const data = buffer.flush()
+    expect(data.web.rqt[100]).toEqual({ sum: 5, count: 1 })
+    expect(data.web.cpu).toBeUndefined()
+  })
+
+  test("repopulate rejects non rqt strategy", () => {
+    freezeTime(100)
+    buffer.repopulate("web", "cpu", { 100: { sum: 1, count: 1 } })
+    expect(Object.keys(buffer.flush())).toHaveLength(0)
+  })
+
+  test("repopulate skips non hash and non positive count", () => {
+    freezeTime(200)
+    buffer.repopulate("web", "rqt", {
+      190: 12,
+      191: { sum: 5, count: 0 },
+      192: { sum: 7, count: -1 },
+      193: { sum: 9, count: 1 },
+    })
+    expect(buffer.flush().web.rqt).toEqual({ 193: { sum: 9, count: 1 } })
+  })
+
+  test("repopulate replaces existing non object cell", () => {
+    freezeTime(100)
+    const series = buffer._seriesFor("web", "rqt")
+    series[100] = 12
+    buffer.repopulate("web", "rqt", { 100: { sum: 9, count: 1 } })
+    expect(buffer.flush().web.rqt[100]).toEqual({ sum: 9, count: 1 })
+  })
+
+  test("repopulate prunes after merge", () => {
+    freezeTime(1000)
+    const series = buffer._seriesFor("web", "rqt")
+    for (let s = 900; s < 970; s++) {
+      series[s] = { sum: 1, count: 1 }
     }
-
-    const cpu = buffer.flush().cpu
-    const keys = Object.keys(cpu.clock).map(Number)
-    expect(keys.length).toBeLessThanOrEqual(66)
-    expect(Math.max(...keys)).toBe(1070)
+    buffer.repopulate("web", "rqt", { 1000: { sum: 5, count: 1 } })
+    const data = buffer.flush().web.rqt
+    expect(data[1000]).toEqual({ sum: 5, count: 1 })
+    expect(Object.keys(data).every((k) => parseInt(k, 10) >= 940)).toBe(true)
   })
 
-  test("repopulate web within ttl", () => {
+  test("repopulate keeps the second exactly at the ttl boundary", () => {
     freezeTime(100)
-    buffer.repopulateWeb({ 90: [5], 30: [10] })
-
-    const web = buffer.flush().web
-    expect(web).toEqual({ 90: [5] })
-    expect(web[30]).toBeUndefined()
+    buffer.repopulate("web", "rqt", { 40: { sum: 5, count: 1 } })
+    expect(buffer.flush().web.rqt).toEqual({ 40: { sum: 5, count: 1 } })
   })
 
-  test("repopulate web merges with existing", () => {
+  test("custom ttl is honored by repopulate", () => {
+    const custom = new Buffer(10)
     freezeTime(100)
-    buffer.sampleWeb(1)
-    buffer.repopulateWeb({ 100: [2, 3] })
-
-    expect(buffer.flush().web[100]).toEqual([1, 2, 3])
+    custom.repopulate("web", "rqt", {
+      95: { sum: 1, count: 1 },
+      80: { sum: 2, count: 1 },
+    })
+    const data = custom.flush()
+    expect(data.web.rqt[95]).toEqual({ sum: 1, count: 1 })
+    expect(data.web.rqt[80]).toBeUndefined()
   })
 
-  test("flush returns and resets cpu", () => {
-    freezeTime(1000)
-    buffer.sampleCpu("clock", 50.0)
-
-    expect(buffer.flush().cpu).toEqual({ clock: { 1000: [50.0] } })
-    expect(buffer.flush().cpu).toEqual({})
-  })
-
-  test("sample cpu groups values within a second", () => {
-    freezeTime(1000)
-    buffer.sampleCpu("clock", 40.0)
-    buffer.sampleCpu("clock", 60.0)
-
-    expect(buffer.flush().cpu).toEqual({ clock: { 1000: [40.0, 60.0] } })
-  })
-
-  test("a reserved cpu collector name does not pollute Object.prototype", () => {
-    freezeTime(1000)
-    buffer.sampleCpu("__proto__", 50.0)
-
-    expect({}[1000]).toBeUndefined()
-    expect(buffer.flush().cpu["__proto__"]).toEqual({ 1000: [50.0] })
-  })
-
-  test("repopulate web keeps the second exactly at the ttl boundary", () => {
+  test("multi strategy under one name", () => {
     freezeTime(100)
-    buffer.repopulateWeb({ 40: [5] })
+    buffer.sample("web", "rqt", 12)
+    buffer.sample("web", "cpu", 37.5)
+    const data = buffer.flush()
+    expect(data.web.rqt[100]).toEqual({ sum: 12, count: 1 })
+    expect(data.web.cpu[100]).toBe(37.5)
+  })
 
-    expect(buffer.flush().web).toEqual({ 40: [5] })
+  test("repopulate accepts string keys", () => {
+    freezeTime(100)
+    buffer.repopulate("web", "rqt", {
+      100: { sum: 5, count: 1 },
+    })
+    expect(buffer.flush().web.rqt[100]).toEqual({ sum: 5, count: 1 })
   })
 })

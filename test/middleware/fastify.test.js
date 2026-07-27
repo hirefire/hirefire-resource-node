@@ -28,7 +28,7 @@ describe("Fastify", () => {
       .set("X-Request-Start", String(Date.now() - 1000))
     expect(response.status).toBe(200)
     expect(response.text).toBe("Hello")
-    expect(HireFire.configuration.buffer.flush().web).toEqual({})
+    expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
     expect(start).not.toHaveBeenCalled()
   })
 
@@ -44,8 +44,8 @@ describe("Fastify", () => {
 
     expect(response.status).toBe(200)
     expect(response.text).toBe("Hello")
-    expect(HireFire.configuration.buffer.flush().web).toEqual({
-      [second]: [1234],
+    expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+      [second]: { sum: 1234, count: 1 },
     })
     expect(start).toHaveBeenCalled()
   })
@@ -61,8 +61,8 @@ describe("Fastify", () => {
       .set("X-Queue-Start", String(second * 1000 - 1234))
 
     expect(response.status).toBe(200)
-    expect(HireFire.configuration.buffer.flush().web).toEqual({
-      [second]: [1234],
+    expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+      [second]: { sum: 1234, count: 1 },
     })
   })
 })

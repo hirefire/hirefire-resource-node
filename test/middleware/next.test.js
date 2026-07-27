@@ -24,7 +24,7 @@ describe("Next.js", () => {
       )
       expect(response).toBeInstanceOf(NextResponse)
       expect(response.headers.get("x-middleware-next")).toBe("1")
-      expect(HireFire.configuration.buffer.flush().web).toEqual({})
+      expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
       expect(start).not.toHaveBeenCalled()
     })
 
@@ -40,8 +40,8 @@ describe("Next.js", () => {
 
       expect(response).toBeInstanceOf(NextResponse)
       expect(response.headers.get("x-middleware-next")).toBe("1")
-      expect(HireFire.configuration.buffer.flush().web).toEqual({
-        [second]: [1234],
+      expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+        [second]: { sum: 1234, count: 1 },
       })
       expect(start).toHaveBeenCalled()
     })
@@ -57,8 +57,8 @@ describe("Next.js", () => {
       )
 
       expect(response).toBeInstanceOf(NextResponse)
-      expect(HireFire.configuration.buffer.flush().web).toEqual({
-        [second]: [1234],
+      expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+        [second]: { sum: 1234, count: 1 },
       })
     })
   })
@@ -93,8 +93,8 @@ describe("Next.js", () => {
 
       expect(response).toBeInstanceOf(NextResponse)
       expect(userMiddleware).toHaveBeenCalled()
-      expect(HireFire.configuration.buffer.flush().web).toEqual({
-        [second]: [567],
+      expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+        [second]: { sum: 567, count: 1 },
       })
     })
   })

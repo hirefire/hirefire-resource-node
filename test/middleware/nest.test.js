@@ -35,8 +35,8 @@ describe("Nest", () => {
       .get("/")
       .set("X-Request-Start", String(second * 1000 - 1234))
 
-    expect(HireFire.configuration.buffer.flush().web).toEqual({
-      [second]: [1234],
+    expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+      [second]: { sum: 1234, count: 1 },
     })
     expect(start).toHaveBeenCalled()
   })
@@ -51,8 +51,8 @@ describe("Nest", () => {
       .get("/")
       .set("X-Queue-Start", String(second * 1000 - 1234))
 
-    expect(HireFire.configuration.buffer.flush().web).toEqual({
-      [second]: [1234],
+    expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+      [second]: { sum: 1234, count: 1 },
     })
   })
 })

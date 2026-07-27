@@ -22,7 +22,7 @@ class Web {
    * @returns {void}
    */
   sample(requestQueueTime) {
-    this._configuration.buffer.sampleWeb(requestQueueTime)
+    this._configuration.buffer.sample(this._name, "rqt", requestQueueTime)
   }
 }
 

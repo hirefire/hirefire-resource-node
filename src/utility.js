@@ -1,3 +1,5 @@
+const { MissingQueueError } = require("./errors")
+
 function unpack(args) {
   const lastArg = args[args.length - 1]
   let queues = []
@@ -23,15 +25,26 @@ function unpack(args) {
  * Trim and de-duplicate queue names into a set, matching the adapter contract.
  *
  * @param {Iterable<string>} queues
+ * @param {{allowEmpty?: boolean}} [opts]
  * @returns {string[]}
+ * @throws {MissingQueueError} when empty and allowEmpty is false
  */
-function normalizeQueues(queues) {
+function normalizeQueues(queues, { allowEmpty = true } = {}) {
   const names = new Set()
   for (const queue of queues) {
-    const name = String(queue).trim()
+    // null/undefined → drop (Ruby nil.to_s → ""). Never String(null) → "null".
+    const name = queue == null ? "" : String(queue).trim()
     if (name) names.add(name)
   }
-  return Array.from(names)
+  if (names.size > 0) {
+    return Array.from(names)
+  }
+  if (allowEmpty) {
+    return []
+  }
+  throw new MissingQueueError(
+    "No queue was specified. Please specify at least one queue.",
+  )
 }
 
 module.exports = { unpack, normalizeQueues }

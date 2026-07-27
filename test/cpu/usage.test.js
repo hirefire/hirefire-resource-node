@@ -79,6 +79,18 @@ describe("CPU.Usage", () => {
       expect(Usage.reading().source).toBe("cgroupV1")
     })
 
+    test("cgroup v2 zero usage is accepted not fallthrough", () => {
+      stubReads({
+        [Usage.CGROUP_V2_USAGE]: "usage_usec 0\nuser_usec 0",
+      })
+      expect(Usage.reading()).toEqual({ seconds: 0.0, source: "cgroupV2" })
+    })
+
+    test("cgroup v1 zero usage is accepted not fallthrough", () => {
+      stubReads({ [Usage.CGROUP_V1_USAGE]: "0" })
+      expect(Usage.reading()).toEqual({ seconds: 0.0, source: "cgroupV1" })
+    })
+
     test("a throwing clock read falls through to a null reading", () => {
       stubReads({})
       jest.spyOn(Usage, "procStatPaths").mockReturnValue([])
@@ -287,6 +299,17 @@ describe("CPU.Usage", () => {
     test("render without a cpu count falls through to the processor count", () => {
       process.env.RENDER = "true"
       stubReads({})
+      expect(Usage.availableCpus()).toBe(Usage.processorCount())
+    })
+
+    test("render cpu count zero or non-numeric falls through", () => {
+      process.env.RENDER = "true"
+      stubReads({})
+
+      process.env.RENDER_CPU_COUNT = "0"
+      expect(Usage.availableCpus()).toBe(Usage.processorCount())
+
+      process.env.RENDER_CPU_COUNT = "nope"
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 

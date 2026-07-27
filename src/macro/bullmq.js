@@ -1,9 +1,13 @@
-const IORedis = require("ioredis")
 const { unpack, normalizeQueues } = require("../utility")
 const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
+
+// Lazy: core test cell and plan path load this module without installing ioredis.
+function loadIORedis() {
+  return require("ioredis")
+}
 
 /**
  * Job queue latency is not supported for BullMQ. The returned promise always rejects with
@@ -63,20 +67,53 @@ async function jobQueueLatency(...args) {
  * @param {...any} args
  * @returns {Promise<number>}
  */
+/**
+ * Defaults for short-lived sample connections (audit H1).
+ * Keep enableOfflineQueue at ioredis default (true) so commands issued before
+ * the socket is ready still run; bound wait with connect/command timeouts and
+ * cap retries so an unreachable Redis cannot hang the plan path indefinitely.
+ */
+const SAMPLE_REDIS_OPTIONS = {
+  maxRetriesPerRequest: 1,
+  connectTimeout: 5000,
+  commandTimeout: 5000,
+  retryStrategy(times) {
+    if (times > 2) return null
+    return Math.min(times * 50, 200)
+  },
+}
+
 async function jobQueueSize(...args) {
+  const IORedis = loadIORedis()
   let { queues, options } = unpack(args)
   queues = normalizeQueues(queues)
 
-  const redis = new IORedis(
+  const connection =
     options.connection ||
-      process.env.REDIS_TLS_URL ||
-      process.env.REDIS_URL ||
-      process.env.REDISTOGO_URL ||
-      process.env.REDISCLOUD_URL ||
-      process.env.OPENREDIS_URL ||
-      "redis://localhost:6379/0",
-    options.connectionOptions,
-  )
+    process.env.REDIS_TLS_URL ||
+    process.env.REDIS_URL ||
+    process.env.REDISTOGO_URL ||
+    process.env.REDISCLOUD_URL ||
+    process.env.OPENREDIS_URL ||
+    "redis://localhost:6379/0"
+
+  const userConnectionOptions = options.connectionOptions || {}
+  // Defaults first; caller connection / connectionOptions win.
+  const redis =
+    typeof connection === "object" && connection !== null
+      ? new IORedis({
+          ...SAMPLE_REDIS_OPTIONS,
+          ...connection,
+          ...userConnectionOptions,
+        })
+      : new IORedis(connection, {
+          ...SAMPLE_REDIS_OPTIONS,
+          ...userConnectionOptions,
+        })
+
+  // Unhandled ioredis "error" events terminate the Node process. Sampling
+  // failures still surface as rejected commands / quit.
+  redis.on("error", () => {})
 
   try {
     if (queues.length === 0) {
@@ -86,25 +123,32 @@ async function jobQueueSize(...args) {
     let totalCount = 0
     const pipeline = redis.pipeline()
     const now = Date.now() * 0x1000
+    const cmdsPerQueue = 6
 
     for (const queue of queues) {
       pipeline.lindex(`bull:${queue}:wait`, -1)
       pipeline.llen(`bull:${queue}:wait`)
+      pipeline.llen(`bull:${queue}:paused`)
       pipeline.llen(`bull:${queue}:active`)
       pipeline.zcount(`bull:${queue}:delayed`, "-inf", now)
+      pipeline.zcard(`bull:${queue}:prioritized`)
     }
 
     const results = await pipeline.exec()
+    if (!results) return 0
 
-    for (let i = 0; i < results.length; i += 4) {
-      const lastWaitJob = results[i][1]
-      const waitCount = Number(results[i + 1][1]) || 0
-      const activeCount = Number(results[i + 2][1]) || 0
-      const delayedCount = Number(results[i + 3][1]) || 0
+    for (let i = 0; i < results.length; i += cmdsPerQueue) {
+      const lastWaitJob = pipelineValue(results[i])
+      const waitCount = toCount(pipelineValue(results[i + 1]))
+      const pausedCount = toCount(pipelineValue(results[i + 2]))
+      const activeCount = toCount(pipelineValue(results[i + 3]))
+      const delayedCount = toCount(pipelineValue(results[i + 4]))
+      const prioritizedCount = toCount(pipelineValue(results[i + 5]))
 
-      totalCount += waitCount + activeCount + delayedCount
+      totalCount +=
+        waitCount + pausedCount + activeCount + delayedCount + prioritizedCount
 
-      if (lastWaitJob && lastWaitJob.startsWith("0:")) {
+      if (typeof lastWaitJob === "string" && lastWaitJob.startsWith("0:")) {
         totalCount -= 1
       }
     }
@@ -134,7 +178,9 @@ async function enumerateQueues(redis) {
     cursor = nextCursor
 
     for (const key of keys) {
-      const match = key.match(/^bull:(.*):(wait|active|delayed)$/)
+      const match = key.match(
+        /^bull:(.*):(wait|paused|active|delayed|prioritized)$/,
+      )
       if (match) {
         uniqueQueueNames.add(match[1])
       }
@@ -144,8 +190,53 @@ async function enumerateQueues(redis) {
   return Array.from(uniqueQueueNames)
 }
 
+function pipelineValue(tuple) {
+  if (!tuple) return null
+  const [err, value] = tuple
+  if (err) return null
+  return value
+}
+
+function toCount(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * @param {string} _strategy
+ * @param {*} _options
+ * @returns {object}
+ */
+function planOptions(_strategy, _options) {
+  return {}
+}
+
+/**
+ * @returns {object}
+ */
+function planConnectionOptions() {
+  const raw = process.env.HIREFIRE_BULLMQ_URL
+  if (raw == null) return {}
+  const url = String(raw).trim()
+  if (!url) return {}
+  return { connection: url }
+}
+
+/**
+ * BullMQ plans support size only (not latency).
+ *
+ * @param {string|symbol} strategy
+ * @returns {boolean}
+ */
+function supportsPlanStrategy(strategy) {
+  return String(strategy) === "jqs"
+}
+
 module.exports = {
   jobQueueLatency,
   jobQueueSize,
   JobQueueLatencyUnsupportedError,
+  planOptions,
+  planConnectionOptions,
+  supportsPlanStrategy,
 }

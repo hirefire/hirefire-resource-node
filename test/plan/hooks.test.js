@@ -1,0 +1,44 @@
+const Hooks = require("../../src/plan/hooks")
+
+describe("Plan.Hooks", () => {
+  test("defaults", () => {
+    expect(Hooks.planOptions("jqs", { a: 1 })).toEqual({})
+    expect(Hooks.planConnectionOptions()).toEqual({})
+    expect(Hooks.supportsPlanStrategy("jql")).toBe(true)
+    expect(Hooks.supportsPlanStrategy("jqs")).toBe(true)
+    expect(Hooks.supportsPlanStrategy("nope")).toBe(false)
+  })
+
+  test("extractPlanOptions allowlist and coerce", () => {
+    const schema = {
+      jqs: {
+        prioritized: "boolean",
+        limit: "non_negative_integer",
+      },
+    }
+    expect(
+      Hooks.extractPlanOptions(
+        "jqs",
+        {
+          prioritized: true,
+          limit: "10",
+          ignored: 1,
+          badLimit: 1.5,
+          badBool: "true",
+        },
+        schema,
+      ),
+    ).toEqual({ prioritized: true, limit: 10 })
+  })
+
+  test("coercePlanValue strict integer and boolean", () => {
+    expect(Hooks.coercePlanValue("boolean", true)).toBe(true)
+    expect(Hooks.coercePlanValue("boolean", false)).toBe(false)
+    expect(Hooks.coercePlanValue("boolean", "true")).toBeNull()
+    expect(Hooks.coercePlanValue("non_negative_integer", 0)).toBe(0)
+    expect(Hooks.coercePlanValue("non_negative_integer", -1)).toBeNull()
+    expect(Hooks.coercePlanValue("non_negative_integer", 1.5)).toBeNull()
+    expect(Hooks.coercePlanValue("non_negative_integer", "5")).toBe(5)
+    expect(Hooks.coercePlanValue("non_negative_integer", "5.0")).toBeNull()
+  })
+})

@@ -6,7 +6,7 @@ const { Client, RequestError } = require("../src/client")
 const VERSION = require("../src/version")
 
 const BASE = "https://data.hirefire.io"
-const BODY = '[{"name":"web","samples":{"1000":[]}}]'
+const BODY = '[{"name":"web","metrics":{"rqt":{"1000":[]}}}]'
 
 describe("Client", () => {
   let client
@@ -23,7 +23,9 @@ describe("Client", () => {
         "hirefire-agent": `Node-${VERSION}`,
       },
     })
-      .post("/metrics/ingest", [{ name: "web", samples: { 1000: [] } }])
+      .post("/metrics/ingest", [
+        { name: "web", metrics: { rqt: { 1000: [] } } },
+      ])
       .reply(200)
 
     await client.submitSamples(BODY)
@@ -34,6 +36,14 @@ describe("Client", () => {
   test("submitSamples returns null on unauthorized", async () => {
     nock(BASE).post("/metrics/ingest").reply(401)
     expect(await client.submitSamples(BODY)).toBeNull()
+  })
+
+  test("returns payload_too_large on 413", async () => {
+    nock(BASE)
+      .post("/metrics/ingest")
+      .reply(413, { error: "payload too large" })
+    const result = await client.submitSamples(BODY)
+    expect(result).toBe("payload_too_large")
   })
 
   test("submitSamples raises on server error", async () => {
@@ -123,15 +133,38 @@ describe("Client", () => {
   test("raises without a token", async () => {
     const tokenless = new Client({ token: null })
     await expect(tokenless.submitSamples("[]")).rejects.toThrow(
-      "HIREFIRE_TOKEN",
+      "HireFire token is not set",
     )
   })
 
   test("raises with an empty token", async () => {
     const tokenless = new Client({ token: "" })
     await expect(tokenless.submitSamples("[]")).rejects.toThrow(
-      "HIREFIRE_TOKEN",
+      "HireFire token is not set",
     )
+  })
+
+  test("blank data url falls back to default", async () => {
+    process.env.HIREFIRE_DATA_URL = "   "
+    const scope = nock(BASE).post("/metrics/ingest").reply(200)
+    await client.submitSamples(BODY)
+    expect(scope.isDone()).toBe(true)
+  })
+
+  test("slash only data url falls back to default", async () => {
+    process.env.HIREFIRE_DATA_URL = "///"
+    const scope = nock(BASE).post("/metrics/ingest").reply(200)
+    await client.submitSamples(BODY)
+    expect(scope.isDone()).toBe(true)
+  })
+
+  test("whitespace padded data url is stripped", async () => {
+    process.env.HIREFIRE_DATA_URL = "  https://custom.hirefire.io  "
+    const scope = nock("https://custom.hirefire.io")
+      .post("/metrics/ingest")
+      .reply(200)
+    await client.submitSamples(BODY)
+    expect(scope.isDone()).toBe(true)
   })
 
   test("uses a custom data url", async () => {
@@ -177,6 +210,17 @@ describe("Client", () => {
 
     expect(scope.isDone()).toBe(true)
   })
+
+  test("path prefix with trailing slash does not double the path", async () => {
+    process.env.HIREFIRE_DATA_URL = "https://custom.hirefire.io/prefix/"
+    const scope = nock("https://custom.hirefire.io")
+      .post("/prefix/metrics/ingest")
+      .reply(200)
+
+    await client.submitSamples(BODY)
+
+    expect(scope.isDone()).toBe(true)
+  })
 })
 
 describe("Client (persistent connection)", () => {
@@ -208,7 +252,7 @@ describe("Client (persistent connection)", () => {
     await client.submitSamples("[]")
 
     expect(connections.size).toBe(1)
-    client.close()
+    await client.close()
   })
 
   test("reconnects and retries once after a stale keep-alive socket", async () => {
@@ -228,7 +272,7 @@ describe("Client (persistent connection)", () => {
 
     expect(response.statusCode).toBe(200)
     expect(requests).toBe(3)
-    client.close()
+    await client.close()
   })
 
   test("does not retry a cold connection failure", async () => {
@@ -243,7 +287,7 @@ describe("Client (persistent connection)", () => {
       RequestError,
     )
     expect(requests).toBe(1)
-    client.close()
+    await client.close()
   })
 
   test("a response stream error is mapped to a request error", async () => {
@@ -260,7 +304,7 @@ describe("Client (persistent connection)", () => {
     await expect(promise).rejects.toBeInstanceOf(RequestError)
     await expect(promise).rejects.toThrow(/Network error/)
 
-    client.close()
+    await client.close()
   })
 
   test("retries once when a reused socket reads back a garbled response", async () => {
@@ -289,7 +333,7 @@ describe("Client (persistent connection)", () => {
 
     expect(response.statusCode).toBe(200)
     expect(requests).toBe(3)
-    client.close()
+    await client.close()
     await new Promise((resolve) => raw.close(resolve))
   })
 
@@ -301,13 +345,111 @@ describe("Client (persistent connection)", () => {
     const [socket] = connections
     const closed = new Promise((resolve) => socket.on("close", resolve))
 
-    client.close()
+    await client.close()
     await closed
 
     expect(connections.size).toBe(0)
   })
 
-  test("close is safe without a connection", () => {
-    expect(() => new Client({ token: "t" }).close()).not.toThrow()
+  test("close is safe without a connection", async () => {
+    await expect(new Client({ token: "t" }).close()).resolves.toBeUndefined()
+  })
+
+  test("does not retry twice on persistent stale keep-alive errors", async () => {
+    let requests = 0
+    await listen((req, res) => {
+      requests += 1
+      req.resume().on("end", () => {
+        if (requests === 1) {
+          res.end()
+          return
+        }
+        req.socket.destroy()
+      })
+    })
+    const client = new Client({ token: "t" })
+
+    await client.submitSamples("[]")
+    await expect(client.submitSamples("[]")).rejects.toBeInstanceOf(
+      RequestError,
+    )
+    // Warm succeeds once; second POST retries once (2 destroys) then raises.
+    expect(requests).toBe(3)
+    await client.close()
+  })
+
+  test("requestLease returns the response body string", async () => {
+    await listen((req, res) => {
+      req.resume().on("end", () => {
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "HireFire-Lease-Granted": "true",
+        })
+        res.end('{"version":1,"job_queues":[]}')
+      })
+    })
+    const client = new Client({ token: "t" })
+    const response = await client.requestLease("pid-1")
+    expect(response.body).toBe('{"version":1,"job_queues":[]}')
+    await client.close()
+  })
+
+  test("timeout on warm socket settles once without retry", async () => {
+    let requests = 0
+    await listen((req, res) => {
+      requests += 1
+      if (requests === 1) {
+        req.resume().on("end", () => res.end())
+        return
+      }
+      req.resume()
+    })
+    const client = new Client({ token: "t" }, { timeout: 0.15 })
+
+    await client.submitSamples("[]")
+    await expect(client.submitSamples("[]")).rejects.toThrow("timed out")
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    expect(requests).toBe(2)
+    await client.close()
+  })
+
+  test("close waits for in-flight requests", async () => {
+    let release
+    const gate = new Promise((resolve) => {
+      release = resolve
+    })
+    let completed = false
+    await listen((req, res) => {
+      req.resume().on("end", () => {
+        gate.then(() => {
+          completed = true
+          res.end()
+        })
+      })
+    })
+    const client = new Client({ token: "t" })
+    const inflight = client.submitSamples("[]")
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    const closePromise = client.close()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(completed).toBe(false)
+
+    release()
+    await inflight
+    await closePromise
+    expect(completed).toBe(true)
+  })
+
+  test("close swallows destroy failure", async () => {
+    await listen((req, res) => req.resume().on("end", () => res.end()))
+    const client = new Client({ token: "t" })
+    await client.submitSamples("[]")
+    expect(client._agent).not.toBeNull()
+    client._agent.destroy = () => {
+      throw new Error("destroy boom")
+    }
+    await expect(client.close()).resolves.toBeUndefined()
+    expect(client._agent).toBeNull()
   })
 })

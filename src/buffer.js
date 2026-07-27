@@ -1,53 +1,122 @@
+/**
+ * Nested metric buffer: name → strategy → second → bucket.
+ * RQT: { sum, count }. Non-RQT: bare number (latest-wins).
+ */
 class Buffer {
+  static SAMPLE_COUNT_LIMIT = 1_000_000
+
   constructor(ttl = 60) {
-    this._web = {}
-    this._workers = new Map()
-    this._cpu = Object.create(null)
+    this._metrics = Object.create(null)
     this._ttl = ttl
   }
 
-  sampleWeb(sample) {
+  /**
+   * @param {string} name
+   * @param {string} strategy
+   * @param {number} value
+   */
+  sample(name, strategy, value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return
+
     const timestamp = Math.floor(Date.now() / 1000)
-    prune(this._web, timestamp, this._ttl)
-    this._web[timestamp] = this._web[timestamp] || []
-    this._web[timestamp].push(sample)
-  }
-
-  sampleWorker(name, sample) {
-    this._workers.set(name, sample)
-  }
-
-  sampleCpu(name, value) {
-    const timestamp = Math.floor(Date.now() / 1000)
-    this._cpu[name] = this._cpu[name] || {}
-    prune(this._cpu[name], timestamp, this._ttl)
-    this._cpu[name][timestamp] = this._cpu[name][timestamp] || []
-    this._cpu[name][timestamp].push(value)
-  }
-
-  flush() {
-    const web = this._web
-    const workers = this._workers
-    const cpu = this._cpu
-    this._web = {}
-    this._workers = new Map()
-    this._cpu = Object.create(null)
-
-    return {
-      web,
-      workers: Array.from(workers, ([name, sample]) => ({ name, sample })),
-      cpu,
+    strategy = String(strategy)
+    const series = this._seriesFor(name, strategy)
+    prune(series, timestamp, this._ttl)
+    if (strategy === "rqt") {
+      let bucket = series[timestamp]
+      if (!bucket) {
+        bucket = { sum: 0, count: 0 }
+        series[timestamp] = bucket
+      }
+      if (bucket.count >= Buffer.SAMPLE_COUNT_LIMIT) return
+      bucket.sum += value
+      bucket.count += 1
+    } else {
+      series[timestamp] = value
     }
   }
 
-  repopulateWeb(data) {
-    const now = Math.floor(Date.now() / 1000)
-    Object.entries(data).forEach(([timestamp, samples]) => {
-      if (parseInt(timestamp) < now - this._ttl) return
-      const bucket = (this._web[timestamp] = this._web[timestamp] || [])
-      for (const sample of samples) bucket.push(sample)
-    })
+  flush() {
+    const metrics = this._metrics
+    this._metrics = Object.create(null)
+    return metrics
   }
+
+  discardInherited() {
+    this._metrics = Object.create(null)
+  }
+
+  /**
+   * @param {string} name
+   * @param {string} strategy
+   * @param {Record<string|number, {sum:number, count:number}>} data
+   */
+  repopulate(name, strategy, data) {
+    strategy = String(strategy)
+    if (strategy !== "rqt") return
+
+    const now = Math.floor(Date.now() / 1000)
+    let series = null
+    for (const [timestampKey, bucket] of Object.entries(data)) {
+      const timestamp = parseInt(timestampKey, 10)
+      if (timestamp < now - this._ttl) continue
+      const { sum, count } = rqtParts(bucket)
+      if (count <= 0) continue
+      if (!series) series = this._seriesFor(name, strategy)
+      const existing = series[timestamp]
+      if (
+        existing &&
+        typeof existing === "object" &&
+        !Array.isArray(existing)
+      ) {
+        series[timestamp] = clampRqt(existing.sum + sum, existing.count + count)
+      } else {
+        series[timestamp] = clampRqt(sum, count)
+      }
+    }
+    if (series) prune(series, now, this._ttl)
+  }
+
+  _seriesFor(name, strategy) {
+    if (!this._metrics[name]) this._metrics[name] = Object.create(null)
+    if (!this._metrics[name][strategy])
+      this._metrics[name][strategy] = Object.create(null)
+    return this._metrics[name][strategy]
+  }
+}
+
+function clampRqt(sum, count) {
+  if (count > Buffer.SAMPLE_COUNT_LIMIT) {
+    const mean = sum / count
+    return {
+      sum: mean * Buffer.SAMPLE_COUNT_LIMIT,
+      count: Buffer.SAMPLE_COUNT_LIMIT,
+    }
+  }
+  return { sum, count }
+}
+
+/**
+ * Shared rqt sum/count parse for buffer.repopulate and dispatcher encode/merge.
+ * @param {*} bucket
+ * @returns {{sum: number, count: number}}
+ */
+function rqtParts(bucket) {
+  if (bucket && typeof bucket === "object" && !Array.isArray(bucket)) {
+    // Preserve Infinity/NaN (Python float()) so encode can omit non-finite means.
+    // Missing keys default to 0 like Ruby/Python.
+    const sum =
+      bucket.sum === undefined || bucket.sum === null ? 0 : Number(bucket.sum)
+    const countRaw =
+      bucket.count === undefined || bucket.count === null
+        ? 0
+        : Math.trunc(Number(bucket.count))
+    return {
+      sum,
+      count: Number.isFinite(countRaw) ? countRaw : 0,
+    }
+  }
+  return { sum: 0, count: 0 }
 }
 
 function prune(buckets, now, ttl) {
@@ -56,8 +125,9 @@ function prune(buckets, now, ttl) {
 
   const cutoff = now - ttl
   keys.forEach((timestamp) => {
-    if (parseInt(timestamp) < cutoff) delete buckets[timestamp]
+    if (parseInt(timestamp, 10) < cutoff) delete buckets[timestamp]
   })
 }
 
 module.exports = Buffer
+module.exports.rqtParts = rqtParts

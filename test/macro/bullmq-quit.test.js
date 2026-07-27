@@ -9,6 +9,21 @@ jest.mock(
 const IORedis = require("ioredis")
 const { jobQueueSize } = require("../../src/macro/bullmq")
 
+function emptyQueueResults(count = 1) {
+  const rows = []
+  for (let i = 0; i < count; i++) {
+    rows.push(
+      [null, null],
+      [null, 0],
+      [null, 0],
+      [null, 0],
+      [null, 0],
+      [null, 0],
+    )
+  }
+  return rows
+}
+
 describe("BullMQ connection lifecycle", () => {
   let quit
   let exec
@@ -21,12 +36,14 @@ describe("BullMQ connection lifecycle", () => {
       lindex: jest.fn().mockReturnThis(),
       llen: jest.fn().mockReturnThis(),
       zcount: jest.fn().mockReturnThis(),
+      zcard: jest.fn().mockReturnThis(),
       exec,
     }
     IORedis.mockImplementation(() => ({
       pipeline: () => pipeline,
       scan: jest.fn().mockResolvedValue(["0", []]),
       quit,
+      on: jest.fn(),
     }))
   })
 
@@ -40,12 +57,60 @@ describe("BullMQ connection lifecycle", () => {
       pipeline: () => pipeline,
       scan,
       quit,
+      on: jest.fn(),
     }))
 
     await expect(
       jobQueueSize({ connection: "redis://localhost:6379/0" }),
     ).rejects.toThrow("redis down")
     expect(quit).toHaveBeenCalledTimes(1)
+  })
+
+  test("jobQueueSize registers error handler and sample timeouts", async () => {
+    exec.mockResolvedValue(emptyQueueResults(1))
+    const on = jest.fn()
+    IORedis.mockImplementation(() => ({
+      pipeline: () => pipeline,
+      scan: jest.fn().mockResolvedValue(["0", []]),
+      quit,
+      on,
+    }))
+
+    await jobQueueSize("default", { connection: "redis://localhost:6379/0" })
+
+    expect(on).toHaveBeenCalledWith("error", expect.any(Function))
+    expect(IORedis).toHaveBeenCalledWith(
+      "redis://localhost:6379/0",
+      expect.objectContaining({
+        maxRetriesPerRequest: 1,
+        connectTimeout: 5000,
+        commandTimeout: 5000,
+        retryStrategy: expect.any(Function),
+      }),
+    )
+  })
+
+  test("jobQueueSize lets caller connectionOptions override sample defaults", async () => {
+    exec.mockResolvedValue(emptyQueueResults(1))
+    IORedis.mockImplementation(() => ({
+      pipeline: () => pipeline,
+      quit,
+      on: jest.fn(),
+    }))
+
+    await jobQueueSize("default", {
+      connection: "redis://localhost:6379/0",
+      connectionOptions: { connectTimeout: 1234, maxRetriesPerRequest: 3 },
+    })
+
+    expect(IORedis).toHaveBeenCalledWith(
+      "redis://localhost:6379/0",
+      expect.objectContaining({
+        connectTimeout: 1234,
+        maxRetriesPerRequest: 3,
+        commandTimeout: 5000,
+      }),
+    )
   })
 
   test("jobQueueSize enumerates queues with SCAN not KEYS", async () => {
@@ -56,20 +121,12 @@ describe("BullMQ connection lifecycle", () => {
         ["bull:default:wait", "bull:mailer:active", "bull:other:meta"],
       ])
       .mockResolvedValueOnce(["0", ["bull:default:delayed"]])
-    exec.mockResolvedValue([
-      [null, null],
-      [null, 0],
-      [null, 0],
-      [null, 0],
-      [null, null],
-      [null, 0],
-      [null, 0],
-      [null, 0],
-    ])
+    exec.mockResolvedValue(emptyQueueResults(2))
     IORedis.mockImplementation(() => ({
       pipeline: () => pipeline,
       scan,
       quit,
+      on: jest.fn(),
     }))
 
     await expect(
@@ -96,6 +153,8 @@ describe("BullMQ connection lifecycle", () => {
       [null, 1],
       [null, 0],
       [null, 0],
+      [null, 0],
+      [null, 0],
     ])
 
     await expect(
@@ -103,9 +162,40 @@ describe("BullMQ connection lifecycle", () => {
         connection: "redis://localhost:6379/0",
       }),
     ).resolves.toBe(1)
-    expect(pipeline.llen).toHaveBeenCalledTimes(2)
+    expect(pipeline.llen).toHaveBeenCalledTimes(3)
     expect(pipeline.lindex).toHaveBeenCalledTimes(1)
     expect(pipeline.zcount).toHaveBeenCalledTimes(1)
+    expect(pipeline.zcard).toHaveBeenCalledTimes(1)
+  })
+
+  test("jobQueueSize counts prioritized and paused", async () => {
+    exec.mockResolvedValueOnce([
+      [null, null],
+      [null, 1],
+      [null, 2],
+      [null, 3],
+      [null, 4],
+      [null, 5],
+    ])
+
+    await expect(
+      jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
+    ).resolves.toBe(15)
+  })
+
+  test("jobQueueSize treats pipeline field errors as zero", async () => {
+    exec.mockResolvedValueOnce([
+      [null, null],
+      [null, 1],
+      [new Error("nope"), null],
+      [null, 2],
+      [null, 0],
+      [null, 0],
+    ])
+
+    await expect(
+      jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
+    ).resolves.toBe(3)
   })
 
   test("jobQueueSize disconnects when quit rejects after a pipeline failure", async () => {
@@ -116,6 +206,7 @@ describe("BullMQ connection lifecycle", () => {
       pipeline: () => pipeline,
       quit,
       disconnect,
+      on: jest.fn(),
     }))
 
     await expect(

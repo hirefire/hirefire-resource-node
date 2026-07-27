@@ -44,6 +44,21 @@ class Workers {
   }
 
   /**
+   * Case-insensitive match. Returned source keeps its canonical declared name for emit.
+   *
+   * @param {string} name
+   * @returns {import("./worker") | null}
+   */
+  findByName(name) {
+    const needle = String(name)
+    return (
+      this._workers.find(
+        (worker) => worker.name.toLowerCase() === needle.toLowerCase(),
+      ) || null
+    )
+  }
+
+  /**
    * @template T
    * @param {(worker: import("./worker")) => T} fn
    * @returns {T[]}
@@ -60,38 +75,47 @@ class Workers {
   }
 
   /**
-   * Samples every worker and buffers valid metric values.
+   * Samples a job-queue worker and buffers a valid metric under the given wire strategy.
    *
-   * A value is valid when it is a non-boolean, non-negative, finite number. Invalid or raised
-   * sampler results are logged and skipped, not re-raised.
-   *
+   * @param {import("./worker")} worker
+   * @param {string} strategy - `jql` or `jqs`
    * @returns {Promise<void>}
    */
-  async sample() {
-    for (const worker of this._workers) {
-      try {
-        const value = await worker.sample()
+  async sampleJobQueue(worker, strategy) {
+    if (!worker) return
 
-        if (!validSample(value)) {
-          this._logger().error(
-            `[HireFire] The sampler for dyno "${worker.name}" returned ` +
-              `${inspect(
-                value,
-              )}, expected a non-negative number. Sample dropped.`,
-          )
-          continue
-        }
+    strategy = String(strategy)
+    if (strategy !== "jql" && strategy !== "jqs") {
+      this._logger().error(
+        `[HireFire] Unknown job-queue strategy ${JSON.stringify(
+          strategy,
+        )} for ` + `${JSON.stringify(worker.name)}. Sample dropped.`,
+      )
+      return
+    }
 
-        this._configuration.buffer.sampleWorker(worker.name, value)
-      } catch (error) {
-        const reason =
-          error instanceof Error
-            ? `${error.name}: ${error.message}`
-            : inspect(error)
+    try {
+      const value = await worker.sample()
+
+      if (!validSample(value)) {
         this._logger().error(
-          `[HireFire] The sampler for dyno "${worker.name}" raised ${reason}`,
+          `[HireFire] The sampler for dyno "${worker.name}" returned ` +
+            `${inspect(
+              value,
+            )}, expected a non-negative number. Sample dropped.`,
         )
+        return
       }
+
+      this._configuration.buffer.sample(worker.name, strategy, Number(value))
+    } catch (error) {
+      const reason =
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : inspect(error)
+      this._logger().error(
+        `[HireFire] The sampler for dyno "${worker.name}" raised ${reason}`,
+      )
     }
   }
 
