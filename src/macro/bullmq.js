@@ -34,12 +34,13 @@ async function jobQueueLatency(...args) {
  */
 
 /**
- * Calculates the total job queue size across the specified queues. If no queues are specified, it
- * measures size across all queues.
+ * Calculates waiting job queue size (JQS) across the specified queues. Counts live wait,
+ * paused, and prioritized lists plus due delayed jobs (score ≤ now). Active (working) jobs
+ * are excluded. If no queues are specified, measures across all discovered queues.
  *
  * @overload
  * @param {...string} queues - Queue names. Omit to measure across all queues.
- * @returns {Promise<number>} Cumulative job queue size across the specified queues.
+ * @returns {Promise<number>} Cumulative waiting job count across the specified queues.
  * @example
  * // Calculate size across all queues
  * await jobQueueSize()
@@ -54,7 +55,7 @@ async function jobQueueLatency(...args) {
  * @overload
  * @param {...(string | BullMQOptions)} queuesAndOptions - Queue names, optionally followed by a
  *   {@link BullMQOptions} object.
- * @returns {Promise<number>} Cumulative job queue size across the specified queues.
+ * @returns {Promise<number>} Cumulative waiting job count across the specified queues.
  * @example
  * // Calculate size using the options.connection property
  * await jobQueueSize("default", { connection: "redis://localhost:6379/0" })
@@ -122,15 +123,16 @@ async function jobQueueSize(...args) {
 
     let totalCount = 0
     const pipeline = redis.pipeline()
-    const now = Date.now() * 0x1000
-    const cmdsPerQueue = 6
+    // Delayed scores: timestampMs * 0x1000 + sequence. Upper bound includes the full
+    // sequence nibble for the current millisecond.
+    const delayedUpper = (Date.now() + 1) * 0x1000 - 1
+    const cmdsPerQueue = 5
 
     for (const queue of queues) {
       pipeline.lindex(`bull:${queue}:wait`, -1)
       pipeline.llen(`bull:${queue}:wait`)
       pipeline.llen(`bull:${queue}:paused`)
-      pipeline.llen(`bull:${queue}:active`)
-      pipeline.zcount(`bull:${queue}:delayed`, "-inf", now)
+      pipeline.zcount(`bull:${queue}:delayed`, "-inf", delayedUpper)
       pipeline.zcard(`bull:${queue}:prioritized`)
     }
 
@@ -141,12 +143,11 @@ async function jobQueueSize(...args) {
       const lastWaitJob = pipelineValue(results[i])
       const waitCount = toCount(pipelineValue(results[i + 1]))
       const pausedCount = toCount(pipelineValue(results[i + 2]))
-      const activeCount = toCount(pipelineValue(results[i + 3]))
-      const delayedCount = toCount(pipelineValue(results[i + 4]))
-      const prioritizedCount = toCount(pipelineValue(results[i + 5]))
+      const delayedCount = toCount(pipelineValue(results[i + 3]))
+      const prioritizedCount = toCount(pipelineValue(results[i + 4]))
 
-      totalCount +=
-        waitCount + pausedCount + activeCount + delayedCount + prioritizedCount
+      // Waiting only: live (wait + paused + prioritized) + due delayed. Active excluded.
+      totalCount += waitCount + pausedCount + delayedCount + prioritizedCount
 
       if (typeof lastWaitJob === "string" && lastWaitJob.startsWith("0:")) {
         totalCount -= 1

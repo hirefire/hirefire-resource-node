@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Buffer RQT accumulates sum+count. Samples ignore non-finite values. Repopulate is RQT-only with mean-preserving clamp at the sample count limit.
 - `HIREFIRE_DATA_URL` strips whitespace and trailing slashes. Empty or slash-only values fall back to `https://data.hirefire.io`.
 - Configuration error surface is `MissingSamplerError` and `DuplicateDynoError` only.
+- BullMQ `jobQueueSize` is waiting-only: live (`wait` + `paused` + `prioritized`) plus due delayed (score ≤ now). Active (working) jobs are no longer counted. JQL stays unsupported. No `skip_working` flag (unlike Sidekiq).
 
 ### Removed
 

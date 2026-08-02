@@ -71,6 +71,31 @@ describe("BullMQ", () => {
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
   })
 
+  test("jobQueueSize excludes active-only jobs", async () => {
+    await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
+    expect(await redis.llen("bull:default:active")).toBe(2)
+    // Named queue: active is present but not waiting.
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
+  })
+
+  test("jobQueueSize counts waiting only when mixed with active", async () => {
+    await defaultQueue.add("liveJob", {})
+    await defaultQueue.add("dueDelayedJob", {}, { delay: 1 })
+    await redis.lpush("bull:default:active", "job-active-1")
+    jest.advanceTimersByTime(1)
+    // live wait + due delayed = 2. active excluded.
+    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
+    expect(await redis.llen("bull:default:active")).toBe(1)
+  })
+
+  test("jobQueueSize excludes future delayed until due", async () => {
+    await defaultQueue.add("futureDelayedJob", {}, { delay: 60_000 })
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
+    jest.advanceTimersByTime(60_000)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
+  })
+
   test("jobQueueSize coerces stringNumbers counts to a number", async () => {
     await defaultQueue.add("testJob", {})
     const count = await jobQueueSize("default", {
