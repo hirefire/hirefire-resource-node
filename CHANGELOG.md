@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Plan sample-wave lifecycle aligned with Ruby: `Plan.aroundJobQueueSample` brackets each dispatcher job-queue sample, every allowlisted macro exposes no-op `beforeSampleJobQueues` / `afterSampleJobQueues` / `reinitAfterFork`, and `Plan.reinitMacrosAfterFork` fans out reinit (Node has no fork call sites, ports kept for architecture parity).
 - `HireFire.boot()` for zero-config installs: starts the dispatcher when a token is present with no local dyno declarations.
 - Always-on request queue time (RQT) under the process identity or explicit `dyno("web")`, armed by platform web role (`DYNO` / `RENDER_SERVICE_TYPE`), middleware traffic, or an explicit HTTP registration.
 - Always-on CPU metrics under the resolved process identity (no `tracking: "cpu"` declaration).
@@ -41,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Sample-wave token fencing on the ports above: a raised `beforeSampleJobQueues` skips that adapter's `afterSampleJobQueues` (successful `null` still gets after). Hook errors log and do not abort the wave or remaining adapters.
 - Unresolved process identity no longer synthesizes RQT liveness heartbeats.
 - Soft identity re-resolves on every access and rebuilds always-on HTTP/CPU sources when the identity name changes.
 - BullMQ `jobQueueSize` counts `prioritized` and `paused` queues (and discovers them via SCAN), so priority and paused backlog are no longer undercounted. Pipeline command errors are treated as zero for that field rather than throwing.

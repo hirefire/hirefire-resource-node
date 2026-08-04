@@ -445,4 +445,351 @@ describe("Plan", () => {
       expect.stringContaining("no valid names"),
     )
   })
+
+  test("aroundJobQueueSample calls before and after on every adapter", async () => {
+    const events = []
+    const a = {
+      beforeSampleJobQueues: () => {
+        events.push(["before", "a"])
+        return "token_a"
+      },
+      afterSampleJobQueues: (token) => {
+        events.push(["after", "a", token])
+      },
+    }
+    const b = {
+      beforeSampleJobQueues: () => {
+        events.push(["before", "b"])
+        return "token_b"
+      },
+      afterSampleJobQueues: (token) => {
+        events.push(["after", "b", token])
+      },
+    }
+
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+    Object.defineProperty(Plan.ADAPTERS, "a", {
+      get: () => a,
+      configurable: true,
+      enumerable: true,
+    })
+    Object.defineProperty(Plan.ADAPTERS, "b", {
+      get: () => b,
+      configurable: true,
+      enumerable: true,
+    })
+
+    try {
+      const result = await Plan.aroundJobQueueSample(() => {
+        events.push("body")
+        return "ok"
+      }, configuration)
+      expect(result).toBe("ok")
+      expect(events).toEqual([
+        ["before", "a"],
+        ["before", "b"],
+        "body",
+        ["after", "a", "token_a"],
+        ["after", "b", "token_b"],
+      ])
+    } finally {
+      for (const key of Object.keys(Plan.ADAPTERS)) {
+        delete Plan.ADAPTERS[key]
+      }
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
+
+  test("aroundJobQueueSample runs after when body raises", async () => {
+    const afterTokens = []
+    const mod = {
+      beforeSampleJobQueues: () => "wave",
+      afterSampleJobQueues: (token) => {
+        afterTokens.push(token)
+      },
+    }
+
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+    Object.defineProperty(Plan.ADAPTERS, "x", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+
+    try {
+      await expect(
+        Plan.aroundJobQueueSample(async () => {
+          throw new Error("boom")
+        }, configuration),
+      ).rejects.toThrow("boom")
+      expect(afterTokens).toEqual(["wave"])
+    } finally {
+      for (const key of Object.keys(Plan.ADAPTERS)) {
+        delete Plan.ADAPTERS[key]
+      }
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
+
+  test("reinitMacrosAfterFork notifies every adapter", async () => {
+    const called = []
+    const a = {
+      reinitAfterFork: () => {
+        called.push("a")
+      },
+    }
+    const b = {
+      reinitAfterFork: () => {
+        called.push("b")
+      },
+    }
+
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+    Object.defineProperty(Plan.ADAPTERS, "a", {
+      get: () => a,
+      configurable: true,
+      enumerable: true,
+    })
+    Object.defineProperty(Plan.ADAPTERS, "b", {
+      get: () => b,
+      configurable: true,
+      enumerable: true,
+    })
+
+    try {
+      await Plan.reinitMacrosAfterFork(configuration)
+      expect(called).toEqual(["a", "b"])
+    } finally {
+      for (const key of Object.keys(Plan.ADAPTERS)) {
+        delete Plan.ADAPTERS[key]
+      }
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
+
+  test("aroundJobQueueSample continues when before raises and skips its after", async () => {
+    const events = []
+    const a = {
+      beforeSampleJobQueues: () => {
+        events.push(["before", "a"])
+        throw new Error("before-a")
+      },
+      afterSampleJobQueues: (token) => {
+        events.push(["after", "a", token])
+      },
+    }
+    const b = {
+      beforeSampleJobQueues: () => {
+        events.push(["before", "b"])
+        return "token_b"
+      },
+      afterSampleJobQueues: (token) => {
+        events.push(["after", "b", token])
+      },
+    }
+
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+    Object.defineProperty(Plan.ADAPTERS, "a", {
+      get: () => a,
+      configurable: true,
+      enumerable: true,
+    })
+    Object.defineProperty(Plan.ADAPTERS, "b", {
+      get: () => b,
+      configurable: true,
+      enumerable: true,
+    })
+
+    try {
+      const result = await Plan.aroundJobQueueSample(() => {
+        events.push("body")
+        return "ok"
+      }, configuration)
+      expect(result).toBe("ok")
+      expect(events).toEqual([
+        ["before", "a"],
+        ["before", "b"],
+        "body",
+        ["after", "b", "token_b"],
+      ])
+      expect(configuration.logger.error).toHaveBeenCalledWith(
+        expect.stringMatching(/beforeSampleJobQueues for "a" raised.*before-a/),
+      )
+    } finally {
+      for (const key of Object.keys(Plan.ADAPTERS)) {
+        delete Plan.ADAPTERS[key]
+      }
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
+
+  test("aroundJobQueueSample continues remaining afters when one after raises", async () => {
+    const events = []
+    const a = {
+      beforeSampleJobQueues: () => "token_a",
+      afterSampleJobQueues: () => {
+        events.push(["after", "a"])
+        throw new Error("after-a")
+      },
+    }
+    const b = {
+      beforeSampleJobQueues: () => "token_b",
+      afterSampleJobQueues: (token) => {
+        events.push(["after", "b", token])
+      },
+    }
+
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+    Object.defineProperty(Plan.ADAPTERS, "a", {
+      get: () => a,
+      configurable: true,
+      enumerable: true,
+    })
+    Object.defineProperty(Plan.ADAPTERS, "b", {
+      get: () => b,
+      configurable: true,
+      enumerable: true,
+    })
+
+    try {
+      await Plan.aroundJobQueueSample(() => {
+        events.push("body")
+      }, configuration)
+      expect(events).toEqual([
+        "body",
+        ["after", "a"],
+        ["after", "b", "token_b"],
+      ])
+      expect(configuration.logger.error).toHaveBeenCalledWith(
+        expect.stringMatching(/afterSampleJobQueues for "a" raised.*after-a/),
+      )
+    } finally {
+      for (const key of Object.keys(Plan.ADAPTERS)) {
+        delete Plan.ADAPTERS[key]
+      }
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
+
+  test("reinitMacrosAfterFork continues when one adapter raises", async () => {
+    const called = []
+    const a = {
+      reinitAfterFork: () => {
+        called.push("a")
+        throw new Error("reinit-a")
+      },
+    }
+    const b = {
+      reinitAfterFork: () => {
+        called.push("b")
+      },
+    }
+
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+    Object.defineProperty(Plan.ADAPTERS, "a", {
+      get: () => a,
+      configurable: true,
+      enumerable: true,
+    })
+    Object.defineProperty(Plan.ADAPTERS, "b", {
+      get: () => b,
+      configurable: true,
+      enumerable: true,
+    })
+
+    try {
+      await expect(
+        Plan.reinitMacrosAfterFork(configuration),
+      ).resolves.toBeUndefined()
+      expect(called).toEqual(["a", "b"])
+      expect(configuration.logger.error).toHaveBeenCalledWith(
+        expect.stringMatching(/reinitAfterFork for "a" raised.*reinit-a/),
+      )
+    } finally {
+      for (const key of Object.keys(Plan.ADAPTERS)) {
+        delete Plan.ADAPTERS[key]
+      }
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
+
+  test("allowlisted macros re-export sample-wave hooks as no-ops", () => {
+    const Hooks = require("../../src/plan/hooks")
+    for (const name of ["bull", "bullmq", "pg_boss"]) {
+      const macro = require(`../../src/macro/${name}`)
+      expect(macro.beforeSampleJobQueues).toBe(Hooks.beforeSampleJobQueues)
+      expect(macro.afterSampleJobQueues).toBe(Hooks.afterSampleJobQueues)
+      expect(macro.reinitAfterFork).toBe(Hooks.reinitAfterFork)
+      expect(macro.beforeSampleJobQueues()).toBeNull()
+      expect(macro.afterSampleJobQueues("token")).toBeUndefined()
+      expect(macro.reinitAfterFork()).toBeUndefined()
+    }
+  })
+
+  test("aroundJobQueueSample calls after with successful null token", async () => {
+    const afterTokens = []
+    const mod = {
+      beforeSampleJobQueues: () => null,
+      afterSampleJobQueues: (token) => {
+        afterTokens.push(token)
+      },
+    }
+
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+    Object.defineProperty(Plan.ADAPTERS, "x", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+
+    try {
+      const result = await Plan.aroundJobQueueSample(() => "ok", configuration)
+      expect(result).toBe("ok")
+      expect(afterTokens).toEqual([null])
+    } finally {
+      for (const key of Object.keys(Plan.ADAPTERS)) {
+        delete Plan.ADAPTERS[key]
+      }
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
+
+  test("aroundJobQueueSample with empty adapters still runs body", async () => {
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+
+    try {
+      const result = await Plan.aroundJobQueueSample(
+        () => "empty",
+        configuration,
+      )
+      expect(result).toBe("empty")
+      expect(configuration.logger.error).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
 })

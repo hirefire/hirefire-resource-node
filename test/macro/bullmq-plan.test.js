@@ -29,4 +29,14 @@ describe("BullMQ plan hooks", () => {
     expect(bullmq.supportsPlanStrategy("jqs")).toBe(true)
     expect(bullmq.supportsPlanStrategy("jql")).toBe(false)
   })
+
+  test("sample-wave hooks default to no-ops", () => {
+    const Hooks = require("../../src/plan/hooks")
+    expect(bullmq.beforeSampleJobQueues).toBe(Hooks.beforeSampleJobQueues)
+    expect(bullmq.afterSampleJobQueues).toBe(Hooks.afterSampleJobQueues)
+    expect(bullmq.reinitAfterFork).toBe(Hooks.reinitAfterFork)
+    expect(bullmq.beforeSampleJobQueues()).toBeNull()
+    expect(bullmq.afterSampleJobQueues("token")).toBeUndefined()
+    expect(bullmq.reinitAfterFork()).toBeUndefined()
+  })
 })

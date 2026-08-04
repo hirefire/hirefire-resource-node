@@ -2,7 +2,9 @@ const KNOWN_STRATEGIES = new Set(["jql", "jqs"])
 
 /**
  * Uniform plan hooks for every queue macro. Plan always calls these; adapters
- * override when they accept lease options or need connection options.
+ * override when they accept lease options, need connection options, or hold
+ * sample-wave / process-local state (defaults are no-ops so ports stay aligned
+ * with Ruby even when no adapter uses the lifecycle yet).
  */
 const Hooks = {
   /**
@@ -34,6 +36,41 @@ const Hooks = {
   supportsPlanStrategy(strategy) {
     return KNOWN_STRATEGIES.has(String(strategy))
   },
+
+  /**
+   * Open process-local state for one Dispatcher job-queue sample wave.
+   * Default is a no-op. Adapters with sample-scoped caches override and may
+   * return an opaque token for {@link Hooks.afterSampleJobQueues}.
+   *
+   * Called for every allowlisted macro on each job-queue sample wave, whether
+   * or not that adapter appears in the current lease plan. May be sync or
+   * return a Promise (Plan awaits either).
+   *
+   * @returns {*|null|Promise<*|null>} opaque token passed to `afterSampleJobQueues`
+   */
+  beforeSampleJobQueues() {
+    return null
+  },
+
+  /**
+   * Close process-local sample-wave state opened by
+   * {@link Hooks.beforeSampleJobQueues}. Default is a no-op. Called from
+   * `finally` even when a sampler raises. May be sync or return a Promise.
+   *
+   * @param {*} [_token] value returned by `beforeSampleJobQueues`
+   * @returns {void|Promise<void>}
+   */
+  afterSampleJobQueues(_token) {},
+
+  /**
+   * Reset process-local macro state after fork or abandoned inherited state.
+   * Default is a no-op. Node has no process fork model; the hook still exists
+   * so the surface matches Ruby/Python when a consumer appears. May be sync or
+   * return a Promise.
+   *
+   * @returns {void|Promise<void>}
+   */
+  reinitAfterFork() {},
 
   /**
    * Slice and coerce lease `options` using a strategy-keyed schema.

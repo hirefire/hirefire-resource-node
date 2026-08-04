@@ -3,6 +3,7 @@ const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
+const Hooks = require("../plan/hooks")
 
 // Lazy: core test cell and plan path load this module without installing ioredis.
 function loadIORedis() {
@@ -240,4 +241,7 @@ module.exports = {
   planOptions,
   planConnectionOptions,
   supportsPlanStrategy,
+  beforeSampleJobQueues: Hooks.beforeSampleJobQueues,
+  afterSampleJobQueues: Hooks.afterSampleJobQueues,
+  reinitAfterFork: Hooks.reinitAfterFork,
 }

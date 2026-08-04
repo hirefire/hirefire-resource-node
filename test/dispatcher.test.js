@@ -1292,6 +1292,91 @@ describe("Dispatcher", () => {
     expect(dispatcher._lastRqtSecond).toBe(1000)
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
   })
+
+  test("sampleJobQueues runs plan samples inside aroundJobQueueSample", async () => {
+    const Plan = require("../src/plan")
+    const order = []
+    const around = jest
+      .spyOn(Plan, "aroundJobQueueSample")
+      .mockImplementation(async (fn, configuration) => {
+        order.push("around-enter")
+        expect(configuration).toBe(config())
+        const result = await fn()
+        order.push("around-exit")
+        return result
+      })
+    const execute = jest
+      .spyOn(Plan, "execute")
+      .mockImplementation(async (entry, configuration) => {
+        order.push("execute")
+        expect(configuration).toBe(config())
+        expect(entry).toEqual(
+          expect.objectContaining({
+            adapter: expect.stringMatching(/^(bullmq|bull)$/),
+            strategy: "jqs",
+          }),
+        )
+      })
+    const executable = jest.spyOn(Plan, "executable").mockReturnValue(true)
+    const supportsStrategy = jest
+      .spyOn(Plan, "supportsStrategy")
+      .mockReturnValue(true)
+    const knownAdapter = jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
+
+    const dispatcher = config().dispatcher
+    dispatcher._lease._granted = true
+    dispatcher._lease._jobQueues = [
+      {
+        name: "worker",
+        adapter: "bullmq",
+        strategy: "jqs",
+        queues: ["default"],
+      },
+      {
+        name: "mailer",
+        adapter: "bull",
+        strategy: "jqs",
+        queues: ["mail"],
+      },
+    ]
+
+    try {
+      await dispatcher._sampleJobQueues()
+
+      expect(around).toHaveBeenCalledTimes(1)
+      expect(execute).toHaveBeenCalledTimes(2)
+      expect(execute).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+        }),
+        config(),
+      )
+      expect(execute).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          name: "mailer",
+          adapter: "bull",
+          strategy: "jqs",
+        }),
+        config(),
+      )
+      expect(order).toEqual([
+        "around-enter",
+        "execute",
+        "execute",
+        "around-exit",
+      ])
+    } finally {
+      around.mockRestore()
+      execute.mockRestore()
+      executable.mockRestore()
+      supportsStrategy.mockRestore()
+      knownAdapter.mockRestore()
+    }
+  })
 })
 
 function withTimeout(promise, ms, message) {

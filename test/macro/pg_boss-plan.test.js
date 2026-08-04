@@ -62,4 +62,14 @@ describe("pg-boss plan hooks", () => {
     // String coercion of plain string strategies only.
     expect(pgBossMacro.supportsPlanStrategy("JQS")).toBe(false)
   })
+
+  test("sample-wave hooks default to no-ops", () => {
+    const Hooks = require("../../src/plan/hooks")
+    expect(pgBossMacro.beforeSampleJobQueues).toBe(Hooks.beforeSampleJobQueues)
+    expect(pgBossMacro.afterSampleJobQueues).toBe(Hooks.afterSampleJobQueues)
+    expect(pgBossMacro.reinitAfterFork).toBe(Hooks.reinitAfterFork)
+    expect(pgBossMacro.beforeSampleJobQueues()).toBeNull()
+    expect(pgBossMacro.afterSampleJobQueues("token")).toBeUndefined()
+    expect(pgBossMacro.reinitAfterFork()).toBeUndefined()
+  })
 })

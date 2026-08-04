@@ -1,4 +1,5 @@
 const { unpack, normalizeQueues } = require("../utility")
+const Hooks = require("../plan/hooks")
 
 const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://127.0.0.1:5432/postgres"
@@ -344,5 +345,8 @@ module.exports = {
   planOptions,
   planConnectionOptions,
   supportsPlanStrategy,
+  beforeSampleJobQueues: Hooks.beforeSampleJobQueues,
+  afterSampleJobQueues: Hooks.afterSampleJobQueues,
+  reinitAfterFork: Hooks.reinitAfterFork,
   _resetBlockedColumnCacheForTests,
 }

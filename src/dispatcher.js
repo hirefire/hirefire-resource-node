@@ -349,15 +349,17 @@ class Dispatcher {
   }
 
   async _sampleJobQueues() {
-    const localWorkers = this._configuration.workers
+    await Plan.aroundJobQueueSample(async () => {
+      const localWorkers = this._configuration.workers
 
-    for (const entry of this._lease.jobQueues) {
-      if (this._adapterPresent(entry)) {
-        await this._samplePlanAdapter(entry, localWorkers)
-      } else {
-        await this._sampleStrategyOnly(entry, localWorkers)
+      for (const entry of this._lease.jobQueues) {
+        if (this._adapterPresent(entry)) {
+          await this._samplePlanAdapter(entry, localWorkers)
+        } else {
+          await this._sampleStrategyOnly(entry, localWorkers)
+        }
       }
-    }
+    }, this._configuration)
   }
 
   async _samplePlanAdapter(entry, localWorkers) {

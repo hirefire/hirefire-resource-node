@@ -62,4 +62,14 @@ describe("Bull plan hooks", () => {
     expect(bull.planOptions("jqs", null)).toEqual({})
     expect(bull.planOptions(undefined, undefined)).toEqual({})
   })
+
+  test("sample-wave hooks default to no-ops", () => {
+    const Hooks = require("../../src/plan/hooks")
+    expect(bull.beforeSampleJobQueues).toBe(Hooks.beforeSampleJobQueues)
+    expect(bull.afterSampleJobQueues).toBe(Hooks.afterSampleJobQueues)
+    expect(bull.reinitAfterFork).toBe(Hooks.reinitAfterFork)
+    expect(bull.beforeSampleJobQueues()).toBeNull()
+    expect(bull.afterSampleJobQueues("token")).toBeUndefined()
+    expect(bull.reinitAfterFork()).toBeUndefined()
+  })
 })

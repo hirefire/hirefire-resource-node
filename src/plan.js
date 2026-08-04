@@ -67,6 +67,91 @@ const Plan = {
   },
 
   /**
+   * Run `fn` as one job-queue sample wave. Every allowlisted macro receives
+   * `beforeSampleJobQueues` / `afterSampleJobQueues` (defaults no-op). Dispatcher
+   * must not know adapter cache details. Hooks may be sync or return a Promise
+   * (both are awaited). Only adapters whose before completed without throwing
+   * receive after (token fencing, including successful null tokens).
+   *
+   * @template T
+   * @param {() => (T|Promise<T>)} fn body for this wave
+   * @param {import("./configuration")|null|undefined} [configuration]
+   * @returns {Promise<T>} resolves to `fn`'s return value
+   */
+  async aroundJobQueueSample(fn, configuration) {
+    const logger = configuration && configuration.logger
+    // Only adapters whose before completed are recorded. If before raises,
+    // after is skipped for that adapter (Ruby Plan.around_job_queue_sample).
+    const tokens = Object.create(null)
+
+    for (const name of Object.keys(this.ADAPTERS)) {
+      try {
+        const macro = this.ADAPTERS[name]
+        if (macro && typeof macro.beforeSampleJobQueues === "function") {
+          tokens[name] = await macro.beforeSampleJobQueues()
+        } else {
+          tokens[name] = null
+        }
+      } catch (error) {
+        safeLog(
+          logger,
+          "error",
+          `[HireFire] beforeSampleJobQueues for ${JSON.stringify(
+            name,
+          )} raised ` + formatHookError(error),
+        )
+      }
+    }
+
+    try {
+      return await fn()
+    } finally {
+      for (const name of Object.keys(tokens)) {
+        try {
+          const macro = this.ADAPTERS[name]
+          if (macro && typeof macro.afterSampleJobQueues === "function") {
+            await macro.afterSampleJobQueues(tokens[name])
+          }
+        } catch (error) {
+          safeLog(
+            logger,
+            "error",
+            `[HireFire] afterSampleJobQueues for ${JSON.stringify(
+              name,
+            )} raised ` + formatHookError(error),
+          )
+        }
+      }
+    }
+  },
+
+  /**
+   * Notify every allowlisted macro after fork / abandoned inherited state.
+   * Node has no process fork model; keep the fan-out so ports match Ruby.
+   *
+   * @param {import("./configuration")|null|undefined} [configuration]
+   * @returns {Promise<void>}
+   */
+  async reinitMacrosAfterFork(configuration) {
+    const logger = configuration && configuration.logger
+    for (const name of Object.keys(this.ADAPTERS)) {
+      try {
+        const macro = this.ADAPTERS[name]
+        if (macro && typeof macro.reinitAfterFork === "function") {
+          await macro.reinitAfterFork()
+        }
+      } catch (error) {
+        safeLog(
+          logger,
+          "error",
+          `[HireFire] reinitAfterFork for ${JSON.stringify(name)} raised ` +
+            formatHookError(error),
+        )
+      }
+    }
+  },
+
+  /**
    * @param {object} entry
    * @param {import("./configuration")} configuration
    * @returns {Promise<void>}
@@ -253,6 +338,13 @@ function formatSampleValue(value) {
   } catch {
     return typeof value
   }
+}
+
+function formatHookError(error) {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`
+  }
+  return String(error)
 }
 
 module.exports = Plan
