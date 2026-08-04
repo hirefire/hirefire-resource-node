@@ -13,13 +13,7 @@ const { jobQueueSize } = require("../../src/macro/bullmq")
 function emptyQueueResults(count = 1) {
   const rows = []
   for (let i = 0; i < count; i++) {
-    rows.push(
-      [null, null],
-      [null, 0],
-      [null, 0],
-      [null, 0],
-      [null, 0],
-    )
+    rows.push([null, null], [null, 0], [null, 0], [null, 0], [null, 0])
   }
   return rows
 }

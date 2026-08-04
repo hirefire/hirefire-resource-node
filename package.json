@@ -53,9 +53,21 @@
       "types": "./types/middleware/next.d.ts",
       "default": "./src/middleware/next.js"
     },
+    "./macro/bull": {
+      "types": "./types/macro/bull.d.ts",
+      "default": "./src/macro/bull.js"
+    },
     "./macro/bullmq": {
       "types": "./types/macro/bullmq.d.ts",
       "default": "./src/macro/bullmq.js"
+    },
+    "./macro/pg-boss": {
+      "types": "./types/macro/pg_boss.d.ts",
+      "default": "./src/macro/pg_boss.js"
+    },
+    "./macro/pg_boss": {
+      "types": "./types/macro/pg_boss.d.ts",
+      "default": "./src/macro/pg_boss.js"
     }
   },
   "typesVersions": {

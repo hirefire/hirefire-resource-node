@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `HireFire.boot()` for zero-config installs: starts the dispatcher when a token is present with no local dyno declarations.
 - Always-on request queue time (RQT) under the process identity or explicit `dyno("web")`, armed by platform web role (`DYNO` / `RENDER_SERVICE_TYPE`), middleware traffic, or an explicit HTTP registration.
 - Always-on CPU metrics under the resolved process identity (no `tracking: "cpu"` declaration).
-- Lease collection plans: grant bodies can drive job-queue sampling via allowlisted adapters (BullMQ `jqs`), with plan-vs-local precedence and strategy-only local dynos.
+- Lease collection plans: grant bodies can drive job-queue sampling via allowlisted adapters (BullMQ and classic Bull `jqs`, pg-boss `jql`/`jqs`), with plan-vs-local precedence and strategy-only local dynos.
+- Classic Bull (OptimalBits/`bull`) macro: waiting-only `jobQueueSize` (`LLEN wait` + `LLEN paused` + due `ZCOUNT delayed`), `jobQueueLatency` unsupported, plan hooks, `HIREFIRE_BULL_URL`, plan adapter key `bull`.
+- pg-boss macro: waiting-only `jobQueueSize` and `jobQueueLatency` via read-only SQL on `${schema}.job` (`state < 'active' AND start_after <= now()` and `NOT blocked` when the column exists). Plan adapter key `pg_boss`, env `HIREFIRE_PG_BOSS_URL` / `HIREFIRE_PG_BOSS_SCHEMA`, exports `hirefire-resource/macro/pg-boss` and `hirefire-resource/macro/pg_boss`. Official support pg-boss 10–12.
 - `HireFire.configure` is additive and re-evaluates job-queue loop entry after late dyno registrations (`ensureJobQueueLoop`).
 - Identity helpers: whitespace strip, Fir mixed-case dyno suffixes, `platformHttpRole`, case-insensitive web role matching.
 - Token strip: whitespace-only tokens are absent. Explicit `""` still forces reporting off.

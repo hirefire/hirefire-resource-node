@@ -32,4 +32,9 @@ if [ -z "$major" ] || [ -z "$testfile" ]; then
 fi
 
 npm install "${package}@${major}" --no-save --no-audit --no-fund --silent
+# pg-boss matrix path is a prefix matching integration + lifecycle + plan suites.
+# runInBand keeps Pool spy lifecycle tests from racing real Pool integration in one worker.
+if [ "$package" = "pg-boss" ]; then
+  exec npx --no-install jest --runInBand "$testfile"
+fi
 exec npx --no-install jest "$testfile"

@@ -41,6 +41,16 @@
       "package": "bullmq",
       "majors": [4, 5],
       "test": "test/macro/bullmq.test.js"
+    },
+    {
+      "package": "bull",
+      "majors": [4],
+      "test": "test/macro/bull.test.js"
+    },
+    {
+      "package": "pg-boss",
+      "majors": [10, 11, 12],
+      "test": "test/macro/pg_boss"
     }
   ]
 }

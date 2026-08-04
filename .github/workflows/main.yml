@@ -55,6 +55,19 @@ jobs:
         image: redis:7
         ports:
           - 6379:6379
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.list) }}
@@ -69,6 +82,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Run tests
+        env:
+          DATABASE_URL: postgres://postgres@localhost:5432/postgres
         run: bin/run-cell "${{ matrix.package }}" "${{ matrix.major }}" "${{ matrix.test }}"
 
   publish:

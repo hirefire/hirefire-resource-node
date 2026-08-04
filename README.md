@@ -22,8 +22,12 @@ and Job Queue Size. Set `HIREFIRE_TOKEN` for the library to run.
 **Supported worker libraries:**
 
 - BullMQ 4+ (size only, no job queue latency)
+- Bull 4+ (classic OptimalBits/bull, size only, no job queue latency)
+- pg-boss 10–12 (job queue size and latency via read-only SQL, plan key `pg_boss`)
 
 The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
+
+**pg-boss connection:** optional `HIREFIRE_PG_BOSS_URL` (then `DATABASE_URL`), schema via `HIREFIRE_PG_BOSS_SCHEMA` or options (default `pgboss`). The macro opens Postgres with the app’s `pg` driver. It never claims jobs.
 
 **TypeScript:**
 
@@ -46,10 +50,10 @@ Learn more at the [home page][HireFire].
 
 ## Development
 
-Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Redis for the BullMQ macro tests runs in a container, and mise installs the pinned Node versions from `.tool-versions`. `bin/services up` starts it on a Docker-assigned free host port recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops it and removes `.env`. Because the ports are assigned fresh at startup, multiple worktrees can run side by side without conflicting with each other or with any system-wide Redis.
+Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Redis (BullMQ / classic Bull) and Postgres (pg-boss) for the macro tests run in containers, and mise installs the pinned Node versions from `.tool-versions`. `bin/services up` starts them on Docker-assigned free host ports recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops them and removes `.env`. Because the ports are assigned fresh at startup, multiple worktrees can run side by side without conflicting with each other or with any system-wide Redis/Postgres.
 
 - Run `bin/setup` to prepare the environment.
-- Run `bin/services up` / `bin/services down` to start / stop the Redis container.
+- Run `bin/services up` / `bin/services down` to start / stop Redis and Postgres.
 - See `npm run` for common tasks (`npm run check`, `npm run format`, `npm test`, `npm run test:core`).
 
 ## Release

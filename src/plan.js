@@ -13,8 +13,14 @@ const MAX_QUEUE_NAME_BYTES = 128
  */
 const Plan = {
   ADAPTERS: {
+    get bull() {
+      return require("./macro/bull")
+    },
     get bullmq() {
       return require("./macro/bullmq")
+    },
+    get pg_boss() {
+      return require("./macro/pg_boss")
     },
   },
 
@@ -24,7 +30,11 @@ const Plan = {
   MAX_QUEUE_NAME_BYTES,
 
   anyAllowlistedJobQueueLibraryLoaded() {
-    return libraryLoaded("bullmq")
+    return (
+      libraryLoaded("bullmq") ||
+      libraryLoaded("bull") ||
+      libraryLoaded("pg_boss")
+    )
   },
 
   knownAdapter(adapter) {
@@ -164,9 +174,19 @@ const Plan = {
 }
 
 function libraryLoaded(adapter) {
-  if (String(adapter) !== "bullmq") return false
+  const name = String(adapter)
+  if (name === "pg_boss") {
+    try {
+      require.resolve("pg-boss")
+      require.resolve("pg")
+      return true
+    } catch {
+      return false
+    }
+  }
+  if (name !== "bullmq" && name !== "bull") return false
   try {
-    require.resolve("bullmq")
+    require.resolve(name)
     return true
   } catch {
     return false

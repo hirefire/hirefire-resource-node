@@ -12,6 +12,8 @@ describe("Plan", () => {
 
   test("known adapter and strategy", () => {
     expect(Plan.knownAdapter("bullmq")).toBe(true)
+    expect(Plan.knownAdapter("bull")).toBe(true)
+    expect(Plan.knownAdapter("pg_boss")).toBe(true)
     expect(Plan.knownAdapter("sidekiq")).toBe(false)
     expect(Plan.knownStrategy("jqs")).toBe(true)
     expect(Plan.knownStrategy("jql")).toBe(true)
@@ -20,6 +22,99 @@ describe("Plan", () => {
   test("supports strategy jqs only for bullmq", () => {
     expect(Plan.supportsStrategy("bullmq", "jqs")).toBe(true)
     expect(Plan.supportsStrategy("bullmq", "jql")).toBe(false)
+  })
+
+  test("supports strategy jqs only for bull", () => {
+    expect(Plan.supportsStrategy("bull", "jqs")).toBe(true)
+    expect(Plan.supportsStrategy("bull", "jql")).toBe(false)
+  })
+
+  test("supports strategy jql and jqs for pg_boss", () => {
+    expect(Plan.supportsStrategy("pg_boss", "jqs")).toBe(true)
+    expect(Plan.supportsStrategy("pg_boss", "jql")).toBe(true)
+    expect(Plan.supportsStrategy("pg_boss", "rpm")).toBe(false)
+  })
+
+  test("libraryLoaded for pg_boss requires both pg-boss and pg", () => {
+    // Patch plan.js's own require.resolve (Jest workers do not share the test
+    // file's require.resolve; Module._resolveFilename is also bypassed).
+    const planModule = require.cache[require.resolve("../../src/plan")]
+    const originalResolve = planModule.require.resolve
+    const present = new Set(["pg-boss", "pg"])
+
+    const mockResolve = function resolve(request, options) {
+      if (request === "pg-boss" || request === "pg") {
+        if (!present.has(request)) {
+          const err = new Error(`Cannot find module '${request}'`)
+          err.code = "MODULE_NOT_FOUND"
+          throw err
+        }
+        return `/virtual-hirefire/${request}/index.js`
+      }
+      return originalResolve.call(planModule.require, request, options)
+    }
+    mockResolve.paths = originalResolve.paths
+    planModule.require.resolve = mockResolve
+
+    try {
+      present.delete("pg")
+      expect(Plan.libraryLoaded("pg_boss")).toBe(false)
+      expect(Plan.executable("pg_boss")).toBe(false)
+
+      present.add("pg")
+      present.delete("pg-boss")
+      expect(Plan.libraryLoaded("pg_boss")).toBe(false)
+      expect(Plan.executable("pg_boss")).toBe(false)
+
+      present.add("pg-boss")
+      present.add("pg")
+      expect(Plan.libraryLoaded("pg_boss")).toBe(true)
+      expect(Plan.executable("pg_boss")).toBe(true)
+    } finally {
+      planModule.require.resolve = originalResolve
+    }
+  })
+
+  test("libraryLoaded isolates bull from bullmq package names", () => {
+    const planModule = require.cache[require.resolve("../../src/plan")]
+    const originalResolve = planModule.require.resolve
+    const present = new Set()
+
+    const mockResolve = function resolve(request, options) {
+      if (request === "bull" || request === "bullmq") {
+        if (!present.has(request)) {
+          const err = new Error(`Cannot find module '${request}'`)
+          err.code = "MODULE_NOT_FOUND"
+          throw err
+        }
+        return `/virtual-hirefire/${request}/index.js`
+      }
+      return originalResolve.call(planModule.require, request, options)
+    }
+    mockResolve.paths = originalResolve.paths
+    planModule.require.resolve = mockResolve
+
+    try {
+      expect(Plan.libraryLoaded("bull")).toBe(false)
+      expect(Plan.libraryLoaded("bullmq")).toBe(false)
+
+      present.add("bullmq")
+      expect(Plan.libraryLoaded("bullmq")).toBe(true)
+      expect(Plan.libraryLoaded("bull")).toBe(false)
+      expect(Plan.executable("bull")).toBe(false)
+
+      present.delete("bullmq")
+      present.add("bull")
+      expect(Plan.libraryLoaded("bull")).toBe(true)
+      expect(Plan.libraryLoaded("bullmq")).toBe(false)
+      expect(Plan.executable("bullmq")).toBe(false)
+
+      present.add("bullmq")
+      expect(Plan.libraryLoaded("bull")).toBe(true)
+      expect(Plan.libraryLoaded("bullmq")).toBe(true)
+    } finally {
+      planModule.require.resolve = originalResolve
+    }
   })
 
   test("supports strategy rejects unknown adapter and strategy", () => {
@@ -33,6 +128,20 @@ describe("Plan", () => {
       {
         name: "worker",
         adapter: "bullmq",
+        strategy: "jql",
+        queues: ["default"],
+      },
+      configuration,
+    )
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
+    expect(configuration.logger.error).toHaveBeenCalled()
+  })
+
+  test("execute skips jql bull", async () => {
+    await Plan.execute(
+      {
+        name: "worker",
+        adapter: "bull",
         strategy: "jql",
         queues: ["default"],
       },

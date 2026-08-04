@@ -21,17 +21,23 @@ up() {
   fi
 
   redis_port="$(docker compose port redis 6379 | cut -d: -f2)"
+  postgres_port="$(docker compose port postgres 5432 | cut -d: -f2)"
 
-  if [ -z "$redis_port" ]; then
+  if [ -z "$redis_port" ] || [ -z "$postgres_port" ]; then
     echo "Could not determine the published ports." >&2
     exit 1
   fi
 
   if [ "$started" -eq 1 ] || [ ! -f .env ]; then
-    printf 'REDIS_PORT=%s\nREDIS_URL=redis://localhost:%s/0\n' "$redis_port" "$redis_port" > .env
+    {
+      printf 'REDIS_PORT=%s\nREDIS_URL=redis://localhost:%s/0\n' "$redis_port" "$redis_port"
+      printf 'POSTGRES_PORT=%s\nDATABASE_URL=postgres://postgres@localhost:%s/postgres\n' \
+        "$postgres_port" "$postgres_port"
+    } > .env
   fi
 
   echo "Redis -> localhost:${redis_port}"
+  echo "Postgres -> localhost:${postgres_port}"
 }
 
 down() {
