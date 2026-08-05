@@ -1,6 +1,12 @@
 const Queue = require("bull")
-const { jobQueueLatency, jobQueueSize } = require("../../src/macro/bull")
+const {
+  jobQueueLatency,
+  jobQueueSize,
+  jobQueueWorking,
+} = require("../../src/macro/bull")
 const { JobQueueLatencyUnsupportedError } = require("../../src/errors")
+const Plan = require("../../src/plan")
+const Configuration = require("../../src/configuration")
 const IORedis = require("ioredis")
 
 const redisURL = `redis://127.0.0.1:${process.env.REDIS_PORT || "6379"}/0`
@@ -348,5 +354,89 @@ describe("Bull", () => {
     // flushdb already wiped. Explicit re-flush for this case.
     await redis.flushdb()
     expect(await jobQueueSize({ connection: redisURL })).toBe(0)
+  })
+
+  test("jobQueueWorking idle is zero", async () => {
+    expect(await jobQueueWorking({ connection: redisURL })).toBe(0)
+    expect(await jobQueueWorking("default", { connection: redisURL })).toBe(0)
+  })
+
+  test("jobQueueWorking counts active and filters queues", async () => {
+    await redis.lpush("bull:default:active", "a1")
+    await redis.lpush("bull:mailer:active", "m1", "m2")
+    await defaultQueue.add({})
+
+    expect(await jobQueueWorking({ connection: redisURL })).toBe(3)
+    expect(await jobQueueWorking("default", { connection: redisURL })).toBe(1)
+    expect(await jobQueueWorking("mailer", { connection: redisURL })).toBe(2)
+    expect(await jobQueueWorking("critical", { connection: redisURL })).toBe(0)
+    expect(
+      await jobQueueWorking("default", "mailer", { connection: redisURL }),
+    ).toBe(3)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
+    expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
+  })
+
+  test("plan execute bull jqs also samples wrk", async () => {
+    await redis.lpush("bull:default:active", "a1", "a2")
+    await defaultQueue.add({})
+
+    const configuration = new Configuration()
+    configuration.logger = { info() {}, warn() {}, error: jest.fn() }
+    const prev = process.env.HIREFIRE_BULL_URL
+    process.env.HIREFIRE_BULL_URL = redisURL
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bull",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      const flushed = configuration.buffer.flush()
+      expect(flushed.worker.jqs).toBeDefined()
+      expect(flushed.worker.wrk).toBeDefined()
+      const jqs = Object.values(flushed.worker.jqs)[0]
+      const wrk = Object.values(flushed.worker.wrk)[0]
+      expect(jqs).toBe(await jobQueueSize("default", { connection: redisURL }))
+      expect(wrk).toBe(
+        await jobQueueWorking("default", { connection: redisURL }),
+      )
+      expect(wrk).toBe(2)
+      expect(jqs).toBe(1)
+    } finally {
+      if (prev === undefined) delete process.env.HIREFIRE_BULL_URL
+      else process.env.HIREFIRE_BULL_URL = prev
+    }
+  })
+
+  test("plan execute bull empty queues samples all wrk", async () => {
+    await redis.lpush("bull:default:active", "a1")
+    await redis.lpush("bull:mailer:active", "m1")
+
+    const configuration = new Configuration()
+    configuration.logger = { info() {}, warn() {}, error: jest.fn() }
+    const prev = process.env.HIREFIRE_BULL_URL
+    process.env.HIREFIRE_BULL_URL = redisURL
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bull",
+          strategy: "jqs",
+          queues: [],
+        },
+        configuration,
+      )
+      const flushed = configuration.buffer.flush()
+      const wrk = Object.values(flushed.worker.wrk)[0]
+      expect(wrk).toBe(2)
+      expect(wrk).toBe(await jobQueueWorking({ connection: redisURL }))
+    } finally {
+      if (prev === undefined) delete process.env.HIREFIRE_BULL_URL
+      else process.env.HIREFIRE_BULL_URL = prev
+    }
   })
 })

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Job-queue **working** count via `jobQueueWorking` for BullMQ and classic Bull (`LLEN active`) and pg-boss (`state = 'active'`). Plan path samples nested strategy **`wrk`** unconditionally next to each `jql`/`jqs` entry (same queues and connection options). Failures drop only `wrk`. Not folded into waiting JQL/JQS.
 - Plan sample-wave lifecycle aligned with Ruby: `Plan.aroundJobQueueSample` brackets each dispatcher job-queue sample, every allowlisted macro exposes no-op `beforeSampleJobQueues` / `afterSampleJobQueues` / `reinitAfterFork`, and `Plan.reinitMacrosAfterFork` fans out reinit (Node has no fork call sites, ports kept for architecture parity).
 - `HireFire.boot()` for zero-config installs: starts the dispatcher when a token is present with no local dyno declarations.
 - Always-on request queue time (RQT) under the process identity or explicit `dyno("web")`, armed by platform web role (`DYNO` / `RENDER_SERVICE_TYPE`), middleware traffic, or an explicit HTTP registration.

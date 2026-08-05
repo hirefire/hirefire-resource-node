@@ -94,6 +94,28 @@ describe("Dispatcher", () => {
     expect(Object.values(bodies[0][0].metrics.rqt)[0]).toEqual([10, 2])
   })
 
+  test("dispatches jqs and wrk as sibling bare numbers", async () => {
+    stubLease()
+    const bodies = captureIngestBodies()
+    const dispatcher = configureWebAndWorkers()
+
+    freezeTime(2500)
+    config().buffer.sample("worker", "jqs", 12)
+    config().buffer.sample("worker", "wrk", 3)
+    await dispatcher._dispatchTick()
+
+    expect(bodies.length).toBeGreaterThan(0)
+    const entry = bodies[bodies.length - 1].find((e) => e.name === "worker")
+    expect(entry).toBeDefined()
+    const jqsLeaf = entry.metrics.jqs["2500"]
+    const wrkLeaf = entry.metrics.wrk["2500"]
+    expect(jqsLeaf).toBe(12)
+    expect(wrkLeaf).toBe(3)
+    expect(typeof jqsLeaf).toBe("number")
+    expect(typeof wrkLeaf).toBe("number")
+    expect(Array.isArray(wrkLeaf)).toBe(false)
+  })
+
   test("vector C encode mean and count", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()

@@ -792,4 +792,151 @@ describe("Plan", () => {
       Object.defineProperties(Plan.ADAPTERS, original)
     }
   })
+
+  test("execute samples wrk when macro implements jobQueueWorking", async () => {
+    const mod = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+      jobQueueSize: async (...queues) => {
+        expect(queues.slice(0, -1)).toEqual(["default"])
+        return 7
+      },
+      jobQueueWorking: async (...queues) => {
+        expect(queues.slice(0, -1)).toEqual(["default"])
+        return 3
+      },
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      const data = configuration.buffer.flush()
+      expect(Object.values(data.worker.jqs)[0]).toBe(7)
+      expect(Object.values(data.worker.wrk)[0]).toBe(3)
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
+  test("execute skips wrk when macro lacks jobQueueWorking", async () => {
+    const mod = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+      jobQueueSize: async () => 5,
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      const data = configuration.buffer.flush()
+      expect(Object.values(data.worker.jqs)[0]).toBe(5)
+      expect(data.worker.wrk).toBeUndefined()
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
+  test("execute keeps jqs when jobQueueWorking raises", async () => {
+    const mod = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+      jobQueueSize: async () => 9,
+      jobQueueWorking: async () => {
+        throw new Error("wrk boom")
+      },
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      const data = configuration.buffer.flush()
+      expect(Object.values(data.worker.jqs)[0]).toBe(9)
+      expect(data.worker.wrk).toBeUndefined()
+      expect(configuration.logger.error).toHaveBeenCalled()
+      const messages = configuration.logger.error.mock.calls.map((c) =>
+        String(c[0]),
+      )
+      expect(messages.some((m) => m.includes("Plan working sampler"))).toBe(
+        true,
+      )
+      expect(messages.some((m) => m.includes("wrk boom"))).toBe(true)
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
+  test("execute drops invalid wrk keeps jqs", async () => {
+    const mod = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+      jobQueueSize: async () => 4,
+      jobQueueWorking: async () => -2,
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      const data = configuration.buffer.flush()
+      expect(Object.values(data.worker.jqs)[0]).toBe(4)
+      expect(data.worker.wrk).toBeUndefined()
+      const messages = configuration.logger.error.mock.calls.map((c) =>
+        String(c[0]),
+      )
+      expect(messages.some((m) => m.includes("wrk sample dropped"))).toBe(true)
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
 })

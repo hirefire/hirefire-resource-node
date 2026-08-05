@@ -165,6 +165,76 @@ async function jobQueueSize(...args) {
   }
 }
 
+/**
+ * Counts in-flight (working) jobs: LLEN of each queue's `active` list. Empty
+ * queue list measures every discovered queue. Never folded into JQS. Plan
+ * records under nested strategy `wrk`.
+ *
+ * @async
+ * @param {...any} args - Queue names, optionally followed by a {@link BullMQOptions} object.
+ * @returns {Promise<number>} Cumulative active job count.
+ * @example
+ * await jobQueueWorking()
+ * @example
+ * await jobQueueWorking("default", "mailer")
+ */
+async function jobQueueWorking(...args) {
+  const IORedis = loadIORedis()
+  let { queues, options } = unpack(args)
+  queues = normalizeQueues(queues)
+
+  const connection =
+    options.connection ||
+    process.env.REDIS_TLS_URL ||
+    process.env.REDIS_URL ||
+    process.env.REDISTOGO_URL ||
+    process.env.REDISCLOUD_URL ||
+    process.env.OPENREDIS_URL ||
+    "redis://localhost:6379/0"
+
+  const userConnectionOptions = options.connectionOptions || {}
+  const redis =
+    typeof connection === "object" && connection !== null
+      ? new IORedis({
+          ...SAMPLE_REDIS_OPTIONS,
+          ...connection,
+          ...userConnectionOptions,
+        })
+      : new IORedis(connection, {
+          ...SAMPLE_REDIS_OPTIONS,
+          ...userConnectionOptions,
+        })
+
+  redis.on("error", () => {})
+
+  try {
+    if (queues.length === 0) {
+      queues = await enumerateQueues(redis)
+    }
+
+    let totalCount = 0
+    const pipeline = redis.pipeline()
+    for (const queue of queues) {
+      pipeline.llen(`bull:${queue}:active`)
+    }
+
+    const results = await pipeline.exec()
+    if (!results) return 0
+
+    for (const tuple of results) {
+      totalCount += toCount(pipelineValue(tuple))
+    }
+
+    return totalCount
+  } finally {
+    try {
+      await redis.quit()
+    } catch {
+      redis.disconnect()
+    }
+  }
+}
+
 async function enumerateQueues(redis) {
   const uniqueQueueNames = new Set()
   let cursor = "0"
@@ -237,6 +307,7 @@ function supportsPlanStrategy(strategy) {
 module.exports = {
   jobQueueLatency,
   jobQueueSize,
+  jobQueueWorking,
   JobQueueLatencyUnsupportedError,
   planOptions,
   planConnectionOptions,

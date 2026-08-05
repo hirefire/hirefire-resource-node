@@ -142,6 +142,33 @@ async function jobQueueLatency(...args) {
 }
 
 /**
+ * Counts in-flight (working) jobs: rows with `state = 'active'`. Empty queue
+ * list measures all names. Never folded into JQL/JQS. Plan records under `wrk`.
+ *
+ * @async
+ * @param {...any} args - Queue names, optionally followed by a {@link PgBossOptions} object.
+ * @returns {Promise<number>} Cumulative active job count.
+ * @example
+ * await jobQueueWorking()
+ * @example
+ * await jobQueueWorking("email", "sms")
+ */
+async function jobQueueWorking(...args) {
+  return withConnection(args, async (client, queues, schema) => {
+    const parts = [`state = 'active'`]
+    if (queues.length) parts.push(`name = ANY($1::text[])`)
+    const sql = `
+      SELECT COUNT(*)::bigint AS job_queue_working
+      FROM ${schema}.job
+      WHERE ${parts.join("\n  AND ")}
+    `
+    const values = queues.length ? [queues] : []
+    const { rows } = await client.query(sql, values)
+    return Number(rows[0].job_queue_working) || 0
+  })
+}
+
+/**
  * @param {string} _strategy
  * @param {*} _options
  * @returns {object}
@@ -342,6 +369,7 @@ function _resetBlockedColumnCacheForTests() {
 module.exports = {
   jobQueueLatency,
   jobQueueSize,
+  jobQueueWorking,
   planOptions,
   planConnectionOptions,
   supportsPlanStrategy,

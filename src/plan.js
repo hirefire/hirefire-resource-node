@@ -229,21 +229,27 @@ const Plan = {
         return
       }
 
-      const value = await method(...queues, options)
+      const ok = await sampleJobStrategy(
+        configuration,
+        name,
+        strategy,
+        method,
+        queues,
+        options,
+        logger,
+      )
+      if (!ok) return
 
-      if (!validSample(value)) {
-        safeLog(
+      if (typeof macro.jobQueueWorking === "function") {
+        await sampleWorking(
+          configuration,
+          name,
+          macro.jobQueueWorking,
+          queues,
+          options,
           logger,
-          "error",
-          `[HireFire] Plan sampler for ${JSON.stringify(name)} returned ` +
-            `${formatSampleValue(
-              value,
-            )}, expected a non-negative number. Sample dropped.`,
         )
-        return
       }
-
-      configuration.buffer.sample(name, strategy, Number(value))
     } catch (error) {
       const reason =
         error instanceof Error
@@ -256,6 +262,79 @@ const Plan = {
       )
     }
   },
+}
+
+/**
+ * Primary jql/jqs sample. Returns true when a value was buffered.
+ * @returns {Promise<boolean>}
+ */
+async function sampleJobStrategy(
+  configuration,
+  name,
+  strategy,
+  method,
+  queues,
+  options,
+  logger,
+) {
+  const value = await method(...queues, options)
+
+  if (!validSample(value)) {
+    safeLog(
+      logger,
+      "error",
+      `[HireFire] Plan sampler for ${JSON.stringify(name)} returned ` +
+        `${formatSampleValue(
+          value,
+        )}, expected a non-negative number. Sample dropped.`,
+    )
+    return false
+  }
+
+  configuration.buffer.sample(name, strategy, Number(value))
+  return true
+}
+
+/**
+ * Companion in-flight series for adapters that implement jobQueueWorking.
+ * Failures log and do not drop the job strategy sample.
+ * @returns {Promise<void>}
+ */
+async function sampleWorking(
+  configuration,
+  name,
+  method,
+  queues,
+  options,
+  logger,
+) {
+  try {
+    const wrk = await method(...queues, options)
+    if (!validSample(wrk)) {
+      safeLog(
+        logger,
+        "error",
+        `[HireFire] Plan working sampler for ${JSON.stringify(name)} returned ` +
+          `${formatSampleValue(
+            wrk,
+          )}, expected a non-negative number. wrk sample dropped.`,
+      )
+      return
+    }
+    configuration.buffer.sample(name, "wrk", Number(wrk))
+  } catch (error) {
+    const reason =
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error)
+    safeLog(
+      logger,
+      "error",
+      `[HireFire] Plan working sampler for ${JSON.stringify(
+        name,
+      )} raised ${reason}`,
+    )
+  }
 }
 
 function libraryLoaded(adapter) {

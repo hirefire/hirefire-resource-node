@@ -4,6 +4,7 @@ const { Pool } = require("pg")
 const {
   jobQueueLatency,
   jobQueueSize,
+  jobQueueWorking,
   _resetBlockedColumnCacheForTests,
 } = require("../../src/macro/pg_boss")
 const Plan = require("../../src/plan")
@@ -618,6 +619,75 @@ describe("pg-boss", () => {
         const jqlValues = Object.values(flushed.worker.jql)
         expect(jqsValues[0]).toBe(2)
         expect(jqlValues[0]).toBeGreaterThanOrEqual(15)
+      },
+    )
+  })
+
+  test("jobQueueWorking idle is zero", async () => {
+    expect(await jobQueueWorking(sampleOpts)).toBe(0)
+    expect(await jobQueueWorking("email", sampleOpts)).toBe(0)
+  })
+
+  test("jobQueueWorking counts active and filters queues", async () => {
+    await insertJob(pool, { name: "email", state: "active" })
+    await insertJob(pool, { name: "sms", state: "active" })
+    await insertJob(pool, { name: "sms", state: "active" })
+    await insertJob(pool, { name: "email", state: "created" })
+
+    expect(await jobQueueWorking(sampleOpts)).toBe(3)
+    expect(await jobQueueWorking("email", sampleOpts)).toBe(1)
+    expect(await jobQueueWorking("sms", sampleOpts)).toBe(2)
+    expect(await jobQueueWorking("critical", sampleOpts)).toBe(0)
+    expect(await jobQueueWorking("email", "sms", sampleOpts)).toBe(3)
+    expect(await jobQueueSize("email", sampleOpts)).toBe(1)
+    expect(await jobQueueSize("sms", sampleOpts)).toBe(0)
+  })
+
+  test("plan path samples wrk companion with jqs and jql", async () => {
+    await insertJob(pool, { name: "email", state: "active" })
+    await insertJob(pool, { name: "email", state: "created" })
+    await insertJob(pool, { name: "sms", state: "active" })
+
+    const configuration = new Configuration()
+    configuration.logger = { info() {}, warn() {}, error: jest.fn() }
+
+    await withEnv(
+      {
+        HIREFIRE_PG_BOSS_URL: postgresURL,
+        HIREFIRE_PG_BOSS_SCHEMA: SCHEMA,
+      },
+      async () => {
+        await Plan.execute(
+          {
+            name: "worker",
+            adapter: "pg_boss",
+            strategy: "jqs",
+            queues: ["email"],
+          },
+          configuration,
+        )
+        let flushed = configuration.buffer.flush()
+        expect(Object.values(flushed.worker.jqs)[0]).toBe(1)
+        expect(Object.values(flushed.worker.wrk)[0]).toBe(1)
+        expect(Object.values(flushed.worker.wrk)[0]).toBe(
+          await jobQueueWorking("email", sampleOpts),
+        )
+
+        await Plan.execute(
+          {
+            name: "worker",
+            adapter: "pg_boss",
+            strategy: "jql",
+            queues: [],
+          },
+          configuration,
+        )
+        flushed = configuration.buffer.flush()
+        expect(flushed.worker.jql).toBeDefined()
+        expect(Object.values(flushed.worker.wrk)[0]).toBe(2)
+        expect(Object.values(flushed.worker.wrk)[0]).toBe(
+          await jobQueueWorking(sampleOpts),
+        )
       },
     )
   })
