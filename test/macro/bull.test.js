@@ -246,9 +246,7 @@ describe("Bull", () => {
     // active-only queue names is pinned in bull-quit (pipeline key spies).
     await redis.lpush("bull:active-only:active", "job-a1", "job-a2")
     expect(await redis.llen("bull:active-only:active")).toBe(2)
-    expect(
-      await jobQueueSize("active-only", { connection: redisURL }),
-    ).toBe(0)
+    expect(await jobQueueSize("active-only", { connection: redisURL })).toBe(0)
     expect(await jobQueueSize({ connection: redisURL })).toBe(0)
   })
 
@@ -283,7 +281,11 @@ describe("Bull", () => {
     jest.setSystemTime(frozenNow)
 
     await redis.zadd("bull:default:delayed", delayedUpper, "job-due-edge")
-    await redis.zadd("bull:default:delayed", delayedUpper + 1, "job-future-edge")
+    await redis.zadd(
+      "bull:default:delayed",
+      delayedUpper + 1,
+      "job-future-edge",
+    )
     // Raw epoch as score would look "due" under a broken max=Date.now() bound.
     await redis.zadd("bull:default:delayed", frozenNow, "job-raw-epoch-score")
     expect(await redis.zcard("bull:default:delayed")).toBe(3)

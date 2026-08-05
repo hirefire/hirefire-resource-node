@@ -314,7 +314,9 @@ async function sampleWorking(
       safeLog(
         logger,
         "error",
-        `[HireFire] Plan working sampler for ${JSON.stringify(name)} returned ` +
+        `[HireFire] Plan working sampler for ${JSON.stringify(
+          name,
+        )} returned ` +
           `${formatSampleValue(
             wrk,
           )}, expected a non-negative number. wrk sample dropped.`,
@@ -324,9 +326,7 @@ async function sampleWorking(
     configuration.buffer.sample(name, "wrk", Number(wrk))
   } catch (error) {
     const reason =
-      error instanceof Error
-        ? `${error.name}: ${error.message}`
-        : String(error)
+      error instanceof Error ? `${error.name}: ${error.message}` : String(error)
     safeLog(
       logger,
       "error",

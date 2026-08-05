@@ -391,9 +391,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
     delete process.env.DATABASE_URL
     try {
       mockEmptySize()
-      await expect(
-        jobQueueSize({ connection: "" }),
-      ).resolves.toBe(0)
+      await expect(jobQueueSize({ connection: "" })).resolves.toBe(0)
       expect(poolSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           connectionString: "postgres://from-env-after-blank/jobs",

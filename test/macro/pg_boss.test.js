@@ -244,9 +244,7 @@ describe("pg-boss", () => {
       "completed",
       "failed",
     ])
-    expect(
-      rows.every((r) => r.age_from_start_after >= 200),
-    ).toBe(true)
+    expect(rows.every((r) => r.age_from_start_after >= 200)).toBe(true)
 
     expect(await jobQueueSize("email", sampleOpts)).toBe(0)
     expect(await jobQueueSize(sampleOpts)).toBe(0)
@@ -326,9 +324,7 @@ describe("pg-boss", () => {
   test("blank queue names are dropped so empty list measures all queues", async () => {
     await insertJob(pool, { name: "email" })
     await insertJob(pool, { name: "sms" })
-    expect(
-      await jobQueueSize("  ", "", null, undefined, sampleOpts),
-    ).toBe(2)
+    expect(await jobQueueSize("  ", "", null, undefined, sampleOpts)).toBe(2)
     expect(await jobQueueSize("email", "  ", sampleOpts)).toBe(1)
   })
 
@@ -541,9 +537,7 @@ describe("pg-boss", () => {
         HIREFIRE_PG_BOSS_SCHEMA: SCHEMA,
       },
       async () => {
-        expect(
-          await jobQueueSize("email", { connection: postgresURL }),
-        ).toBe(1)
+        expect(await jobQueueSize("email", { connection: postgresURL })).toBe(1)
       },
     )
   })

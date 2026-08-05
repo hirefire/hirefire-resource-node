@@ -16,11 +16,7 @@ function emptyQueueResults(count = 1) {
 function loadBullWithMockedIORedis(clientFactory) {
   jest.resetModules()
   const IORedis = jest.fn().mockImplementation(clientFactory)
-  jest.doMock(
-    "ioredis",
-    () => IORedis,
-    { virtual: true },
-  )
+  jest.doMock("ioredis", () => IORedis, { virtual: true })
   // Also install under the absolute path real packages resolve to, so a
   // previously-resolved real ioredis cannot win over the virtual mock.
   try {
@@ -410,16 +406,18 @@ describe("Bull connection lifecycle", () => {
 
   test("jobQueueSize SCAN ignores completed/failed/repeat-only and never uses KEYS", async () => {
     const keys = jest.fn()
-    const scan = jest.fn().mockResolvedValueOnce([
-      "0",
-      [
-        "bull:done-only:completed",
-        "bull:fail-only:failed",
-        "bull:repeat-only:repeat",
-        "bull:meta-only:meta-paused",
-        "bull:real:wait",
-      ],
-    ])
+    const scan = jest
+      .fn()
+      .mockResolvedValueOnce([
+        "0",
+        [
+          "bull:done-only:completed",
+          "bull:fail-only:failed",
+          "bull:repeat-only:repeat",
+          "bull:meta-only:meta-paused",
+          "bull:real:wait",
+        ],
+      ])
     exec.mockResolvedValue(emptyQueueResults(1))
     ;({ IORedis, jobQueueSize } = loadBullWithMockedIORedis(() => ({
       pipeline: () => pipeline,
