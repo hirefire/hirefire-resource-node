@@ -19,7 +19,7 @@ describe("Koa", () => {
   })
 
   test("passes through without a token", async () => {
-    HireFire.configuration.dyno("web")
+    process.env.DYNO = "web.1"
     const response = await request(app.callback())
       .get("/")
       .set("X-Request-Start", String(Date.now() - 1000))
@@ -33,7 +33,7 @@ describe("Koa", () => {
     process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
     const second = Math.floor(Date.now() / 1000)
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
-    HireFire.configuration.dyno("web")
+    process.env.DYNO = "web.1"
 
     const response = await request(app.callback())
       .get("/")
@@ -51,7 +51,7 @@ describe("Koa", () => {
     process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
     const second = Math.floor(Date.now() / 1000)
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
-    HireFire.configuration.dyno("web")
+    process.env.DYNO = "web.1"
 
     const response = await request(app.callback())
       .get("/")

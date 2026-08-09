@@ -18,9 +18,8 @@ const safeLog = require("./log")
  */
 
 /**
- * Thrown when {@link Configuration#dyno} cannot resolve a source because a non-`"web"` name was
- * given without a sampler. Bare `dyno("web")` is valid: the `"web"` name implies http without a
- * sampler.
+ * Thrown when {@link Configuration#dyno} cannot resolve a source because a name other than
+ * `"web"` was given without a sampler. Bare `dyno("web")` is a backwards-compatible no-op.
  */
 class MissingSamplerError extends Error {
   /**
@@ -58,8 +57,8 @@ const MAX_NAME_BYTES = 128
 class Configuration {
   constructor() {
     /**
-     * The explicit HTTP source once declared via {@link Configuration#dyno}("web"), otherwise `null`.
-     * Always-on RQT still reports under {@link Configuration#httpName} when no explicit HTTP source is set.
+     * Always `null`. Kept for readers that still check `configuration.http`. Request queue
+     * time uses always-on sources under {@link Configuration#httpName} (process identity).
      * @type {import("./web") | null}
      */
     this.http = null
@@ -108,6 +107,7 @@ class Configuration {
     this._cpuUnresolvedWarned = false
     this._rqtUnresolvedWarned = false
     this._identityNameTooLongWarned = false
+    this._bareWebDynoWarned = false
   }
 
   /**
@@ -147,27 +147,25 @@ class Configuration {
   }
 
   /**
-   * Declares a process by dyno name (Heroku Procfile-shaped). No `tracking` options: CPU is
-   * always-on when identity resolves, and RQT is armed by platform web role, middleware traffic,
-   * or the `"web"` name convention below.
+   * Declares a process by dyno name (Heroku Procfile-shaped).
    *
-   * Resolution: a sampler function tracks job-queue metrics (`jql` / `jqs`). The name `"web"`
-   * (case-insensitive) tracks http on its own. Otherwise a sampler is required.
+   * A sampler function registers a local job-queue source. Prefer zero-config for request
+   * queue time and CPU, and lease plan adapters in the HireFire UI for managed job queues.
    *
-   * Prefer zero-config ({@link HireFire#boot} + token) for request queue time, CPU, and
-   * lease-driven job-queue metrics. Use {@link Configuration#dyno} for local job-queue sampler
-   * functions and optional explicit `web` http registration.
+   * Bare `dyno("web")` (no sampler, name `"web"` case-insensitive) is accepted for 1.x
+   * backwards compatibility but does nothing: RQT is armed only by platform web role and
+   * middleware traffic. A once-per-process warning explains that the line can be removed.
+   * `dyno("web", sampler)` still registers a job-queue sampler under `"web"`.
    *
    * @overload
-   * @param {string} name - The process name. The "web" name (case-insensitive) implies http.
+   * @param {string} name - The process name. Bare `"web"` is a no-op with a once-warn.
    * @returns {void}
    * @throws {TypeError} The name is empty/whitespace-only, exceeds 128 bytes, more than two
    *   arguments, or a non-function second argument is given.
-   * @throws {MissingSamplerError} A non-"web" name given without a sampler.
-   * @throws {DuplicateDynoError} The name was already declared for the same source kind, or a
-   *   second http process was declared.
+   * @throws {MissingSamplerError} A name other than `"web"` given without a sampler.
+   * @throws {DuplicateDynoError} The name was already declared for the same source kind.
    * @example
-   * config.dyno("web") // optional; "web" implies http (zero-config usually enough)
+   * config.dyno("web") // no-op BC; safe to remove
    * config.dyno("worker", () => jobQueueSize("default"))
    */
   /**
@@ -198,21 +196,22 @@ class Configuration {
 
     name = coerceName(name)
 
-    let source
     if (typeof sampler === "function") {
-      source = "job_queue"
-    } else if (name.toLowerCase() === "web") {
-      source = "http"
-    } else {
-      throw new MissingSamplerError(
-        `config.dyno("${name}") could not be resolved: it needs a sampler function ` +
-          `(job-queue metrics). Only the "web" name implies http on its own. ` +
-          `RQT is always-on via platform web role or middleware traffic; ` +
-          `CPU is always-on when process identity resolves.`,
-      )
+      this._register(name, "job_queue", sampler)
+      return
     }
 
-    this._register(name, source, typeof sampler === "function" ? sampler : null)
+    if (name.toLowerCase() === "web") {
+      this._warnBareWebDynoOnce()
+      return
+    }
+
+    throw new MissingSamplerError(
+      `config.dyno("${name}") could not be resolved: it needs a sampler function ` +
+        `(job-queue metrics). Request queue time is always-on via platform web role or ` +
+        `middleware traffic; CPU is always-on when process identity resolves. ` +
+        `Bare config.dyno("web") is a no-op and can be removed.`,
+    )
   }
 
   /**
@@ -240,14 +239,12 @@ class Configuration {
   /**
    * Process name used for request-queue-time metrics.
    *
-   * Prefer an explicit HTTP source name when declared via {@link Configuration#dyno}. Otherwise the
-   * resolved process identity. No invented default (e.g. not `"web"`): without a real name there is
-   * nothing reliable to report under.
+   * Resolved process identity only. No invented default (e.g. not `"web"`): without a real
+   * name there is nothing reliable to report under.
    *
    * @returns {string | null}
    */
   get httpName() {
-    if (this.http) return this.http.name
     return this._softIdentity()
   }
 
@@ -266,25 +263,21 @@ class Configuration {
    *
    * Arming layers (any one is enough):
    * 1. **Traffic-first (universal):** middleware has sampled (`markHttpActive`).
-   * 2. **Explicit:** HTTP source declared via `dyno("web")`.
-   * 3. **Platform role (optional pre-traffic):** Heroku process type `"web"` or Render
+   * 2. **Platform role (optional pre-traffic):** Heroku process type `"web"` or Render
    *    `RENDER_SERVICE_TYPE=web`.
    *
    * @returns {boolean}
    */
   get rqtEnabled() {
-    return Boolean(this.http || this._httpActive || Identity.platformHttpRole())
+    return Boolean(this._httpActive || Identity.platformHttpRole())
   }
 
   /**
-   * The HTTP source used for sampling, creating an always-on source when none was declared
-   * and a report name is known.
+   * The HTTP source used for sampling, creating an always-on source when a report name is known.
    *
    * @returns {import("./web") | null}
    */
   get httpSource() {
-    if (this.http) return this.http
-
     const name = this.httpName
     if (name == null) {
       if (this.token && (this._httpActive || Identity.platformHttpRole())) {
@@ -354,16 +347,7 @@ class Configuration {
       )
     }
 
-    if (source === "http") {
-      if (this.http) {
-        throw new DuplicateDynoError(
-          `"${name}" conflicts with the earlier http declaration for "${this.http.name}". ` +
-            `Request metrics are collected from this process's own http traffic, so only one ` +
-            `HTTP source can be declared, under any name.`,
-        )
-      }
-      this.http = new Web(this._canonicalName(name), this)
-    } else if (source === "job_queue") {
+    if (source === "job_queue") {
       this.workers.add(new Worker(this._canonicalName(name), sampler))
     }
 
@@ -373,13 +357,9 @@ class Configuration {
   _canonicalName(name) {
     for (const key of this._sourcesByName.keys()) {
       if (key.toLowerCase() === name.toLowerCase()) {
-        const candidates = [
-          this.http && this.http.name,
-          ...this.workers.map((w) => w.name),
-        ].filter(Boolean)
-        const existing = candidates.find(
-          (n) => n.toLowerCase() === name.toLowerCase(),
-        )
+        const existing = [...this.workers]
+          .map((w) => w.name)
+          .find((n) => n.toLowerCase() === name.toLowerCase())
         return existing || name
       }
     }
@@ -408,6 +388,18 @@ class Configuration {
     )
   }
 
+  _warnBareWebDynoOnce() {
+    if (this._bareWebDynoWarned) return
+    this._bareWebDynoWarned = true
+    safeLog(
+      this.logger,
+      "warn",
+      '[HireFire] config.dyno("web") without a sampler is no longer necessary. ' +
+        "Request queue time is armed by platform web identity (for example DYNO type web " +
+        "or RENDER_SERVICE_TYPE=web) and by HTTP middleware traffic. You can remove this line.",
+    )
+  }
+
   _warnRqtUnresolvedOnce() {
     if (this._rqtUnresolvedWarned) return
     this._rqtUnresolvedWarned = true
@@ -416,7 +408,7 @@ class Configuration {
       "warn",
       "[HireFire] Request queue time samples dropped: process identity " +
         "is unresolved. Set HIREFIRE_SERVICE_NAME, or rely on DYNO / RENDER_SERVICE_NAME where " +
-        'available (or declare config.dyno("web")).',
+        "available.",
     )
   }
 

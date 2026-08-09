@@ -51,7 +51,7 @@ describe("Sails", () => {
     process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
     const second = Math.floor(Date.now() / 1000)
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
-    HireFire.configuration.dyno("web")
+    process.env.DYNO = "web.1"
 
     await request(app)
       .get("/")
@@ -67,7 +67,7 @@ describe("Sails", () => {
     process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
     const second = Math.floor(Date.now() / 1000)
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
-    HireFire.configuration.dyno("web")
+    process.env.DYNO = "web.1"
 
     await request(app)
       .get("/")

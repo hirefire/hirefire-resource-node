@@ -41,7 +41,8 @@ describe("HireFire", () => {
       .mockImplementation(() => {})
 
     const hirefire = new HireFire()
-    hirefire.configure((config) => config.dyno("web"))
+    process.env.DYNO = "web.1"
+    hirefire.configure(() => {})
 
     expect(start).toHaveBeenCalled()
     expect(ensure).toHaveBeenCalled()
@@ -53,7 +54,8 @@ describe("HireFire", () => {
       .mockReturnValue(true)
 
     const hirefire = new HireFire()
-    hirefire.configure((config) => config.dyno("web"))
+    process.env.DYNO = "web.1"
+    hirefire.configure(() => {})
 
     expect(start).not.toHaveBeenCalled()
   })
@@ -65,7 +67,8 @@ describe("HireFire", () => {
       .mockReturnValue(true)
 
     const hirefire = new HireFire()
-    hirefire.configure((config) => config.dyno("web"))
+    process.env.DYNO = "web.1"
+    hirefire.configure(() => {})
 
     expect(start).not.toHaveBeenCalled()
   })
@@ -77,7 +80,8 @@ describe("HireFire", () => {
       .mockReturnValue(true)
 
     const hirefire = new HireFire()
-    hirefire.configure((config) => config.dyno("web"))
+    process.env.DYNO = "web.1"
+    hirefire.configure(() => {})
 
     expect(start).not.toHaveBeenCalled()
   })
@@ -91,7 +95,7 @@ describe("HireFire", () => {
     const hirefire = new HireFire()
     hirefire.configure((config) => {
       config.token = ""
-      config.dyno("web")
+      process.env.DYNO = "web.1"
     })
 
     expect(start).not.toHaveBeenCalled()
@@ -177,7 +181,7 @@ describe("HireFire", () => {
   test("reset stops the dispatcher and replaces the configuration", async () => {
     const hirefire = new HireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }
-    hirefire.configuration.dyno("web")
+    process.env.DYNO = "web.1"
     const stop = jest.spyOn(hirefire.configuration.dispatcher, "stop")
     const previous = hirefire.configuration
 
@@ -209,7 +213,7 @@ describe("HireFire", () => {
     const hirefire = new HireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }
     hirefire.configure((config) => {
-      config.dyno("web")
+      process.env.DYNO = "web.1"
     })
     const previous = hirefire.configuration
     freezeTime(1000)

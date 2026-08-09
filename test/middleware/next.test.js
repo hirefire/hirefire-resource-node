@@ -18,7 +18,7 @@ describe("Next.js", () => {
 
   describe("middleware", () => {
     test("passes through without a token", () => {
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
       const response = middleware(
         request({ "X-Request-Start": String(Date.now() - 1000) }),
       )
@@ -32,7 +32,7 @@ describe("Next.js", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       const second = Math.floor(Date.now() / 1000)
       jest.spyOn(Date, "now").mockReturnValue(second * 1000)
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
 
       const response = middleware(
         request({ "X-Request-Start": String(second * 1000 - 1234) }),
@@ -50,7 +50,7 @@ describe("Next.js", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       const second = Math.floor(Date.now() / 1000)
       jest.spyOn(Date, "now").mockReturnValue(second * 1000)
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
 
       const response = middleware(
         request({ "X-Queue-Start": String(second * 1000 - 1234) }),
@@ -82,7 +82,7 @@ describe("Next.js", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       const second = Math.floor(Date.now() / 1000)
       jest.spyOn(Date, "now").mockReturnValue(second * 1000)
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
       const userMiddleware = jest.fn(() => NextResponse.next())
       const wrapped = withHireFire(userMiddleware)
 

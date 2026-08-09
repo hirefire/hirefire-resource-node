@@ -412,9 +412,12 @@ class Dispatcher {
   _warnPlanOverrideOnce(name) {
     if (this._planOverrideWarned[name]) return
     this._planOverrideWarned[name] = true
-    this._logger().info(
-      `[HireFire] Lease plan overrides the local sampler for ` +
-        `${JSON.stringify(name)}. The local sampler is ignored for this name.`,
+    this._logger().warn(
+      `[HireFire] A HireFire UI adapter is configured for ` +
+        `${JSON.stringify(name)}, so config.dyno(${JSON.stringify(
+          name,
+        )}) with a local sampler is ignored. ` +
+        `You can remove that local configuration; the UI adapter is used instead.`,
     )
   }
 

@@ -31,16 +31,30 @@ describe("Configuration", () => {
     expect(config.workers.any()).toBe(false)
   })
 
-  test("dyno web configures http", () => {
+  test("dyno bare web is a noop", () => {
     config.dyno("web")
-    expect(config.http).toBeInstanceOf(Web)
-    expect(config.http.name).toBe("web")
+    expect(config.http).toBeNull()
+    expect(config.rqtEnabled).toBe(false)
+    expect(config.workers.any()).toBe(false)
   })
 
-  test("dyno web is case-insensitive for http", () => {
+  test("dyno bare web is case-insensitive noop", () => {
     config.dyno("Web")
-    expect(config.http).toBeInstanceOf(Web)
-    expect(config.http.name).toBe("Web")
+    expect(config.http).toBeNull()
+    expect(config.rqtEnabled).toBe(false)
+  })
+
+  test("dyno bare web warns once", () => {
+    const warn = jest.fn()
+    config.logger = { info() {}, warn, error() {} }
+    config.dyno("web")
+    config.dyno("Web")
+    expect(
+      warn.mock.calls.filter((c) =>
+        String(c[0]).includes('config.dyno("web") without a sampler is no longer'),
+      ).length,
+    ).toBe(1)
+    expect(String(warn.mock.calls[0][0])).toMatch(/You can remove/)
   })
 
   test("dyno with a function configures a worker", async () => {
@@ -84,27 +98,29 @@ describe("Configuration", () => {
     expect(() => config.dyno(tooLong, () => 1)).toThrow(/128/)
   })
 
-  test("duplicate same kind raises", () => {
-    config.dyno("web")
-    expect(() => config.dyno("web")).toThrow(Configuration.DuplicateDynoError)
+  test("duplicate job queue raises", () => {
+    config.dyno("worker", () => 1)
+    expect(() => config.dyno("worker", () => 2)).toThrow(
+      Configuration.DuplicateDynoError,
+    )
   })
 
   test("duplicate name guard is case insensitive", () => {
-    config.dyno("web")
-    expect(() => config.dyno("Web")).toThrow(Configuration.DuplicateDynoError)
+    config.dyno("worker", () => 1)
+    expect(() => config.dyno("Worker", () => 2)).toThrow(
+      Configuration.DuplicateDynoError,
+    )
   })
 
-  test("same name may declare http and job queue", () => {
+  test("bare web then job queue under web", () => {
     config.dyno("web")
     config.dyno("web", () => 1)
-    expect(config.http.name).toBe("web")
+    expect(config.http).toBeNull()
     expect([...config.workers].map((w) => w.name)).toEqual(["web"])
   })
 
-  test("first seen casing is preserved across kinds", () => {
-    config.dyno("Web")
-    config.dyno("web", () => 1)
-    expect(config.http.name).toBe("Web")
+  test("first seen casing is preserved for job queues", () => {
+    config.dyno("Web", () => 1)
     expect([...config.workers][0].name).toBe("Web")
   })
 
@@ -116,9 +132,9 @@ describe("Configuration", () => {
     expect(config.workers.findByName("worker").name).toBe("worker")
   })
 
-  test("httpName from explicit web", () => {
+  test("httpName not forced by bare web", () => {
     config.dyno("web")
-    expect(config.httpName).toBe("web")
+    expect(config.httpName).toBeNull()
   })
 
   test("httpName null without explicit or identity", () => {
@@ -186,24 +202,22 @@ describe("Configuration", () => {
 
   test("rqt liveness allowed when identity matches", () => {
     process.env.DYNO = "web.1"
-    config.dyno("web")
     expect(config.rqtLiveness).toBe(true)
   })
 
   test("rqt liveness denied when identity unresolved", () => {
-    config.dyno("web")
+    config.markHttpActive()
     expect(config.rqtLiveness).toBe(false)
   })
 
-  test("rqt liveness denied when identity differs", () => {
+  test("rqt liveness when identity and traffic match", () => {
     process.env.DYNO = "worker.1"
-    config.dyno("web")
-    expect(config.rqtLiveness).toBe(false)
+    config.markHttpActive()
+    expect(config.rqtLiveness).toBe(true)
   })
 
   test("rqt liveness matches case insensitively", () => {
     process.env.DYNO = "Web.1"
-    config.dyno("web")
     expect(config.rqtLiveness).toBe(true)
   })
 
@@ -218,9 +232,9 @@ describe("Configuration", () => {
     expect(config.rqtEnabled).toBe(true)
   })
 
-  test("rqt enabled by explicit http", () => {
+  test("rqt not enabled by bare web", () => {
     config.dyno("web")
-    expect(config.rqtEnabled).toBe(true)
+    expect(config.rqtEnabled).toBe(false)
   })
 
   test("hirefire service name web with worker dyno does not arm rqt", () => {

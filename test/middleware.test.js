@@ -21,7 +21,8 @@ describe("middleware", () => {
   describe("processRequestQueueTime", () => {
     test("collects a web sample", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("web")
+      // Bare dyno("web") is a no-op; identity supplies the report name.
+      process.env.DYNO = "web.1"
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")
       expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
@@ -63,7 +64,7 @@ describe("middleware", () => {
 
     test("starts the dispatcher on a web request", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")
       expect(start).toHaveBeenCalled()
@@ -71,7 +72,7 @@ describe("middleware", () => {
     })
 
     test("does not start the dispatcher without a token", () => {
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")
       expect(start).not.toHaveBeenCalled()
@@ -80,14 +81,14 @@ describe("middleware", () => {
 
     test("ignores an implausible request start without sampling", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
       processRequestQueueTime("t=0.05")
       expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
     })
 
     test("does not sample an over-the-limit queue time", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
       freezeTime(1700000000)
       processRequestQueueTime("1699999000000")
       expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
@@ -103,7 +104,7 @@ describe("middleware", () => {
 
     test("no request-start header is a noop", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
       processRequestQueueTime(undefined)
       expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
       expect(start).not.toHaveBeenCalled()
@@ -126,7 +127,7 @@ describe("middleware", () => {
 
     test("an internal failure is swallowed, not raised into the request", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      HireFire.configuration.dyno("web")
+      process.env.DYNO = "web.1"
       const errorLog = jest
         .spyOn(HireFire.configuration.logger, "error")
         .mockImplementation(() => {})

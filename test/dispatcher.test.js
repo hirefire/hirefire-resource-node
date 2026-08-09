@@ -56,14 +56,14 @@ describe("Dispatcher", () => {
   }
 
   function configureWebAndWorkers() {
-    config().dyno("web")
+    process.env.DYNO = "web.1"
     config().dyno("worker", () => 42)
     config().dyno("mailer", () => 18)
     return config().dispatcher
   }
 
   function configureWebOnly() {
-    config().dyno("web")
+    process.env.DYNO = "web.1"
     return config().dispatcher
   }
 
@@ -916,6 +916,70 @@ describe("Dispatcher", () => {
     const entry = bodies[0].find((e) => e.name === "worker")
     expect(entry.metrics.jql).toBeDefined()
     expect(Object.values(entry.metrics.jql)[0]).toBe(9.9)
+  })
+
+  test("plan override warns once when local dyno is overridden", async () => {
+    const Plan = require("../src/plan")
+    jest.spyOn(Plan, "executable").mockReturnValue(true)
+    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
+    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
+    jest.spyOn(Plan, "execute").mockResolvedValue(undefined)
+    stubLease(
+      true,
+      JSON.stringify({
+        version: 1,
+        job_queues: [
+          {
+            name: "worker",
+            strategy: "jql",
+            adapter: "bullmq",
+            queues: [],
+            options: {},
+          },
+        ],
+      }),
+    )
+    config().dyno("worker", () => 99)
+    const dispatcher = config().dispatcher
+    freezeTime(1000)
+    await dispatcher._workerTick()
+    await dispatcher._workerTick()
+    const msgs = logger.warn.mock.calls.map((c) => String(c[0]))
+    const hits = msgs.filter((m) => m.includes("UI adapter is configured"))
+    expect(hits.length).toBe(1)
+    expect(hits[0]).toMatch(/config\.dyno/)
+    expect(hits[0]).toMatch(/You can remove/)
+  })
+
+  test("strategy-only plan uses local sampler without override warn", async () => {
+    stubLease(
+      true,
+      JSON.stringify({
+        version: 1,
+        job_queues: [
+          {
+            name: "worker",
+            strategy: "jqs",
+            adapter: null,
+            queues: [],
+            options: {},
+          },
+        ],
+      }),
+    )
+    const bodies = captureIngestBodies()
+    config().dyno("worker", () => 7)
+    const dispatcher = config().dispatcher
+    freezeTime(1000)
+    await dispatcher._workerTick()
+    await dispatcher._dispatch()
+    const entry = bodies[0].find((e) => e.name === "worker")
+    expect(Object.values(entry.metrics.jqs)[0]).toBe(7)
+    expect(
+      logger.warn.mock.calls.some((c) =>
+        String(c[0]).includes("UI adapter is configured"),
+      ),
+    ).toBe(false)
   })
 
   test("unknown plan adapter skips without local fallback", async () => {
