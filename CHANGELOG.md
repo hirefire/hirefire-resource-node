@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Package version is **2.0.0** on `next` (pre-public). `HireFire-Agent: Node-2.0.0` so app dual-read floors match.
 - `config.logQueueMetrics = true` no longer prints `[hirefire:router] queue=…ms`. The flag is a once-warn no-op: web request queue time is pushed to `data.hirefire.io` when the HTTP middleware path is armed. You can remove the setting.
 - Public configuration is dyno-only: `config.dyno(name)` or `config.dyno(name, sampler)`. Same name may register both HTTP and a job-queue sampler. Names strip whitespace, reject empty and over-128-byte values, and preserve first-seen casing.
 - Middleware always samples when a token is present (no declared web collector required). Blank `X-Request-Start` falls through to `X-Queue-Start`.
