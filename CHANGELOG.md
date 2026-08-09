@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `config.logQueueMetrics = true` no longer prints `[hirefire:router] queue=…ms`. The flag is a once-warn no-op: web request queue time is pushed to `data.hirefire.io` when the HTTP middleware path is armed. You can remove the setting.
 - Public configuration is dyno-only: `config.dyno(name)` or `config.dyno(name, sampler)`. Same name may register both HTTP and a job-queue sampler. Names strip whitespace, reject empty and over-128-byte values, and preserve first-seen casing.
 - Middleware always samples when a token is present (no declared web collector required). Blank `X-Request-Start` falls through to `X-Queue-Start`.
 - Payload size limit is **32 KB** (was documented as 64 KB). Oversized client payloads are dropped with a watermark advance.

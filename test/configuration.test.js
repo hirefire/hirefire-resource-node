@@ -303,6 +303,31 @@ describe("Configuration", () => {
     expect(config.logQueueMetrics).toBe(false)
   })
 
+  test("logQueueMetrics can be set", () => {
+    config.logQueueMetrics = true
+    expect(config.logQueueMetrics).toBe(true)
+  })
+
+  test("logQueueMetrics true warns once", () => {
+    const warn = jest.fn()
+    config.logger = { info() {}, warn, error() {} }
+    config.logQueueMetrics = true
+    config.logQueueMetrics = true
+    expect(
+      warn.mock.calls.filter((c) =>
+        String(c[0]).includes("config.logQueueMetrics is ignored"),
+      ).length,
+    ).toBe(1)
+    expect(String(warn.mock.calls[0][0])).toMatch(/You can remove/)
+  })
+
+  test("logQueueMetrics false is silent", () => {
+    const warn = jest.fn()
+    config.logger = { info() {}, warn, error() {} }
+    config.logQueueMetrics = false
+    expect(warn).not.toHaveBeenCalled()
+  })
+
   test("token defaults to env", () => {
     process.env.HIREFIRE_TOKEN = "from-env"
     expect(config.token).toBe("from-env")

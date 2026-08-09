@@ -59,10 +59,6 @@ function processRequestQueueTime(requestStart, queueStart) {
         )
       }
     }
-
-    if (configuration.logQueueMetrics) {
-      console.log(`[hirefire:router] queue=${requestQueueTime}ms`)
-    }
   } catch (error) {
     safeLog(
       HireFire.configuration.logger,

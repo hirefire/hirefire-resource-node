@@ -74,10 +74,10 @@ class Configuration {
      */
     this.logger = console
     /**
-     * When true, the HTTP middleware prints `[hirefire:router] queue=…ms` for each sample.
      * @type {boolean}
      */
-    this.logQueueMetrics = false
+    this._logQueueMetrics = false
+    this._logQueueMetricsWarned = false
     /**
      * @type {Map<string, string[]>}
      */
@@ -144,6 +144,25 @@ class Configuration {
    */
   set token(value) {
     this._token = value
+  }
+
+  /**
+   * Legacy 1.x flag for `[hirefire:router]` stdout lines. On 2.x this is a no-op:
+   * setting true warns once that the setting is ignored and can be removed. Web RQT
+   * is push-only.
+   *
+   * @type {boolean}
+   */
+  get logQueueMetrics() {
+    return this._logQueueMetrics
+  }
+
+  /**
+   * @param {boolean} value
+   */
+  set logQueueMetrics(value) {
+    this._logQueueMetrics = Boolean(value)
+    if (this._logQueueMetrics) this._warnLogQueueMetricsOnce()
   }
 
   /**
@@ -397,6 +416,18 @@ class Configuration {
       '[HireFire] config.dyno("web") without a sampler is no longer necessary. ' +
         "Request queue time is armed by platform web identity (for example DYNO type web " +
         "or RENDER_SERVICE_TYPE=web) and by HTTP middleware traffic. You can remove this line.",
+    )
+  }
+
+  _warnLogQueueMetricsOnce() {
+    if (this._logQueueMetricsWarned) return
+    this._logQueueMetricsWarned = true
+    safeLog(
+      this.logger,
+      "warn",
+      "[HireFire] config.logQueueMetrics is ignored. Request queue time is pushed to " +
+        "data.hirefire.io when the HTTP middleware path is armed. The [hirefire:router] " +
+        "log line is no longer emitted. You can remove this setting.",
     )
   }
 
