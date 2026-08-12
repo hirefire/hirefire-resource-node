@@ -641,4 +641,32 @@ describe("Lease", () => {
     expect(lease.sampleFrequency).toBe(15)
     expect(lease._ttl).toBe(15)
   })
+
+  test("parses grant trace true", async () => {
+    grant(
+      { "HireFire-Lease-Granted": "true" },
+      JSON.stringify({
+        version: 1,
+        trace: true,
+        job_queues: [{ name: "worker", strategy: "jql" }],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.granted()).toBe(true)
+    expect(lease.trace()).toBe(true)
+  })
+
+  test("trace false when missing or non-boolean", async () => {
+    grant(
+      { "HireFire-Lease-Granted": "true" },
+      JSON.stringify({
+        version: 1,
+        trace: "true",
+        job_queues: [],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.granted()).toBe(true)
+    expect(lease.trace()).toBe(false)
+  })
 })

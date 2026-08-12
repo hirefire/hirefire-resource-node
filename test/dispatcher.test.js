@@ -746,6 +746,87 @@ describe("Dispatcher", () => {
     expect(dispatcher._lease.granted()).toBe(true)
   })
 
+  test("sample_trace attached when grant trace true", async () => {
+    stubLease(
+      true,
+      JSON.stringify({
+        version: 1,
+        trace: true,
+        job_queues: [
+          {
+            name: "worker",
+            strategy: "jql",
+            adapter: null,
+            queues: [],
+            options: {},
+          },
+          {
+            name: "mailer",
+            strategy: "jql",
+            adapter: null,
+            queues: [],
+            options: {},
+          },
+        ],
+      }),
+    )
+    const bodies = captureIngestBodies()
+    config().dyno("worker", () => 42)
+    config().dyno("mailer", () => 18)
+    const dispatcher = config().dispatcher
+    freezeTime(1000)
+    await dispatcher._workerTick()
+    await dispatcher._dispatch()
+    expect(bodies[0][0].sample_trace).toBeTruthy()
+    const entry = bodies[0][0]
+    expect(entry.sample_trace.wave_ms).toEqual(expect.any(Number))
+    expect(Array.isArray(entry.sample_trace.ops)).toBe(true)
+    expect(entry.sample_trace.ops).toHaveLength(2)
+    expect(
+      entry.sample_trace.ops.every((op) => op.strategy === "jql" && "ms" in op),
+    ).toBe(true)
+    expect(bodies[0].slice(1).every((e) => !e.sample_trace)).toBe(true)
+  })
+
+  test("sample_trace absent without grant trace", async () => {
+    stubLease(
+      true,
+      JSON.stringify({
+        version: 1,
+        job_queues: [
+          { name: "worker", strategy: "jql", adapter: null, queues: [], options: {} },
+        ],
+      }),
+    )
+    const bodies = captureIngestBodies()
+    config().dyno("worker", () => 42)
+    const dispatcher = config().dispatcher
+    freezeTime(1000)
+    await dispatcher._workerTick()
+    await dispatcher._dispatch()
+    expect(bodies[0].every((e) => !e.sample_trace)).toBe(true)
+  })
+
+  test("verbose logs sample timings without server trace", async () => {
+    process.env.HIREFIRE_VERBOSE = "1"
+    stubLease(
+      true,
+      JSON.stringify({
+        version: 1,
+        job_queues: [
+          { name: "worker", strategy: "jql", adapter: null, queues: [], options: {} },
+        ],
+      }),
+    )
+    config().dyno("worker", () => 42)
+    const dispatcher = config().dispatcher
+    await dispatcher._workerTick()
+    const info = logger.info.mock.calls.map((c) => c[0]).join("\n")
+    expect(info).toContain("sample_job_queues wave_ms=")
+    expect(info).toContain("sample adapter=")
+    delete process.env.HIREFIRE_VERBOSE
+  })
+
   test("empty string adapter uses local strategy sampler", async () => {
     stubLease(
       true,

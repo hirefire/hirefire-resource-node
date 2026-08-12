@@ -2,6 +2,7 @@ const { Client } = require("./client")
 const Lease = require("./lease")
 const MetricsBuffer = require("./buffer")
 const Plan = require("./plan")
+const SampleTraceWave = require("./sampleTraceWave")
 const safeLog = require("./log")
 const { rqtParts } = MetricsBuffer
 
@@ -34,6 +35,7 @@ class Dispatcher {
     this._interval = 1
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
     this._nextDispatchAt = null
+    this._pendingSampleTrace = null
     this._sleepers = new Set()
     this._dispatchLoopPromise = null
     this._jobLoopPromise = null
@@ -322,6 +324,7 @@ class Dispatcher {
     this._nextDispatchAt = null
     this._lastRqtSecond = null
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
+    this._pendingSampleTrace = null
     this._unloadedAdapterWarned = Object.create(null)
     this._planOverrideWarned = Object.create(null)
     this._unknownAdapterWarned = Object.create(null)
@@ -349,17 +352,30 @@ class Dispatcher {
   }
 
   async _sampleJobQueues() {
+    const wave = SampleTraceWave.start()
     await Plan.aroundJobQueueSample(async () => {
       const localWorkers = this._configuration.workers
 
       for (const entry of this._lease.jobQueues) {
-        if (this._adapterPresent(entry)) {
-          await this._samplePlanAdapter(entry, localWorkers)
-        } else {
-          await this._sampleStrategyOnly(entry, localWorkers)
-        }
+        await wave.measure(entry, async () => {
+          if (this._adapterPresent(entry)) {
+            await this._samplePlanAdapter(entry, localWorkers)
+          } else {
+            await this._sampleStrategyOnly(entry, localWorkers)
+          }
+        })
       }
     }, this._configuration)
+    const payload = wave.finish()
+    if (this._verbose()) wave.logTo(this._logger())
+    if (this._lease.trace()) this._pendingSampleTrace = payload
+  }
+
+  _verbose() {
+    const value = process.env.HIREFIRE_VERBOSE
+    if (value == null || value === "") return false
+    const lower = String(value).toLowerCase()
+    return lower !== "0" && lower !== "false" && lower !== "no"
   }
 
   async _samplePlanAdapter(entry, localWorkers) {
@@ -510,7 +526,7 @@ class Dispatcher {
         return
       }
 
-      if (process.env.HIREFIRE_VERBOSE) {
+      if (this._verbose()) {
         this._logger().info(`[HireFire] Dispatching metrics: ${body}`)
       }
 
@@ -525,6 +541,7 @@ class Dispatcher {
       }
       this._applyDispatchFrequency(response)
       if (watermark !== undefined) this._lastRqtSecond = watermark
+      this._pendingSampleTrace = null
     } catch (error) {
       if (
         data &&
@@ -609,7 +626,19 @@ class Dispatcher {
       }
     }
 
+    this._attachSampleTrace(entries)
     return { entries, watermark }
+  }
+
+  _attachSampleTrace(entries) {
+    if (
+      this._pendingSampleTrace == null ||
+      entries.length === 0 ||
+      !this._lease.trace()
+    ) {
+      return
+    }
+    entries[0].sample_trace = this._pendingSampleTrace
   }
 
   _appendHttpRqt(entriesByName, data, httpName) {

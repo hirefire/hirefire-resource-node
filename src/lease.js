@@ -18,6 +18,7 @@ class Lease {
     this._client = new Client(configuration)
     this._ttl = 15
     this._granted = false
+    this._trace = false
     this._expiresAt = performance.now()
     this._nextSampleAt = performance.now()
     this._sampleFrequency = 15
@@ -41,6 +42,11 @@ class Lease {
     return this._granted
   }
 
+  /** Whether the current grant asked the client to ship sample_trace on ingest. */
+  trace() {
+    return this._trace
+  }
+
   /**
    * Drop local grant state without closing the transport. Bumps epoch so an in-flight
    * lease HTTP response cannot re-apply grant state.
@@ -48,6 +54,7 @@ class Lease {
   demote() {
     this._epoch += 1
     this._granted = false
+    this._trace = false
     this._jobQueues = []
     this._expiresAt = performance.now()
     this._nextSampleAt = performance.now()
@@ -75,6 +82,7 @@ class Lease {
     } catch (error) {
       if (this._epoch !== epoch) return
       this._granted = false
+      this._trace = false
       this._jobQueues = []
       throw error
     }
@@ -84,12 +92,14 @@ class Lease {
     const status = response.statusCode
     if (status === 401) {
       this._granted = false
+      this._trace = false
       this._jobQueues = []
       return
     }
 
     if (status < 200 || status >= 300) {
       this._granted = false
+      this._trace = false
       this._jobQueues = []
       throw new RequestError(`Lease request failed with ${status} status.`)
     }
@@ -121,11 +131,13 @@ class Lease {
     }
 
     const granted = headers["hirefire-lease-granted"] === "true"
-    const parsedQueues = granted ? this._parseJobQueues(response.body) : []
+    const grantBody = granted
+      ? this._parseGrantBody(response.body)
+      : emptyGrantBody()
 
     if (this._epoch !== epoch) return
 
-    const holdOk = !granted || hold(parsedQueues)
+    const holdOk = !granted || hold(grantBody.job_queues)
 
     if (this._epoch !== epoch) return
 
@@ -136,6 +148,7 @@ class Lease {
 
     if (granted && !holdOk) {
       this._granted = false
+      this._trace = false
       this._jobQueues = []
       this._processId = crypto.randomUUID()
       safeLog(
@@ -147,7 +160,8 @@ class Lease {
     } else {
       const wasGranted = this._granted
       this._granted = granted
-      this._jobQueues = parsedQueues
+      this._trace = granted && grantBody.trace
+      this._jobQueues = grantBody.job_queues
       if (granted && !wasGranted) {
         this._nextSampleAt = performance.now()
       }
@@ -161,8 +175,11 @@ class Lease {
     return this._client.close()
   }
 
-  _parseJobQueues(body) {
-    if (body == null || body === "") return []
+  /**
+   * @returns {{ job_queues: object[], trace: boolean }}
+   */
+  _parseGrantBody(body) {
+    if (body == null || body === "") return emptyGrantBody()
 
     if (Buffer.byteLength(body) > Lease.MAX_BODY_BYTES) {
       safeLog(
@@ -170,7 +187,7 @@ class Lease {
         "error",
         `[HireFire] Lease grant body exceeded ${Lease.MAX_BODY_BYTES} bytes. Plan ignored.`,
       )
-      return []
+      return emptyGrantBody()
     }
 
     let payload
@@ -182,7 +199,7 @@ class Lease {
         "error",
         "[HireFire] Lease grant body was not valid JSON. Plan ignored.",
       )
-      return []
+      return emptyGrantBody()
     }
 
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -191,9 +208,10 @@ class Lease {
         "error",
         "[HireFire] Lease grant body was not a JSON object. Plan ignored.",
       )
-      return []
+      return emptyGrantBody()
     }
 
+    const trace = payload.trace === true
     const entries = payload.job_queues
     if (!Array.isArray(entries)) {
       safeLog(
@@ -201,7 +219,7 @@ class Lease {
         "error",
         "[HireFire] Lease grant body job_queues was not an array. Plan ignored.",
       )
-      return []
+      return emptyGrantBody(trace)
     }
 
     const accepted = []
@@ -252,8 +270,13 @@ class Lease {
       )
     }
 
-    return accepted
+    return { job_queues: accepted, trace }
   }
+}
+
+/** Fresh empty grant body (new job_queues array each call). */
+function emptyGrantBody(trace = false) {
+  return { job_queues: [], trace }
 }
 
 function toInteger(value) {
