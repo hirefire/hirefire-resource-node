@@ -147,9 +147,10 @@ class Configuration {
   }
 
   /**
-   * Legacy 1.x flag for `[hirefire:router]` stdout lines. On 2.x this is a no-op:
-   * setting true warns once that the setting is ignored and can be removed. Web RQT
-   * is push-only.
+   * Legacy flag: when true, middleware still prints `[hirefire:router] queue=…ms`
+   * to stdout (Logplex QueueTime BC). Setting true once-warns to migrate to HireFire
+   * Request Queue Time with `HIREFIRE_TOKEN`. Preferred web RQT is push to
+   * data.hirefire.io.
    *
    * @type {boolean}
    */
@@ -425,9 +426,9 @@ class Configuration {
     safeLog(
       this.logger,
       "warn",
-      "[HireFire] config.logQueueMetrics is ignored. Request queue time is pushed to " +
-        "data.hirefire.io when the HTTP middleware path is armed. The [hirefire:router] " +
-        "log line is no longer emitted. You can remove this setting.",
+      "[HireFire] config.logQueueMetrics is deprecated. Prefer the HireFire Request " +
+        "Queue Time strategy, set HIREFIRE_TOKEN, then remove this logQueueMetrics = " +
+        "true line. Stdout [hirefire:router] lines still emit while this flag is set.",
     )
   }
 

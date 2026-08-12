@@ -315,10 +315,14 @@ describe("Configuration", () => {
     config.logQueueMetrics = true
     expect(
       warn.mock.calls.filter((c) =>
-        String(c[0]).includes("config.logQueueMetrics is ignored"),
+        String(c[0]).includes("config.logQueueMetrics is deprecated"),
       ).length,
     ).toBe(1)
-    expect(String(warn.mock.calls[0][0])).toMatch(/You can remove/)
+    const msg = String(warn.mock.calls[0][0])
+    expect(msg).toMatch(/HireFire Request Queue Time/)
+    expect(msg).toMatch(/HIREFIRE_TOKEN/)
+    expect(msg).toMatch(/remove this logQueueMetrics = true line/)
+    expect(msg).toMatch(/still emit/)
   })
 
   test("logQueueMetrics false is silent", () => {

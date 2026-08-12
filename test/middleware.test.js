@@ -110,16 +110,21 @@ describe("middleware", () => {
       expect(start).not.toHaveBeenCalled()
     })
 
-    test("logQueueMetrics does not emit router line", () => {
+    test("logQueueMetrics emits router line without token", () => {
+      delete process.env.HIREFIRE_TOKEN
+      HireFire.configuration.token = null
       const log = jest.spyOn(console, "log").mockImplementation(() => {})
       HireFire.configuration.logQueueMetrics = true
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")
-      expect(log).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith("[hirefire:router] queue=1000ms")
     })
 
     test("is silent without logQueueMetrics", () => {
+      delete process.env.HIREFIRE_TOKEN
+      HireFire.configuration.token = null
       const log = jest.spyOn(console, "log").mockImplementation(() => {})
+      HireFire.configuration.logQueueMetrics = false
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")
       expect(log).not.toHaveBeenCalled()
