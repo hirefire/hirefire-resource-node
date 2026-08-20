@@ -60,8 +60,6 @@ class Dispatcher {
 
     let retiredJq = null
     try {
-      // Latched _running with a dead main loop: clear and retire a still-live
-      // job loop before spawning a new generation (Ruby joins retired_jq ≤5s).
       if (this._running && !this._dispatchLoopAlive()) {
         this._running = false
         if (this._jobLoopAlive()) {
@@ -77,7 +75,6 @@ class Dispatcher {
 
       this._generation += 1
       const generation = this._generation
-      // Wake sleepers so a retired same-process job loop exits promptly.
       this._wakeSleepers()
       this._running = true
 
@@ -213,7 +210,6 @@ class Dispatcher {
 
   _loopPromiseAlive(promise) {
     if (!promise) return false
-    // Track settled state via flag attached when the loop ends.
     return promise._hirefireAlive !== false
   }
 
@@ -241,8 +237,6 @@ class Dispatcher {
     if (!loopPromise) return Promise.resolve()
     let timer
     return Promise.race([
-      // Clear the abandon timer when the loop settles first. Otherwise the
-      // timeout callback still runs ~JOIN_TIMEOUT later and falsely warns.
       Promise.resolve(loopPromise).finally(() => {
         if (timer != null) clearTimeout(timer)
       }),
@@ -334,13 +328,13 @@ class Dispatcher {
 
   _enterRace() {
     return (
-      this._configuration.workers.any() ||
+      this._configuration.jobQueues.any() ||
       Plan.anyAllowlistedJobQueueLibraryLoaded()
     )
   }
 
   _holdLease(planJobQueues) {
-    if (this._configuration.workers.any()) return true
+    if (this._configuration.jobQueues.any()) return true
 
     return planJobQueues.some((entry) => {
       return (
@@ -354,14 +348,14 @@ class Dispatcher {
   async _sampleJobQueues() {
     const wave = SampleTraceWave.start()
     await Plan.aroundJobQueueSample(async () => {
-      const localWorkers = this._configuration.workers
+      const localJobQueues = this._configuration.jobQueues
 
       for (const entry of this._lease.jobQueues) {
         await wave.measure(entry, async () => {
           if (this._adapterPresent(entry)) {
-            await this._samplePlanAdapter(entry, localWorkers)
+            await this._samplePlanAdapter(entry, localJobQueues)
           } else {
-            await this._sampleStrategyOnly(entry, localWorkers)
+            await this._sampleStrategyOnly(entry, localJobQueues)
           }
         })
       }
@@ -378,7 +372,7 @@ class Dispatcher {
     return lower !== "0" && lower !== "false" && lower !== "no"
   }
 
-  async _samplePlanAdapter(entry, localWorkers) {
+  async _samplePlanAdapter(entry, localJobQueues) {
     const name = String(entry.name ?? "")
     const adapter = entry.adapter
     const strategy = entry.strategy
@@ -389,7 +383,7 @@ class Dispatcher {
         return
       }
 
-      if (localWorkers.findByName(name)) {
+      if (localJobQueues.findByName(name)) {
         this._warnPlanOverrideOnce(name)
       }
       await Plan.execute(entry, this._configuration)
@@ -400,7 +394,7 @@ class Dispatcher {
     }
   }
 
-  async _sampleStrategyOnly(entry, localWorkers) {
+  async _sampleStrategyOnly(entry, localJobQueues) {
     const name = String(entry.name ?? "")
     const strategy = String(entry.strategy ?? "")
 
@@ -409,9 +403,9 @@ class Dispatcher {
       return
     }
 
-    const worker = localWorkers.findByName(name)
-    if (worker) {
-      await localWorkers.sampleJobQueue(worker, strategy)
+    const jobQueue = localJobQueues.findByName(name)
+    if (jobQueue) {
+      await localJobQueues.sampleJobQueue(jobQueue, strategy)
     }
   }
 
@@ -685,7 +679,6 @@ class Dispatcher {
 
   _encodeLeaf(strategy, bucket) {
     if (strategy === "rqt") {
-      // Reject non-finite sum/count before rqtParts (which zeros them for merge).
       if (bucket && typeof bucket === "object" && !Array.isArray(bucket)) {
         const sumRaw = Number(bucket.sum)
         const countRaw = Number(bucket.count)

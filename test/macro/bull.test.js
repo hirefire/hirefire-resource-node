@@ -34,7 +34,6 @@ describe("Bull", () => {
 
   afterEach(async () => {
     jest.useRealTimers()
-    // Close queues even if an earlier step failed so Redis connections do not leak.
     try {
       if (defaultQueue) await defaultQueue.close()
     } finally {
@@ -75,14 +74,12 @@ describe("Bull", () => {
     await defaultQueue.add({}, { delay: 30_000 })
     await defaultQueue.add({})
     jest.advanceTimersByTime(1)
-    // Pin Redis locations so a promotion-only path cannot hide a missing ZCOUNT.
     expect(await redis.llen("bull:default:wait")).toBe(1)
     expect(await redis.zcard("bull:default:delayed")).toBe(2)
     expect(await jobQueueSize({ connection: redisURL })).toBe(1)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
     jest.advanceTimersByTime(15_000)
-    // First delayed is due by score but still on the delayed zset until a worker promotes.
     expect(await redis.llen("bull:default:wait")).toBe(1)
     expect(await redis.zcard("bull:default:delayed")).toBe(2)
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
@@ -99,7 +96,6 @@ describe("Bull", () => {
   test("jobQueueSize excludes active-only jobs", async () => {
     await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
     expect(await redis.llen("bull:default:active")).toBe(2)
-    // Named queue: active is present but not waiting.
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
   })
 
@@ -108,7 +104,6 @@ describe("Bull", () => {
     await defaultQueue.add({}, { delay: 1 })
     await redis.lpush("bull:default:active", "job-active-1")
     jest.advanceTimersByTime(1)
-    // live wait + due delayed = 2. active excluded.
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await redis.llen("bull:default:active")).toBe(1)
@@ -120,7 +115,6 @@ describe("Bull", () => {
     expect(await redis.llen("bull:default:wait")).toBe(0)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
     jest.advanceTimersByTime(60_000)
-    // Still on delayed zset; JQS includes it via due ZCOUNT, not LLEN wait.
     expect(await redis.zcard("bull:default:delayed")).toBe(1)
     expect(await redis.llen("bull:default:wait")).toBe(0)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
@@ -137,9 +131,6 @@ describe("Bull", () => {
   })
 
   test("jobQueueSize counts priority jobs once (not dual-write double-count)", async () => {
-    // Two priority jobs dual-write wait+priority. One plain wait job has no priority index.
-    // wait=3, priority=2 → correct JQS is 3.
-    // Wrong ZCARD-priority-only → 2. Wrong double-count wait+priority → 5.
     await defaultQueue.add({}, { priority: 1 })
     await defaultQueue.add({}, { priority: 2 })
     await defaultQueue.add({})
@@ -160,15 +151,12 @@ describe("Bull", () => {
   })
 
   test("jobQueueSize does not subtract wait markers (classic Bull has none)", async () => {
-    // BullMQ-shaped marker value: classic Bull must still count it (no LINDEX/0: strip).
     await redis.rpush("bull:default:wait", "0:123")
     expect(await redis.llen("bull:default:wait")).toBe(1)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
   })
 
   test("jobQueueSize excludes completed and failed terminal jobs", async () => {
-    // Unequal cards: wait=2 vs completed=1 / failed=1 so ZCARD-only terminals
-    // cannot alone match the expected JQS.
     await defaultQueue.add({})
     await defaultQueue.add({})
     await redis.zadd("bull:default:completed", Date.now(), "job-done-1")
@@ -176,10 +164,8 @@ describe("Bull", () => {
     expect(await redis.zcard("bull:default:completed")).toBe(1)
     expect(await redis.zcard("bull:default:failed")).toBe(1)
     expect(await redis.llen("bull:default:wait")).toBe(2)
-    // Terminal retention must not inflate waiting size.
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
-    // Terminals alone are not waiting.
     await redis.del("bull:default:wait")
     expect(await redis.llen("bull:default:wait")).toBe(0)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
@@ -194,7 +180,6 @@ describe("Bull", () => {
     expect(await redis.llen("bull:default:wait")).toBe(2)
     expect(await redis.llen("bull:mailer:wait")).toBe(1)
     expect(await redis.zcard("bull:mailer:delayed")).toBe(1)
-    // 2 wait (default) + 1 wait (mailer) + 1 due delayed (mailer) = 4
     expect(
       await jobQueueSize("default", "mailer", { connection: redisURL }),
     ).toBe(4)
@@ -229,7 +214,6 @@ describe("Bull", () => {
     const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]))
     try {
       for (const k of keys) delete process.env[k]
-      // Unreachable override: jobQueueSize must not read HIREFIRE_BULL_URL.
       process.env.HIREFIRE_BULL_URL = "redis://127.0.0.1:1/0"
       process.env.REDIS_URL = redisURL
       expect(await jobQueueSize("default")).toBe(1)
@@ -242,8 +226,6 @@ describe("Bull", () => {
   })
 
   test("jobQueueSize active-only jobs do not inflate JQS", async () => {
-    // Named + all-queues: active is working, not waiting. SCAN discovery of
-    // active-only queue names is pinned in bull-quit (pipeline key spies).
     await redis.lpush("bull:active-only:active", "job-a1", "job-a2")
     expect(await redis.llen("bull:active-only:active")).toBe(2)
     expect(await jobQueueSize("active-only", { connection: redisURL })).toBe(0)
@@ -251,8 +233,6 @@ describe("Bull", () => {
   })
 
   test("jobQueueSize priority-index-only state does not inflate JQS", async () => {
-    // Priority index without dual-write wait members (edge race / partial state).
-    // Discovery of priority-only names is pinned in bull-quit.
     await redis.zadd("bull:prio-only:priority", 1, "job-p1")
     expect(await redis.zcard("bull:prio-only:priority")).toBe(1)
     expect(await redis.llen("bull:prio-only:wait")).toBe(0)
@@ -263,7 +243,6 @@ describe("Bull", () => {
   test("jobQueueSize drops blank and whitespace-only queue names", async () => {
     await defaultQueue.add({})
     await mailerQueue.add({})
-    // Blank names normalize away; only default is sampled.
     expect(
       await jobQueueSize("default", "  ", "", null, undefined, {
         connection: redisURL,
@@ -273,9 +252,6 @@ describe("Bull", () => {
   })
 
   test("jobQueueSize uses delayed score upper bound (due vs not-due boundary)", async () => {
-    // Classic Bull score = timestampMs * 0x1000 + nibble. HireFire upper =
-    // (now + 1) * 0x1000 - 1. Seed raw scores so Bull delay timers cannot mask a
-    // wrong bound (e.g. raw epoch ms as max).
     const frozenNow = 1_700_000_000_000
     const delayedUpper = (frozenNow + 1) * 0x1000 - 1
     jest.setSystemTime(frozenNow)
@@ -286,22 +262,17 @@ describe("Bull", () => {
       delayedUpper + 1,
       "job-future-edge",
     )
-    // Raw epoch as score would look "due" under a broken max=Date.now() bound.
     await redis.zadd("bull:default:delayed", frozenNow, "job-raw-epoch-score")
     expect(await redis.zcard("bull:default:delayed")).toBe(3)
     expect(await redis.llen("bull:default:wait")).toBe(0)
 
-    // Due edge + raw-epoch score (also ≤ upper). Future edge excluded.
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
 
     jest.setSystemTime(frozenNow + 1)
-    // After +1ms, previous future edge is now within (now+1)*0x1000-1.
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(3)
   })
 
   test("jobQueueSize excludes repeatable configs and stalled bookkeeping keys", async () => {
-    // wait=2 vs repeat=1 / stalled=1 so SCARD/ZCARD of bookkeeping alone
-    // cannot match expected JQS.
     await defaultQueue.add({})
     await defaultQueue.add({})
     await redis.zadd("bull:default:repeat", Date.now(), "repeat:cron:cfg")
@@ -312,14 +283,11 @@ describe("Bull", () => {
     expect(await redis.llen("bull:default:wait")).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
-    // Bookkeeping alone is not waiting.
     await redis.del("bull:default:wait")
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
   })
 
   test("jobQueueSize counts priority jobs once after global pause", async () => {
-    // Two priority + one plain, then pause → paused=3, priority=2, JQS=3.
-    // Priority-only ZCARD → 2. Double-count paused+priority → 5.
     await defaultQueue.add({}, { priority: 1 })
     await defaultQueue.add({}, { priority: 5 })
     await defaultQueue.add({})
@@ -331,9 +299,6 @@ describe("Bull", () => {
   })
 
   test("jobQueueSize rejects when Redis is unreachable", async () => {
-    // Connection timeouts use real timers (fake timers stall ioredis).
-    // All-queues path must SCAN first; with offline queue off, an unreachable
-    // host rejects instead of soft-zeroing pipeline field errors.
     jest.useRealTimers()
     await expect(
       jobQueueSize({
@@ -351,9 +316,6 @@ describe("Bull", () => {
   })
 
   test("jobQueueSize all-queues is 0 on empty Redis", async () => {
-    // beforeEach flushes; no Queue keys remain if we only sample without adds.
-    // Close queues first would drop their meta keys on close in some versions;
-    // flushdb already wiped. Explicit re-flush for this case.
     await redis.flushdb()
     expect(await jobQueueSize({ connection: redisURL })).toBe(0)
   })

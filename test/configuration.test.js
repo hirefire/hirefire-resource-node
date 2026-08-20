@@ -1,6 +1,5 @@
 require("./support")
 const Configuration = require("../src/configuration")
-const Web = require("../src/web")
 const Dispatcher = require("../src/dispatcher")
 const Buffer = require("../src/buffer")
 
@@ -24,18 +23,17 @@ describe("Configuration", () => {
 
   test("http defaults to null", () => {
     expect(config.http).toBeNull()
-    expect(config.web).toBeNull()
   })
 
-  test("workers default to empty", () => {
-    expect(config.workers.any()).toBe(false)
+  test("jobQueues default to empty", () => {
+    expect(config.jobQueues.any()).toBe(false)
   })
 
   test("dyno bare web is a noop", () => {
     config.dyno("web")
     expect(config.http).toBeNull()
     expect(config.rqtEnabled).toBe(false)
-    expect(config.workers.any()).toBe(false)
+    expect(config.jobQueues.any()).toBe(false)
   })
 
   test("dyno bare web is case-insensitive noop", () => {
@@ -51,7 +49,9 @@ describe("Configuration", () => {
     config.dyno("Web")
     expect(
       warn.mock.calls.filter((c) =>
-        String(c[0]).includes('config.dyno("web") without a sampler is no longer'),
+        String(c[0]).includes(
+          'config.dyno("web") without a sampler is no longer',
+        ),
       ).length,
     ).toBe(1)
     expect(String(warn.mock.calls[0][0])).toMatch(/You can remove/)
@@ -60,7 +60,7 @@ describe("Configuration", () => {
   test("dyno with a function configures a worker", async () => {
     config.dyno("worker", () => 1.23)
     config.dyno("mailer", () => 2.46)
-    const workers = [...config.workers]
+    const workers = [...config.jobQueues]
     expect(workers.map((w) => w.name)).toEqual(["worker", "mailer"])
     expect(await workers[0].sample()).toBe(1.23)
     expect(await workers[1].sample()).toBe(2.46)
@@ -90,7 +90,7 @@ describe("Configuration", () => {
 
   test("dyno strips name whitespace", () => {
     config.dyno("  worker  ", () => 1)
-    expect(config.workers.findByName("worker").name).toBe("worker")
+    expect(config.jobQueues.findByName("worker").name).toBe("worker")
   })
 
   test("dyno rejects name over max bytes", () => {
@@ -116,12 +116,12 @@ describe("Configuration", () => {
     config.dyno("web")
     config.dyno("web", () => 1)
     expect(config.http).toBeNull()
-    expect([...config.workers].map((w) => w.name)).toEqual(["web"])
+    expect([...config.jobQueues].map((w) => w.name)).toEqual(["web"])
   })
 
   test("first seen casing is preserved for job queues", () => {
     config.dyno("Web", () => 1)
-    expect([...config.workers][0].name).toBe("Web")
+    expect([...config.jobQueues][0].name).toBe("Web")
   })
 
   test("rejected registration does not reserve name", () => {
@@ -129,7 +129,7 @@ describe("Configuration", () => {
       Configuration.MissingSamplerError,
     )
     config.dyno("worker", () => 1)
-    expect(config.workers.findByName("worker").name).toBe("worker")
+    expect(config.jobQueues.findByName("worker").name).toBe("worker")
   })
 
   test("httpName not forced by bare web", () => {

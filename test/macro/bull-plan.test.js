@@ -53,7 +53,6 @@ describe("Bull plan hooks", () => {
     expect(bull.supportsPlanStrategy("rpm")).toBe(false)
     expect(bull.supportsPlanStrategy("")).toBe(false)
     expect(bull.supportsPlanStrategy(Symbol("jqs"))).toBe(false)
-    // String coercion: only the literal strategy name "jqs".
     expect(bull.supportsPlanStrategy("JQS")).toBe(false)
   })
 

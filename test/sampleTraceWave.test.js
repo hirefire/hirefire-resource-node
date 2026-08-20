@@ -145,7 +145,6 @@ describe("SampleTraceWave", () => {
     for (const op of payload.ops) {
       expect(payload.wave_ms).toBeGreaterThanOrEqual(op.ms)
     }
-    // Sequential ops plus gaps; 1ms slack for clock resolution.
     expect(payload.wave_ms + 1).toBeGreaterThanOrEqual(opsMs)
     expect(payload.wave_ms).toBeGreaterThanOrEqual(10)
   })

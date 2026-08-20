@@ -1,6 +1,6 @@
 const { freezeTime } = require("./support")
-const CPU = require("../src/cpu")
-const Usage = require("../src/cpu/usage")
+const CPU = require("../src/source/cpu")
+const Usage = require("../src/source/cpu/usage")
 const Buffer = require("../src/buffer")
 
 describe("CPU", () => {

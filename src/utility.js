@@ -32,7 +32,6 @@ function unpack(args) {
 function normalizeQueues(queues, { allowEmpty = true } = {}) {
   const names = new Set()
   for (const queue of queues) {
-    // null/undefined → drop (Ruby nil.to_s → ""). Never String(null) → "null".
     const name = queue == null ? "" : String(queue).trim()
     if (name) names.add(name)
   }

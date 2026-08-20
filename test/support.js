@@ -14,8 +14,6 @@ function silentLogger() {
   return { info() {}, warn() {}, error() {}, log() {} }
 }
 
-// Timecop.freeze equivalent: pin the wall clock (Date.now) and monotonic pacing clock
-// (performance.now) to a fixed second, without faking setTimeout. Call again to advance.
 function freezeTime(seconds) {
   jest.spyOn(Date, "now").mockReturnValue(seconds * 1000)
   jest.spyOn(performance, "now").mockReturnValue(seconds * 1000)

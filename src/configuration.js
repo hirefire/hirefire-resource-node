@@ -1,7 +1,7 @@
-const Web = require("./web")
-const Worker = require("./worker")
-const Workers = require("./workers")
-const CPU = require("./cpu")
+const HTTP = require("./source/http")
+const JobQueue = require("./source/jobQueue")
+const JobQueues = require("./source/jobQueues")
+const CPU = require("./source/cpu")
 const MetricsBuffer = require("./buffer")
 const Dispatcher = require("./dispatcher")
 const Identity = require("./identity")
@@ -59,14 +59,14 @@ class Configuration {
     /**
      * Always `null`. Kept for readers that still check `configuration.http`. Request queue
      * time uses always-on sources under {@link Configuration#httpName} (process identity).
-     * @type {import("./web") | null}
+     * @type {import("./source/http") | null}
      */
     this.http = null
     /**
      * Local job-queue sources declared via sampler functions on {@link Configuration#dyno}.
-     * @type {import("./workers")}
+     * @type {import("./source/jobQueues")}
      */
-    this.workers = new Workers(this)
+    this.jobQueues = new JobQueues(this)
     /**
      * Logger used for HireFire diagnostic messages. Defaults to `console`. Set to `null`
      * (or a logger missing the log methods) to silence diagnostics.
@@ -95,11 +95,11 @@ class Configuration {
      */
     this._dispatcher = null
     /**
-     * @type {import("./cpu") | null}
+     * @type {import("./source/cpu") | null}
      */
     this._alwaysOnCpu = null
     /**
-     * @type {import("./web") | null}
+     * @type {import("./source/http") | null}
      */
     this._alwaysOnHttp = null
     this._httpActive = false
@@ -108,14 +108,6 @@ class Configuration {
     this._rqtUnresolvedWarned = false
     this._identityNameTooLongWarned = false
     this._bareWebDynoWarned = false
-  }
-
-  /**
-   * Alias for {@link Configuration#http} (Node historical name).
-   * @returns {import("./web") | null}
-   */
-  get web() {
-    return this.http
   }
 
   /**
@@ -169,8 +161,10 @@ class Configuration {
   /**
    * Declares a process by dyno name (Heroku Procfile-shaped).
    *
-   * A sampler function registers a local job-queue source. Prefer zero-config for request
-   * queue time and CPU, and lease plan adapters in the HireFire UI for managed job queues.
+   * A sampler function registers a local job-queue source (`jql` / `jqs` under the lease
+   * plan strategy). Prefer zero-config for request queue time and CPU, and lease plan
+   * adapters in the HireFire UI for managed job queues. Use {@link Configuration#dyno} with
+   * a sampler for custom probes or strategy-only (custom configuration) plan entries.
    *
    * Bare `dyno("web")` (no sampler, name `"web"` case-insensitive) is accepted for 1.x
    * backwards compatibility but does nothing: RQT is armed only by platform web role and
@@ -295,7 +289,7 @@ class Configuration {
   /**
    * The HTTP source used for sampling, creating an always-on source when a report name is known.
    *
-   * @returns {import("./web") | null}
+   * @returns {import("./source/http") | null}
    */
   get httpSource() {
     const name = this.httpName
@@ -310,7 +304,7 @@ class Configuration {
       !this._alwaysOnHttp ||
       this._alwaysOnHttp.name.toLowerCase() !== name.toLowerCase()
     ) {
-      this._alwaysOnHttp = new Web(name, this)
+      this._alwaysOnHttp = new HTTP(name, this)
     }
     return this._alwaysOnHttp
   }
@@ -338,7 +332,7 @@ class Configuration {
    *
    * Unresolved identity yields no CPU sources and logs once.
    *
-   * @returns {import("./cpu")[]}
+   * @returns {import("./source/cpu")[]}
    */
   activeCpuSources() {
     const identity = this._softIdentity()
@@ -368,7 +362,7 @@ class Configuration {
     }
 
     if (source === "job_queue") {
-      this.workers.add(new Worker(this._canonicalName(name), sampler))
+      this.jobQueues.add(new JobQueue(this._canonicalName(name), sampler))
     }
 
     this._sourcesByName.set(key, kinds.concat(source))
@@ -377,7 +371,7 @@ class Configuration {
   _canonicalName(name) {
     for (const key of this._sourcesByName.keys()) {
       if (key.toLowerCase() === name.toLowerCase()) {
-        const existing = [...this.workers]
+        const existing = [...this.jobQueues]
           .map((w) => w.name)
           .find((n) => n.toLowerCase() === name.toLowerCase())
         return existing || name

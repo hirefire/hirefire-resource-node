@@ -1,5 +1,3 @@
-// Lifecycle / SQL-shape unit tests. Requires optional peer `pg` (same as the
-// integration cell). Skipped when `pg` is not installed so core cells stay green.
 let pg
 try {
   pg = require("pg")
@@ -26,8 +24,6 @@ describeIfPg("pg-boss connection lifecycle", () => {
     end = jest.fn().mockResolvedValue(undefined)
     query = jest.fn()
     on = jest.fn()
-    // Spy the real Pool export so loadPg() sees the stub even when `pg` is
-    // installed for the integration suite (virtual jest.mock conflicts with real pg).
     poolSpy = jest.spyOn(pg, "Pool").mockImplementation(() => ({
       query,
       end,
@@ -274,7 +270,6 @@ describeIfPg("pg-boss connection lifecycle", () => {
 
   test("absence of blocked is not sticky; presence is cached", async () => {
     const url = "postgres://localhost/cache-probe"
-    // Sample 1: probe false → no NOT blocked in size SQL.
     query
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
@@ -282,7 +277,6 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expect(query.mock.calls[0][0]).toMatch(/information_schema/)
     expect(query.mock.calls[1][0]).not.toMatch(/NOT blocked/)
 
-    // Sample 2: re-probe (false was not cached); now present → NOT blocked.
     query
       .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
@@ -290,7 +284,6 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expect(query.mock.calls[2][0]).toMatch(/information_schema/)
     expect(query.mock.calls[3][0]).toMatch(/NOT blocked/)
 
-    // Sample 3: presence cached → no catalog probe, still NOT blocked.
     query.mockResolvedValueOnce({ rows: [{ job_queue_size: "1" }] })
     await expect(
       jobQueueSize({ connection: url, schema: "pgboss" }),

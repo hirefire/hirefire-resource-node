@@ -1,4 +1,3 @@
-// Pipeline per queue: llen wait, llen paused, zcount delayed (3 cmds, no lindex/zcard)
 function emptyQueueResults(count = 1) {
   const rows = []
   for (let i = 0; i < count; i++) {
@@ -17,14 +16,10 @@ function loadBullWithMockedIORedis(clientFactory) {
   jest.resetModules()
   const IORedis = jest.fn().mockImplementation(clientFactory)
   jest.doMock("ioredis", () => IORedis, { virtual: true })
-  // Also install under the absolute path real packages resolve to, so a
-  // previously-resolved real ioredis cannot win over the virtual mock.
   try {
     const resolved = require.resolve("ioredis")
     jest.doMock(resolved, () => IORedis)
-  } catch {
-    // Package absent (core cell): virtual mock alone is enough.
-  }
+  } catch {}
   const { jobQueueSize } = require("../../src/macro/bull")
   return { IORedis, jobQueueSize }
 }
@@ -148,7 +143,6 @@ describe("Bull connection lifecycle", () => {
     ).resolves.toBe(0)
     expect(scan).toHaveBeenCalledWith("0", "MATCH", "bull:*", "COUNT", 100)
     expect(scan).toHaveBeenCalledWith("7", "MATCH", "bull:*", "COUNT", 100)
-    // default, mailer, prio discovered. meta ignored. 3 cmds per queue = 9 llen+zcount.
     expect(pipeline.llen).toHaveBeenCalledWith("bull:default:wait")
     expect(pipeline.llen).toHaveBeenCalledWith("bull:mailer:wait")
     expect(pipeline.llen).toHaveBeenCalledWith("bull:prio:wait")
@@ -177,7 +171,6 @@ describe("Bull connection lifecycle", () => {
         connection: "redis://localhost:6379/0",
       }),
     ).resolves.toBe(1)
-    // One queue after trim/dedupe: llen wait, llen paused, zcount delayed.
     expect(pipeline.llen).toHaveBeenCalledTimes(2)
     expect(pipeline.zcount).toHaveBeenCalledTimes(1)
   })
@@ -186,7 +179,6 @@ describe("Bull connection lifecycle", () => {
     const frozenNow = 1_700_000_000_000
     const expectedDelayedUpper = (frozenNow + 1) * 0x1000 - 1
     jest.spyOn(Date, "now").mockReturnValue(frozenNow)
-    // wait=1, paused=2, delayed=4 → total 7. No active, no priority zcard.
     exec.mockResolvedValueOnce([
       [null, 1],
       [null, 2],
@@ -212,7 +204,6 @@ describe("Bull connection lifecycle", () => {
   })
 
   test("jobQueueSize treats pipeline field errors as zero", async () => {
-    // wait=1, paused=error→0, delayed=2 → total 3
     exec.mockResolvedValueOnce([
       [null, 1],
       [new Error("nope"), null],
@@ -305,7 +296,6 @@ describe("Bull connection lifecycle", () => {
         connection: "redis://localhost:6379/0",
       }),
     ).resolves.toBe(4)
-    // One logical queue after normalize: 2 LLEN + 1 ZCOUNT.
     expect(pipeline.llen).toHaveBeenCalledTimes(2)
     expect(pipeline.llen).toHaveBeenCalledWith("bull:default:wait")
     expect(pipeline.llen).toHaveBeenCalledWith("bull:default:paused")
@@ -318,7 +308,6 @@ describe("Bull connection lifecycle", () => {
     const frozenNow = 1_700_000_000_000
     const expectedDelayedUpper = (frozenNow + 1) * 0x1000 - 1
     jest.spyOn(Date, "now").mockReturnValue(frozenNow)
-    // default: wait1+paused0+delayed2 = 3; mailer: wait4+paused1+delayed0 = 5 → 8
     exec.mockResolvedValueOnce([
       [null, 1],
       [null, 0],
@@ -356,7 +345,6 @@ describe("Bull connection lifecycle", () => {
   })
 
   test("jobQueueSize coerces non-finite pipeline values to zero", async () => {
-    // wait=null→0, paused="x"→0, delayed=5 → 5
     exec.mockResolvedValueOnce([
       [null, null],
       [null, "x"],
@@ -366,8 +354,6 @@ describe("Bull connection lifecycle", () => {
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
     ).resolves.toBe(5)
 
-    // Full 3-tuple with distinct slots: missing/err slots soft-zero; only delayed counts.
-    // A 1-tuple layout would not distinguish cmdsPerQueue mistakes.
     exec.mockResolvedValueOnce([
       [null, null],
       [null, undefined],
@@ -385,7 +371,6 @@ describe("Bull connection lifecycle", () => {
         "0",
         ["bull:only-active:active", "bull:only-prio:priority"],
       ])
-    // both queues: zero waiting on each (3 cmds × 2)
     exec.mockResolvedValue(emptyQueueResults(2))
     ;({ IORedis, jobQueueSize } = loadBullWithMockedIORedis(() => ({
       pipeline: () => pipeline,
@@ -432,7 +417,6 @@ describe("Bull connection lifecycle", () => {
     ).resolves.toBe(0)
     expect(keys).not.toHaveBeenCalled()
     expect(scan).toHaveBeenCalledTimes(1)
-    // Only live-ish suffixes discover queue names.
     expect(pipeline.llen).toHaveBeenCalledWith("bull:real:wait")
     expect(pipeline.llen).toHaveBeenCalledWith("bull:real:paused")
     expect(pipeline.zcount).toHaveBeenCalledWith(
@@ -454,7 +438,6 @@ describe("Bull connection lifecycle", () => {
     jest.spyOn(Date, "now").mockReturnValue(frozenNow)
     exec.mockResolvedValue(
       emptyQueueResults(2).map((row, i) =>
-        // Distinct non-zero counts so sum order matters: 1+2+3 + 4+5+6 = 21
         i % 3 === 0
           ? [null, Math.floor(i / 3) * 3 + 1]
           : i % 3 === 1
@@ -480,7 +463,6 @@ describe("Bull connection lifecycle", () => {
         ["bull:default:delayed", "-inf", expectedDelayedUpper],
         ["bull:mailer:delayed", "-inf", expectedDelayedUpper],
       ])
-      // Interleaved pipeline order: wait, paused, delayed, wait, paused, delayed.
       const sequence = []
       for (const [name, calls] of [
         ["llen", pipeline.llen.mock.invocationCallOrder],
@@ -503,7 +485,6 @@ describe("Bull connection lifecycle", () => {
   })
 
   test("jobQueueSize coerces string pipeline counts to numbers", async () => {
-    // stringNumbers-style replies must not concatenate.
     exec.mockResolvedValueOnce([
       [null, "2"],
       [null, "3"],
@@ -582,8 +563,6 @@ describe("Bull connection lifecycle", () => {
   })
 
   test("jobQueueSize env ladder walks REDIS_URL → REDISTOGO → REDISCLOUD → OPENREDIS", async () => {
-    // Multi-rung cascade: all lower rungs set. Winner is the first non-empty.
-    // HIREFIRE_BULL_URL is never consulted by jobQueueSize.
     exec.mockResolvedValue(emptyQueueResults(1))
     const keys = [
       "REDIS_TLS_URL",

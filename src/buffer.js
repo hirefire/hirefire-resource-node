@@ -103,8 +103,6 @@ function clampRqt(sum, count) {
  */
 function rqtParts(bucket) {
   if (bucket && typeof bucket === "object" && !Array.isArray(bucket)) {
-    // Preserve Infinity/NaN (Python float()) so encode can omit non-finite means.
-    // Missing keys default to 0 like Ruby/Python.
     const sum =
       bucket.sum === undefined || bucket.sum === null ? 0 : Number(bucket.sum)
     const countRaw =

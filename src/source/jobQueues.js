@@ -1,105 +1,104 @@
-const safeLog = require("./log")
+const safeLog = require("../log")
 
 /**
- * Collection of job-metric Worker collectors declared on the configuration.
+ * Collection of local {@link JobQueue} sources declared on the configuration.
  */
-class Workers {
+class JobQueues {
   /**
-   * @param {import("./configuration")} configuration
+   * @param {import("../configuration")} configuration
    */
   constructor(configuration) {
     this._configuration = configuration
     /**
-     * @type {import("./worker")[]}
+     * @type {import("./jobQueue")[]}
      */
-    this._workers = []
+    this._jobQueues = []
   }
 
   /**
-   * Adds a worker collector to the collection.
-   *
-   * @param {import("./worker")} worker
+   * @param {import("./jobQueue")} jobQueue
    * @returns {void}
    */
-  add(worker) {
-    this._workers.push(worker)
+  add(jobQueue) {
+    this._jobQueues.push(jobQueue)
   }
 
   /**
-   * Whether the collection has at least one worker.
-   *
    * @returns {boolean}
    */
   any() {
-    return this._workers.length > 0
+    return this._jobQueues.length > 0
   }
 
   /**
-   * Number of worker collectors in the collection.
-   *
    * @returns {number}
    */
   count() {
-    return this._workers.length
+    return this._jobQueues.length
   }
 
   /**
    * Case-insensitive match. Returned source keeps its canonical declared name for emit.
    *
    * @param {string} name
-   * @returns {import("./worker") | null}
+   * @returns {import("./jobQueue") | null}
    */
   findByName(name) {
     const needle = String(name)
     return (
-      this._workers.find(
-        (worker) => worker.name.toLowerCase() === needle.toLowerCase(),
+      this._jobQueues.find(
+        (jobQueue) => jobQueue.name.toLowerCase() === needle.toLowerCase(),
       ) || null
     )
   }
 
   /**
    * @template T
-   * @param {(worker: import("./worker")) => T} fn
+   * @param {(jobQueue: import("./jobQueue")) => T} fn
    * @returns {T[]}
    */
   map(fn) {
-    return this._workers.map(fn)
+    return this._jobQueues.map(fn)
   }
 
   /**
-   * @returns {IterableIterator<import("./worker")>}
+   * @returns {IterableIterator<import("./jobQueue")>}
    */
   [Symbol.iterator]() {
-    return this._workers[Symbol.iterator]()
+    return this._jobQueues[Symbol.iterator]()
   }
 
   /**
-   * Samples a job-queue worker and buffers a valid metric under the given wire strategy.
+   * Samples a job-queue source and buffers a valid metric under the given wire strategy.
    *
-   * @param {import("./worker")} worker
+   * @param {import("./jobQueue")} jobQueue
    * @param {string} strategy - `jql` or `jqs`
+   * @param {{ live?: () => boolean }} [options]
    * @returns {Promise<void>}
    */
-  async sampleJobQueue(worker, strategy) {
-    if (!worker) return
+  async sampleJobQueue(jobQueue, strategy, options) {
+    if (!jobQueue) return
 
+    const live = options && options.live
     strategy = String(strategy)
     if (strategy !== "jql" && strategy !== "jqs") {
       this._logger().error(
         `[HireFire] Unknown job-queue strategy ${JSON.stringify(
           strategy,
-        )} for ` + `${JSON.stringify(worker.name)}. Sample dropped.`,
+        )} for ` + `${JSON.stringify(jobQueue.name)}. Sample dropped.`,
       )
       return
     }
 
     try {
-      const value = await worker.sample()
+      const value = await jobQueue.sample()
+      if (live && !live()) return
 
       if (!validSample(value)) {
         this._logger().error(
-          `[HireFire] The sampler for dyno "${worker.name}" returned ` +
+          `[HireFire] The sampler for ${JSON.stringify(
+            jobQueue.name,
+          )} returned ` +
             `${inspect(
               value,
             )}, expected a non-negative number. Sample dropped.`,
@@ -107,14 +106,16 @@ class Workers {
         return
       }
 
-      this._configuration.buffer.sample(worker.name, strategy, Number(value))
+      this._configuration.buffer.sample(jobQueue.name, strategy, Number(value))
     } catch (error) {
       const reason =
         error instanceof Error
           ? `${error.name}: ${error.message}`
           : inspect(error)
       this._logger().error(
-        `[HireFire] The sampler for dyno "${worker.name}" raised ${reason}`,
+        `[HireFire] The sampler for ${JSON.stringify(
+          jobQueue.name,
+        )} raised ${reason}`,
       )
     }
   }
@@ -133,4 +134,4 @@ function inspect(value) {
   return typeof value === "string" ? JSON.stringify(value) : String(value)
 }
 
-module.exports = Workers
+module.exports = JobQueues

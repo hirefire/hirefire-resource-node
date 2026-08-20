@@ -2,7 +2,7 @@ require("../support")
 const fs = require("fs")
 const os = require("os")
 const path = require("path")
-const Usage = require("../../src/cpu/usage")
+const Usage = require("../../src/source/cpu/usage")
 
 function stubReads(map) {
   jest

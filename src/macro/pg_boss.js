@@ -4,29 +4,20 @@ const Hooks = require("../plan/hooks")
 const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://127.0.0.1:5432/postgres"
 const SCHEMA_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
-// Sample query budget (ms). Also applied as statement_timeout on owned pools.
 const SAMPLE_QUERY_TIMEOUT_MS = 5000
 
-// Defaults for short-lived sample-only pools.
 const SAMPLE_POOL_OPTIONS = {
   max: 1,
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 1000,
-  // node-pg aborts queries that exceed this (client-side).
   query_timeout: SAMPLE_QUERY_TIMEOUT_MS,
-  // Server-side cancel if the statement still runs past the budget.
   statement_timeout: SAMPLE_QUERY_TIMEOUT_MS,
 }
 
-// Process-local cache: cacheKey → true when blocked column is known present.
-// Absent/false is not cached permanently so migrate-add-blocked and missing-table
-// recover on the next sample.
 const blockedColumnPresentCache = new Set()
-// Stable ids for borrowed pools/clients without mutating them.
 const connectionIdMap = new WeakMap()
 let connectionIdSeq = 0
 
-// Lazy: core test cell and plan path load this module without installing pg.
 function loadPg() {
   return require("pg")
 }
@@ -209,8 +200,6 @@ function supportsPlanStrategy(strategy) {
 async function withConnection(args, fn) {
   const { queues: rawQueues, options } = unpack(args)
   const queues = normalizeQueues(rawQueues)
-  // Fold to lowercase to match unquoted Postgres identifier semantics so
-  // FROM schema.job and information_schema.table_schema agree.
   const schema = resolveSchema(options).toLowerCase()
   if (!SCHEMA_RE.test(schema)) {
     throw new Error(`Invalid pg-boss schema name: ${schema}`)
@@ -238,10 +227,8 @@ async function withConnection(args, fn) {
     ownedPool = new Pool({
       ...SAMPLE_POOL_OPTIONS,
       ...userOpts,
-      // Resolved URL always wins over a connectionString in connectionOptions.
       connectionString,
     })
-    // Unhandled pool "error" events terminate the Node process.
     ownedPool.on("error", () => {})
     queryable = ownedPool
     cacheKey = blockedCacheKey(schema, connectionString)
@@ -260,9 +247,7 @@ async function withConnection(args, fn) {
     if (ownedPool) {
       try {
         await ownedPool.end()
-      } catch {
-        // Never let teardown override the sample result or original error.
-      }
+      } catch {}
     }
   }
 }
@@ -317,13 +302,11 @@ function blockedCacheKey(schema, connection) {
   if (typeof connection === "string") {
     return `${schema}\0${connection}`
   }
-  // Borrowed client/Pool: identity by object reference (stable per process).
   return `${schema}\0obj:${connectionIdentity(connection)}`
 }
 
 function connectionIdentity(connection) {
   if (!connection || typeof connection !== "object") return "unknown"
-  // Prefer a stable URL when the pool exposes one (node-pg Pool options).
   const opts = connection.options || connection
   if (opts && typeof opts.connectionString === "string") {
     return opts.connectionString
@@ -331,7 +314,6 @@ function connectionIdentity(connection) {
   if (opts && typeof opts.host === "string") {
     return `${opts.host}:${opts.port || 5432}/${opts.database || ""}`
   }
-  // Per-object id via WeakMap (no property write on the caller's pool).
   let id = connectionIdMap.get(connection)
   if (!id) {
     connectionIdSeq += 1
@@ -355,8 +337,6 @@ async function detectHasBlockedColumn(client, schema, cacheKey) {
     [schema],
   )
   const has = rows.length > 0
-  // Only cache presence. Absence may become true after migrate, or the job table
-  // may appear later. Re-probe each sample until true.
   if (has) blockedColumnPresentCache.add(cacheKey)
   return has
 }

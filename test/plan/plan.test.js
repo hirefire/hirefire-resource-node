@@ -36,8 +36,6 @@ describe("Plan", () => {
   })
 
   test("libraryLoaded for pg_boss requires both pg-boss and pg", () => {
-    // Patch plan.js's own require.resolve (Jest workers do not share the test
-    // file's require.resolve; Module._resolveFilename is also bypassed).
     const planModule = require.cache[require.resolve("../../src/plan")]
     const originalResolve = planModule.require.resolve
     const present = new Set(["pg-boss", "pg"])
@@ -826,6 +824,43 @@ describe("Plan", () => {
       const data = configuration.buffer.flush()
       expect(Object.values(data.worker.jqs)[0]).toBe(7)
       expect(Object.values(data.worker.wrk)[0]).toBe(3)
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
+  test("execute skips wrk when job strategy sample is invalid", async () => {
+    let workingCalled = false
+    const mod = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+      jobQueueSize: async () => -1,
+      jobQueueWorking: async () => {
+        workingCalled = true
+        return 3
+      },
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      const data = configuration.buffer.flush()
+      expect(data.worker && data.worker.jqs).toBeUndefined()
+      expect(data.worker && data.worker.wrk).toBeUndefined()
+      expect(workingCalled).toBe(false)
     } finally {
       Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
     }

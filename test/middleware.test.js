@@ -21,7 +21,6 @@ describe("middleware", () => {
   describe("processRequestQueueTime", () => {
     test("collects a web sample", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
-      // Bare dyno("web") is a no-op; identity supplies the report name.
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")

@@ -80,8 +80,6 @@ const Plan = {
    */
   async aroundJobQueueSample(fn, configuration) {
     const logger = configuration && configuration.logger
-    // Only adapters whose before completed are recorded. If before raises,
-    // after is skipped for that adapter (Ruby Plan.around_job_queue_sample).
     const tokens = Object.create(null)
 
     for (const name of Object.keys(this.ADAPTERS)) {
@@ -373,7 +371,6 @@ function normalizePlanQueues(queues, name, logger) {
 
   const list = []
   for (const queue of queues) {
-    // JSON null → "" (Ruby nil.to_s), then dropped as empty. Never String(null) → "null".
     const qname = queue == null ? "" : String(queue).trim()
     if (!qname || Buffer.byteLength(qname) > MAX_QUEUE_NAME_BYTES) continue
     list.push(qname)

@@ -373,7 +373,6 @@ describe("Client (persistent connection)", () => {
     await expect(client.submitSamples("[]")).rejects.toBeInstanceOf(
       RequestError,
     )
-    // Warm succeeds once; second POST retries once (2 destroys) then raises.
     expect(requests).toBe(3)
     await client.close()
   })

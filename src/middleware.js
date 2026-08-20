@@ -53,7 +53,6 @@ function processRequestQueueTime(requestStart, queueStart) {
 
     const configuration = HireFire.configuration
 
-    // Legacy Logplex QueueTime path: no token required (1.x parity).
     if (configuration.logQueueMetrics) {
       logRequestQueueTime(requestQueueTime)
     }

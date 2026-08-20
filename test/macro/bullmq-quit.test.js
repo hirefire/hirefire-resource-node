@@ -9,7 +9,6 @@ jest.mock(
 const IORedis = require("ioredis")
 const { jobQueueSize } = require("../../src/macro/bullmq")
 
-// Pipeline per queue: lindex wait, llen wait, llen paused, zcount delayed, zcard prioritized
 function emptyQueueResults(count = 1) {
   const rows = []
   for (let i = 0; i < count; i++) {
@@ -162,7 +161,6 @@ describe("BullMQ connection lifecycle", () => {
   })
 
   test("jobQueueSize counts prioritized and paused, excludes active", async () => {
-    // wait=1, paused=2, delayed=4, prioritized=5 (no active in pipeline)
     const frozenNow = 1_700_000_000_000
     const expectedDelayedUpper = (frozenNow + 1) * 0x1000 - 1
     jest.spyOn(Date, "now").mockReturnValue(frozenNow)
@@ -193,7 +191,6 @@ describe("BullMQ connection lifecycle", () => {
   })
 
   test("jobQueueSize subtracts wait marker when last entry is 0:", async () => {
-    // Marker-only wait: lindex "0:123", llen wait 1 → JQS 0
     exec.mockResolvedValueOnce([
       [null, "0:123"],
       [null, 1],
@@ -205,7 +202,6 @@ describe("BullMQ connection lifecycle", () => {
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
     ).resolves.toBe(0)
 
-    // Marker plus one real wait job: lindex "0:123", llen wait 2 → JQS 1
     exec.mockResolvedValueOnce([
       [null, "0:123"],
       [null, 2],
@@ -219,7 +215,6 @@ describe("BullMQ connection lifecycle", () => {
   })
 
   test("jobQueueSize treats pipeline field errors as zero", async () => {
-    // wait=1, paused=error→0, delayed=2, prioritized=0
     exec.mockResolvedValueOnce([
       [null, null],
       [null, 1],

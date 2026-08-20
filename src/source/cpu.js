@@ -1,7 +1,7 @@
 const Usage = require("./cpu/usage")
 
 /**
- * CPU utilization collector for a declared process.
+ * CPU utilization source for an always-on process identity name.
  */
 class CPU {
   constructor(name, configuration) {
@@ -13,7 +13,7 @@ class CPU {
   }
 
   /**
-   * The process name this collector reports under.
+   * The process name this source reports under.
    * @returns {string}
    */
   get name() {

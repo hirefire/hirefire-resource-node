@@ -101,9 +101,7 @@ class Client {
     if (this._agent) {
       try {
         this._agent.destroy()
-      } catch {
-        // Swallow close failures so stop paths remain safe.
-      }
+      } catch {}
       this._agent = null
     }
   }
@@ -183,9 +181,6 @@ class Client {
       })
 
       request.on("timeout", () => {
-        // Settle with a non-retriable timeout first. destroy() can emit error
-        // (often ECONNRESET on a reused socket), which must not win the race
-        // and trigger a keep-alive retry of a real timeout.
         settle(reject, new RequestError("Request timed out."))
         request.destroy()
       })
@@ -219,7 +214,6 @@ class Client {
 
       response.on("end", () => {
         if (exceeded) {
-          // Body exceeded cap: return oversized string so lease parse treats as ignored plan.
           resolve("x".repeat(maxBodyBytes + 1))
           return
         }

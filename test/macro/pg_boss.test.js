@@ -141,7 +141,6 @@ describe("pg-boss", () => {
     pool = new Pool({ connectionString: postgresURL, max: 2 })
     try {
       await pool.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`)
-      // Install schema + queues via plain Node so ESM pg-boss 12 works outside Jest.
       execFileSync(
         process.execPath,
         [setupScript, postgresURL, SCHEMA, "email", "sms"],
@@ -150,9 +149,7 @@ describe("pg-boss", () => {
     } catch (error) {
       try {
         await pool.end()
-      } catch {
-        // ignore end failures during setup abort
-      }
+      } catch {}
       pool = null
       throw error
     }
@@ -165,9 +162,7 @@ describe("pg-boss", () => {
     } finally {
       try {
         await pool.end()
-      } catch {
-        // ignore end failures
-      }
+      } catch {}
     }
   })
 
@@ -222,7 +217,6 @@ describe("pg-boss", () => {
   })
 
   test("active jobs are excluded from size and latency", async () => {
-    // Old start_after so a wrong include would report large JQL (~minutes).
     const id = await insertJob(pool, { name: "email", state: "active" })
     await setStartAfter(pool, id, -300)
     const rows = await jobStates(pool)
@@ -233,7 +227,6 @@ describe("pg-boss", () => {
   })
 
   test("terminal states alone are excluded from size and latency", async () => {
-    // Age each terminal so a wrong include would produce large latency, not ~0.
     for (const state of ["completed", "cancelled", "failed"]) {
       const id = await insertJob(pool, { name: "email", state })
       await setStartAfter(pool, id, -300)
@@ -262,7 +255,6 @@ describe("pg-boss", () => {
     expect(await jobQueueSize("email", sampleOpts)).toBe(1)
     expect(await jobQueueLatency("email", sampleOpts)).toBeGreaterThanOrEqual(2)
 
-    // Sampling must not mutate terminal or live rows.
     const after = await jobStates(pool)
     expect(after.map((r) => r.state).sort()).toEqual([
       "cancelled",
@@ -286,7 +278,6 @@ describe("pg-boss", () => {
     expect(future).toHaveLength(1)
     expect(active).toHaveLength(1)
 
-    // live + due = 2. future and active excluded.
     expect(await jobQueueSize("email", sampleOpts)).toBe(2)
     expect(await jobQueueSize(sampleOpts)).toBe(2)
   })
@@ -331,9 +322,6 @@ describe("pg-boss", () => {
   test("latency uses earliest due start_after not created_on", async () => {
     const older = await insertJob(pool, { name: "email" })
     const newer = await insertJob(pool, { name: "email" })
-    // Tight start_after window (~12s / ~5s). created_on far in the past on both
-    // so ORDER BY start_after + age(created_on) or pure created_on age cannot
-    // land in the expected band.
     await setStartAfter(pool, older, -12)
     await setStartAfter(pool, newer, -5)
     await setCreatedOn(pool, older, -7200)
@@ -348,7 +336,6 @@ describe("pg-boss", () => {
     expect(olderRow.age_from_start_after).toBeLessThan(30)
 
     const latency = await jobQueueLatency("email", sampleOpts)
-    // Oldest start_after wins (~12s). created_on ages (~2h) must not pass.
     expect(latency).toBeGreaterThanOrEqual(8)
     expect(latency).toBeLessThan(30)
   })
@@ -359,15 +346,12 @@ describe("pg-boss", () => {
     await setStartAfter(pool, emailOld, -50)
     await setStartAfter(pool, smsNewer, -12)
 
-    // Across both queues the oldest eligibility wins (email ~50s).
     const both = await jobQueueLatency("email", "sms", sampleOpts)
     expect(both).toBeGreaterThanOrEqual(45)
     expect(both).toBeLessThan(90)
-    // Single-queue filter must not pick the other queue's older job.
     const smsOnly = await jobQueueLatency("sms", sampleOpts)
     expect(smsOnly).toBeGreaterThanOrEqual(10)
     expect(smsOnly).toBeLessThan(30)
-    // All-queues matches named pair when those are the only rows.
     const all = await jobQueueLatency(sampleOpts)
     expect(all).toBeGreaterThanOrEqual(45)
     expect(all).toBeLessThan(90)
@@ -377,11 +361,8 @@ describe("pg-boss", () => {
     const version = installedPgBossVersion()
     const has = await hasBlockedColumn(pool)
     if (expectsBlockedColumn(version)) {
-      // pg-boss ≥ 12.19 must ship blocked; fail the matrix cell if schema is wrong.
       expect(has).toBe(true)
     } else if (!has) {
-      // Pre-blocked schemas (10.x / 11.x / early 12.x): still measure waiting
-      // without a blocked gate (product soft-skip of NOT blocked).
       const id = await insertJob(pool, { name: "email" })
       await setStartAfter(pool, id, -6)
       expect(await jobQueueSize("email", sampleOpts)).toBe(1)
@@ -391,7 +372,6 @@ describe("pg-boss", () => {
       return
     }
 
-    // Controlled inserts: 2 live unblocked + 1 blocked → absolute size 2.
     await insertJob(pool, { name: "email", blocked: false })
     await insertJob(pool, { name: "email", blocked: false })
     const blockedId = await insertJob(pool, {
@@ -407,7 +387,6 @@ describe("pg-boss", () => {
     expect(await jobQueueSize("email", sampleOpts)).toBe(2)
     expect(await jobQueueSize(sampleOpts)).toBe(2)
 
-    // Blocked-only age must not drive latency (unblocked rows are brand new).
     const latency = await jobQueueLatency("email", sampleOpts)
     expect(latency).toBeLessThan(20)
   })
@@ -415,7 +394,6 @@ describe("pg-boss", () => {
   test("blocked-only queue reports size 0 and latency 0 when column exists", async () => {
     const has = await hasBlockedColumn(pool)
     if (!has) {
-      // Pre-blocked schema: seed waiting work and prove JQS still counts it.
       const id = await insertJob(pool, { name: "email" })
       await setStartAfter(pool, id, -6)
       expect(await jobQueueSize("email", sampleOpts)).toBe(1)
@@ -461,7 +439,6 @@ describe("pg-boss", () => {
           schema: SCHEMA,
         }),
       ).toBe(1)
-      // Borrowed pool must remain usable (macro must not end it).
       const { rows } = await borrowed.query("SELECT 1 AS ok")
       expect(rows[0].ok).toBe(1)
     } finally {
@@ -475,7 +452,6 @@ describe("pg-boss", () => {
       {
         HIREFIRE_PG_BOSS_URL: postgresURL,
         HIREFIRE_PG_BOSS_SCHEMA: SCHEMA,
-        // Unreachable / wrong DB: must not be used when HireFire URL is set.
         DATABASE_URL: "postgres://postgres@127.0.0.1:1/not_used",
       },
       async () => {
@@ -559,7 +535,6 @@ describe("pg-boss", () => {
     await setStartAfter(pool, id, -7)
     expect(await jobQueueSize("email", sampleOpts)).toBe(1)
     expect(await jobQueueLatency("email", sampleOpts)).toBeGreaterThanOrEqual(5)
-    // Second sample still read-only.
     expect(await jobQueueSize("email", sampleOpts)).toBe(1)
 
     const { rows } = await pool.query(

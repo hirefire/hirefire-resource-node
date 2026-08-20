@@ -1,8 +1,8 @@
 const { freezeTime } = require("./support")
-const Web = require("../src/web")
+const HTTP = require("../src/source/http")
 const Buffer = require("../src/buffer")
 
-describe("Web", () => {
+describe("HTTP", () => {
   let configuration
 
   beforeEach(() => {
@@ -10,13 +10,13 @@ describe("Web", () => {
   })
 
   test("coerces the name to a string", () => {
-    expect(new Web("web", configuration).name).toBe("web")
-    expect(new Web("api", configuration).name).toBe("api")
+    expect(new HTTP("web", configuration).name).toBe("web")
+    expect(new HTTP("api", configuration).name).toBe("api")
   })
 
-  test("sample delegates the queue time to the buffer", () => {
+  test("sample buffers request queue time", () => {
     freezeTime(1000)
-    new Web("web", configuration).sample(42)
+    new HTTP("web", configuration).sample(42)
     expect(configuration.buffer.flush().web.rqt).toEqual({
       1000: { sum: 42, count: 1 },
     })

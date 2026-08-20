@@ -80,7 +80,6 @@ describe("BullMQ", () => {
   test("jobQueueSize excludes active-only jobs", async () => {
     await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
     expect(await redis.llen("bull:default:active")).toBe(2)
-    // Named queue: active is present but not waiting.
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
   })
 
@@ -89,7 +88,6 @@ describe("BullMQ", () => {
     await defaultQueue.add("dueDelayedJob", {}, { delay: 1 })
     await redis.lpush("bull:default:active", "job-active-1")
     jest.advanceTimersByTime(1)
-    // live wait + due delayed = 2. active excluded.
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await redis.llen("bull:default:active")).toBe(1)

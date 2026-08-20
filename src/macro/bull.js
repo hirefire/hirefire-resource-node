@@ -5,7 +5,6 @@ const {
 } = require("../errors")
 const Hooks = require("../plan/hooks")
 
-// Lazy: core test cell and plan path load this module without installing ioredis.
 function loadIORedis() {
   return require("ioredis")
 }
@@ -103,7 +102,6 @@ async function jobQueueSize(...args) {
     "redis://localhost:6379/0"
 
   const userConnectionOptions = options.connectionOptions || {}
-  // Defaults first; caller connection / connectionOptions win.
   const redis =
     typeof connection === "object" && connection !== null
       ? new IORedis({
@@ -116,8 +114,6 @@ async function jobQueueSize(...args) {
           ...userConnectionOptions,
         })
 
-  // Unhandled ioredis "error" events terminate the Node process. Sampling
-  // failures still surface as rejected commands / quit.
   redis.on("error", () => {})
 
   try {
@@ -127,11 +123,7 @@ async function jobQueueSize(...args) {
 
     let totalCount = 0
     const pipeline = redis.pipeline()
-    // Delayed scores: timestampMs * 0x1000 + sequence. Upper bound includes the full
-    // sequence nibble for the current millisecond.
     const delayedUpper = (Date.now() + 1) * 0x1000 - 1
-    // Classic Bull: LLEN wait, LLEN paused, ZCOUNT delayed due. No LINDEX marker,
-    // no ZCARD priority (priority members already sit on wait/paused).
     const cmdsPerQueue = 3
 
     for (const queue of queues) {
@@ -148,8 +140,6 @@ async function jobQueueSize(...args) {
       const pausedCount = toCount(pipelineValue(results[i + 1]))
       const delayedCount = toCount(pipelineValue(results[i + 2]))
 
-      // Waiting only: live (wait + paused) + due delayed. Active excluded.
-      // Priority index is not added (dual-written into wait/paused).
       totalCount += waitCount + pausedCount + delayedCount
     }
 

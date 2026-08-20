@@ -59,7 +59,6 @@ describe("pg-boss plan hooks", () => {
     expect(pgBossMacro.supportsPlanStrategy("rpm")).toBe(false)
     expect(pgBossMacro.supportsPlanStrategy("cpu")).toBe(false)
     expect(pgBossMacro.supportsPlanStrategy(Symbol.for("jqs"))).toBe(false)
-    // String coercion of plain string strategies only.
     expect(pgBossMacro.supportsPlanStrategy("JQS")).toBe(false)
   })
 
