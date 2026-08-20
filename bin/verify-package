@@ -1,0 +1,67 @@
+#!/usr/bin/env node
+"use strict"
+
+const { execSync } = require("child_process")
+const fs = require("fs")
+const path = require("path")
+
+const root = path.resolve(__dirname, "..")
+process.chdir(root)
+
+const pkg = require(path.join(root, "package.json"))
+
+function fail(message) {
+  console.error(message)
+  process.exit(1)
+}
+
+execSync("npm run build:types", { stdio: "inherit" })
+
+const indexDts = path.join(root, "types", "index.d.ts")
+if (!fs.existsSync(indexDts) || fs.statSync(indexDts).size === 0) {
+  fail("types/index.d.ts missing or empty after build:types")
+}
+
+const requiredDocs = ["LICENSE", "README.md", "CHANGELOG.md"]
+const required = new Set(["types/index.d.ts", ...requiredDocs])
+for (const entry of Object.values(pkg.exports)) {
+  if (entry && typeof entry === "object" && typeof entry.types === "string") {
+    required.add(entry.types.replace(/^\.\//, ""))
+  }
+}
+
+const raw = execSync("npm pack --dry-run --json", {
+  encoding: "utf8",
+  stdio: ["ignore", "pipe", "pipe"],
+})
+let parsed = JSON.parse(raw)
+if (!Array.isArray(parsed)) {
+  parsed = [parsed]
+}
+const files = (parsed[0].files || []).map((file) =>
+  typeof file === "string" ? file : file.path,
+)
+const fileSet = new Set(files)
+
+const missing = [...required].filter(
+  (rel) => !fileSet.has(rel) && !fileSet.has(`./${rel}`),
+)
+if (missing.length) {
+  const packedHint = files.filter(
+    (file) =>
+      String(file).includes("types") ||
+      requiredDocs.includes(String(file).replace(/^\.\//, "")),
+  )
+  fail(
+    `packed tarball missing required files:\n${missing.join(
+      "\n",
+    )}\npacked hint:\n${packedHint.join("\n")}`,
+  )
+}
+
+console.log(
+  "pack ok:",
+  required.size - requiredDocs.length,
+  "declaration paths plus",
+  requiredDocs.join(", "),
+)
