@@ -6,7 +6,7 @@ node_modules
 out
 doc
 types
-CLAUDE.md
+AGENTS.md
 .worktreeinclude
 .claude/settings.local.json
 .cursor/sandbox.json
