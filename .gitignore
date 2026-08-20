@@ -7,7 +7,3 @@ out
 doc
 types
 AGENTS.md
-.worktreeinclude
-.claude/settings.local.json
-.cursor/sandbox.json
-.cursorignore
