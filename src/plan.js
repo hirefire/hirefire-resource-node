@@ -8,9 +8,6 @@ const STRATEGIES = {
 const MAX_QUEUES = 64
 const MAX_QUEUE_NAME_BYTES = 128
 
-/**
- * Lease collection plans: resolve adapters, strategies, and execute plan entries.
- */
 const Plan = {
   ADAPTERS: {
     get bull() {
@@ -53,11 +50,6 @@ const Plan = {
     return Object.prototype.hasOwnProperty.call(STRATEGIES, String(strategy))
   },
 
-  /**
-   * @param {string|symbol} adapter
-   * @param {string|symbol} strategy
-   * @returns {boolean}
-   */
   supportsStrategy(adapter, strategy) {
     if (!this.knownAdapter(adapter)) return false
     if (!this.knownStrategy(strategy)) return false
@@ -66,18 +58,6 @@ const Plan = {
     return macro.supportsPlanStrategy(strategy)
   },
 
-  /**
-   * Run `fn` as one job-queue sample wave. Every allowlisted macro receives
-   * `beforeSampleJobQueues` / `afterSampleJobQueues` (defaults no-op). Dispatcher
-   * must not know adapter cache details. Hooks may be sync or return a Promise
-   * (both are awaited). Only adapters whose before completed without throwing
-   * receive after (token fencing, including successful null tokens).
-   *
-   * @template T
-   * @param {() => (T|Promise<T>)} fn body for this wave
-   * @param {import("./configuration")|null|undefined} [configuration]
-   * @returns {Promise<T>} resolves to `fn`'s return value
-   */
   async aroundJobQueueSample(fn, configuration) {
     const logger = configuration && configuration.logger
     const tokens = Object.create(null)
@@ -123,13 +103,6 @@ const Plan = {
     }
   },
 
-  /**
-   * Notify every allowlisted macro after fork / abandoned inherited state.
-   * Node has no process fork model; keep the fan-out so ports match Ruby.
-   *
-   * @param {import("./configuration")|null|undefined} [configuration]
-   * @returns {Promise<void>}
-   */
   async reinitMacrosAfterFork(configuration) {
     const logger = configuration && configuration.logger
     for (const name of Object.keys(this.ADAPTERS)) {
@@ -149,11 +122,6 @@ const Plan = {
     }
   },
 
-  /**
-   * @param {object} entry
-   * @param {import("./configuration")} configuration
-   * @returns {Promise<void>}
-   */
   async execute(entry, configuration) {
     const adapter = String(entry.adapter ?? entry["adapter"] ?? "").trim()
     const strategy = String(entry.strategy ?? entry["strategy"] ?? "").trim()
@@ -262,10 +230,6 @@ const Plan = {
   },
 }
 
-/**
- * Primary jql/jqs sample. Returns true when a value was buffered.
- * @returns {Promise<boolean>}
- */
 async function sampleJobStrategy(
   configuration,
   name,
@@ -293,11 +257,6 @@ async function sampleJobStrategy(
   return true
 }
 
-/**
- * Companion in-flight series for adapters that implement jobQueueWorking.
- * Failures log and do not drop the job strategy sample.
- * @returns {Promise<void>}
- */
 async function sampleWorking(
   configuration,
   name,

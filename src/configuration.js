@@ -250,47 +250,18 @@ class Configuration {
     return this._dispatcher
   }
 
-  /**
-   * Process name used for request-queue-time metrics.
-   *
-   * Resolved process identity only. No invented default (e.g. not `"web"`): without a real
-   * name there is nothing reliable to report under.
-   *
-   * @returns {string | null}
-   */
   get httpName() {
     return this._softIdentity()
   }
 
-  /**
-   * Marks this process as serving HTTP (middleware has sampled). Universal always-on RQT arm
-   * for any platform once real traffic is observed.
-   *
-   * @returns {void}
-   */
   markHttpActive() {
     this._httpActive = true
   }
 
-  /**
-   * Whether this process should emit the `rqt` wire metric (real samples and/or liveness).
-   *
-   * Arming layers (any one is enough):
-   * 1. **Traffic-first (universal):** middleware has sampled (`markHttpActive`).
-   * 2. **Platform role (optional pre-traffic):** Heroku process type `"web"` or Render
-   *    `RENDER_SERVICE_TYPE=web`.
-   *
-   * @returns {boolean}
-   */
   get rqtEnabled() {
     return Boolean(this._httpActive || Identity.platformHttpRole())
   }
 
-  /**
-   * The HTTP source used for sampling, creating an always-on source when a report name is known.
-   *
-   * @returns {import("./source/http") | null}
-   */
   get httpSource() {
     const name = this.httpName
     if (name == null) {
@@ -309,14 +280,6 @@ class Configuration {
     return this._alwaysOnHttp
   }
 
-  /**
-   * Whether `rqt` liveness claims (heartbeats and backfill) may be synthesized for this process.
-   *
-   * Requires RQT arming, a resolved process identity, and that identity matching {@link Configuration#httpName}.
-   * Unresolved identity never synthesizes liveness (no guessing).
-   *
-   * @returns {boolean}
-   */
   get rqtLiveness() {
     if (!this.rqtEnabled) return false
 
@@ -327,13 +290,6 @@ class Configuration {
     return identity.toLowerCase() === httpName.toLowerCase()
   }
 
-  /**
-   * Always-on CPU source for this process when identity resolves.
-   *
-   * Unresolved identity yields no CPU sources and logs once.
-   *
-   * @returns {import("./source/cpu")[]}
-   */
   activeCpuSources() {
     const identity = this._softIdentity()
     if (identity == null) {

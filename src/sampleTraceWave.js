@@ -4,10 +4,6 @@ function elapsedMs(from) {
   return Math.round((performance.now() - from) * 1000) / 1000
 }
 
-/**
- * One job-queue sample wave: monotonic start, per-op timings, finish payload for
- * sample_trace / verbose logging.
- */
 class SampleTraceWave {
   static start() {
     return new SampleTraceWave()
@@ -19,11 +15,6 @@ class SampleTraceWave {
     this._payload = null
   }
 
-  /**
-   * Runs fn (sync or async), records one op for entry, returns fn's result.
-   * @param {object} entry
-   * @param {() => any | Promise<any>} fn
-   */
   async measure(entry, fn) {
     const opStart = performance.now()
     const result = await fn()
@@ -31,11 +22,6 @@ class SampleTraceWave {
     return result
   }
 
-  /**
-   * Records one op with a pre-measured duration in milliseconds.
-   * @param {object} entry
-   * @param {number} ms
-   */
   record(entry, ms) {
     this._payload = null
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
@@ -56,11 +42,6 @@ class SampleTraceWave {
     return this
   }
 
-  /**
-   * Wire payload: `{ wave_ms, ops }`.
-   * Ops is a copy so later record does not mutate a previous finish handle.
-   * @returns {{ wave_ms: number, ops: object[] }}
-   */
   finish() {
     if (this._payload == null) {
       this._payload = {
@@ -71,10 +52,6 @@ class SampleTraceWave {
     return this._payload
   }
 
-  /**
-   * Verbose sample timing lines (same format as the former dispatcher helper).
-   * @param {{ info?: Function }} logger
-   */
   logTo(logger) {
     const payload = this.finish()
     safeLog(

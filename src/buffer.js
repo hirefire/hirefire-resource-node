@@ -1,7 +1,3 @@
-/**
- * Nested metric buffer: name → strategy → second → bucket.
- * RQT: { sum, count }. Non-RQT: bare number (latest-wins).
- */
 class Buffer {
   static SAMPLE_COUNT_LIMIT = 1_000_000
 
@@ -10,11 +6,6 @@ class Buffer {
     this._ttl = ttl
   }
 
-  /**
-   * @param {string} name
-   * @param {string} strategy
-   * @param {number} value
-   */
   sample(name, strategy, value) {
     if (typeof value !== "number" || !Number.isFinite(value)) return
 
@@ -46,11 +37,6 @@ class Buffer {
     this._metrics = Object.create(null)
   }
 
-  /**
-   * @param {string} name
-   * @param {string} strategy
-   * @param {Record<string|number, {sum:number, count:number}>} data
-   */
   repopulate(name, strategy, data) {
     strategy = String(strategy)
     if (strategy !== "rqt") return
@@ -96,11 +82,6 @@ function clampRqt(sum, count) {
   return { sum, count }
 }
 
-/**
- * Shared rqt sum/count parse for buffer.repopulate and dispatcher encode/merge.
- * @param {*} bucket
- * @returns {{sum: number, count: number}}
- */
 function rqtParts(bucket) {
   if (bucket && typeof bucket === "object" && !Array.isArray(bucket)) {
     const sum =

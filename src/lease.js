@@ -9,9 +9,6 @@ class Lease {
   static MAX_JOB_QUEUES = 64
   static MAX_NAME_BYTES = 128
 
-  /**
-   * @param {import("./configuration")} configuration
-   */
   constructor(configuration) {
     this._configuration = configuration
     this._processId = crypto.randomUUID()
@@ -42,15 +39,10 @@ class Lease {
     return this._granted
   }
 
-  /** Whether the current grant asked the client to ship sample_trace on ingest. */
   trace() {
     return this._trace
   }
 
-  /**
-   * Drop local grant state without closing the transport. Bumps epoch so an in-flight
-   * lease HTTP response cannot re-apply grant state.
-   */
   demote() {
     this._epoch += 1
     this._granted = false
@@ -67,9 +59,6 @@ class Lease {
     await fn()
   }
 
-  /**
-   * @param {{hold: (plan: object[]) => boolean}} options
-   */
   async requestIfDue({ hold }) {
     if (performance.now() < this._expiresAt) return
 
@@ -168,16 +157,10 @@ class Lease {
     }
   }
 
-  /**
-   * @returns {Promise<void>}
-   */
   close() {
     return this._client.close()
   }
 
-  /**
-   * @returns {{ job_queues: object[], trace: boolean }}
-   */
   _parseGrantBody(body) {
     if (body == null || body === "") return emptyGrantBody()
 
@@ -274,7 +257,6 @@ class Lease {
   }
 }
 
-/** Fresh empty grant body (new job_queues array each call). */
 function emptyGrantBody(trace = false) {
   return { job_queues: [], trace }
 }

@@ -252,10 +252,6 @@ class Dispatcher {
     ])
   }
 
-  /**
-   * Track a retired loop for stop() joins and join it with the usual bound.
-   * @param {Promise<unknown>} loopPromise
-   */
   _retireLoop(loopPromise) {
     if (!loopPromise) return
     this._retiredLoops.add(loopPromise)

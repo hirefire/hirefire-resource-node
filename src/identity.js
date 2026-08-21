@@ -32,38 +32,21 @@ const Identity = {
     )
   },
 
-  /**
-   * True when the platform marks this process as an HTTP web role (pre-traffic RQT arm).
-   * @returns {boolean}
-   */
   platformHttpRole() {
     return this.herokuWebProcess() || this.renderWebService()
   },
 
-  /**
-   * Heroku process type after Cedar/Fir strip equals "web" (case-insensitive). Exact match only.
-   * @returns {boolean}
-   */
   herokuWebProcess() {
     const name = this.herokuDyno()
     return name != null && name.toLowerCase() === "web"
   },
 
-  /**
-   * Render service type is "web" (public web service).
-   * @returns {boolean}
-   */
   renderWebService() {
     const type = presence(process.env.RENDER_SERVICE_TYPE)
     return type != null && type.toLowerCase() === "web"
   },
 }
 
-/**
- * Strips leading/trailing whitespace. Blank or whitespace-only values are absent.
- * @param {string|null|undefined} value
- * @returns {string|null}
- */
 function presence(value) {
   if (value == null) return null
   const stripped = String(value).trim()
