@@ -9,46 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Job-queue **working** count via `jobQueueWorking` for BullMQ and classic Bull (`LLEN active`) and pg-boss (`state = 'active'`). Plan path samples nested strategy **`wrk`** unconditionally next to each `jql`/`jqs` entry (same queues and connection options). Failures drop only `wrk`. Not folded into waiting JQL/JQS.
-- Plan sample-wave lifecycle aligned with Ruby: `Plan.aroundJobQueueSample` brackets each dispatcher job-queue sample, every allowlisted macro exposes no-op `beforeSampleJobQueues` / `afterSampleJobQueues` / `reinitAfterFork`, and `Plan.reinitMacrosAfterFork` fans out reinit (Node has no fork call sites, ports kept for architecture parity).
-- `HireFire.boot()` for zero-config installs: starts the dispatcher when a token is present with no local dyno declarations.
-- Always-on request queue time (RQT) under the process identity or explicit `dyno("web")`, armed by platform web role (`DYNO` / `RENDER_SERVICE_TYPE`), middleware traffic, or an explicit HTTP registration.
-- Always-on CPU metrics under the resolved process identity (no `tracking: "cpu"` declaration).
-- Lease collection plans: grant bodies can drive job-queue sampling via allowlisted adapters (BullMQ and classic Bull `jqs`, pg-boss `jql`/`jqs`), with plan-vs-local precedence and strategy-only local dynos.
-- Classic Bull (OptimalBits/`bull`) macro: waiting-only `jobQueueSize` (`LLEN wait` + `LLEN paused` + due `ZCOUNT delayed`), `jobQueueLatency` unsupported, plan hooks, `HIREFIRE_BULL_URL`, plan adapter key `bull`.
-- pg-boss macro: waiting-only `jobQueueSize` and `jobQueueLatency` via read-only SQL on `${schema}.job` (`state < 'active' AND start_after <= now()` and `NOT blocked` when the column exists). Plan adapter key `pg_boss`, env `HIREFIRE_PG_BOSS_URL` / `HIREFIRE_PG_BOSS_SCHEMA`, exports `hirefire-resource/macro/pg-boss` and `hirefire-resource/macro/pg_boss`. Official support pg-boss 10–12.
-- `HireFire.configure` is additive and re-evaluates job-queue loop entry after late dyno registrations (`ensureJobQueueLoop`).
-- Identity helpers: whitespace strip, Fir mixed-case dyno suffixes, `platformHttpRole`, case-insensitive web role matching.
-- Token strip: whitespace-only tokens are absent. Explicit `""` still forces reporting off.
-- Dispatcher lifecycle: generation fences after awaits, `stop({ flush })`, dual dispatch/job loop joins, lease demote/epoch, process id rotate when a grant cannot be sampled.
-- Nested compact ingest wire: RQT as `[mean, n]` or `[]` heartbeats, bare non-RQT numbers, 32 KB payload limit.
-- Plan hooks on the BullMQ macro (`planOptions`, `planConnectionOptions`, `supportsPlanStrategy`) and `HIREFIRE_BULLMQ_URL` connection override.
-- JSDoc and generated TypeScript declarations for the cutover public surface (`boot`, dyno-only config, `http` / `httpName` / `rqtEnabled` / `rqtLiveness`, plan hooks).
+- Push job-queue and request-queue-time metrics to `https://data.hirefire.io` (lease plus nested ingest) so HireFire no longer polls the app.
+- Always-on request queue time on the HTTP middleware path, and always-on CPU when process identity resolves (`DYNO`, `HIREFIRE_SERVICE_NAME`, or `RENDER_SERVICE_NAME`).
+- `HireFire.boot()` for token-only zero-config. Local `config.dyno` job-queue samplers remain for custom probes and root installs.
+- Job-queue working count (`jobQueueWorking`) and nested `wrk` beside `jql`/`jqs` for BullMQ, classic Bull, and pg-boss.
+- Lease collection plans: the server grant can drive allowlisted macros (`bullmq`, `bull`, `pg_boss`). Strategy-only entries still run the matching local `config.dyno` sampler.
+- Classic Bull (OptimalBits/`bull`) adapter: waiting-only `jobQueueSize` (`wait` plus `paused` plus due `delayed`). Job queue latency is unsupported.
+- pg-boss adapter (`pg_boss` plan key): waiting-only size and latency via read-only SQL. Official support is pg-boss 10 to 12.
 
 ### Changed
 
-- Package version is **2.0.0** on `next` (pre-public). `HireFire-Agent: Node-2.0.0` so app dual-read floors match.
-- `config.logQueueMetrics = true` no longer prints `[hirefire:router] queue=…ms`. The flag is a once-warn no-op: web request queue time is pushed to `data.hirefire.io` when the HTTP middleware path is armed. You can remove the setting.
-- Public configuration is dyno-only: `config.dyno(name)` or `config.dyno(name, sampler)`. Same name may register both HTTP and a job-queue sampler. Names strip whitespace, reject empty and over-128-byte values, and preserve first-seen casing.
-- Middleware always samples when a token is present (no declared web collector required). Blank `X-Request-Start` falls through to `X-Queue-Start`.
-- Payload size limit is **32 KB** (was documented as 64 KB). Oversized client payloads are dropped with a watermark advance.
-- Buffer RQT accumulates sum+count. Samples ignore non-finite values. Repopulate is RQT-only with mean-preserving clamp at the sample count limit.
-- `HIREFIRE_DATA_URL` strips whitespace and trailing slashes. Empty or slash-only values fall back to `https://data.hirefire.io`.
-- Configuration error surface is `MissingSamplerError` and `DuplicateDynoError` only.
-- BullMQ `jobQueueSize` is waiting-only: live (`wait` + `paused` + `prioritized`) plus due delayed (score ≤ now). Active (working) jobs are no longer counted. JQL stays unsupported. No `skip_working` flag (unlike Sidekiq).
+- Job-queue macros count only the waiting set (live plus due scheduled plus due retry). In-flight jobs are no longer included in JQL or JQS.
+- BullMQ `jobQueueSize` is waiting-only: live (`wait` plus `paused` plus `prioritized`) plus due delayed. Active jobs are no longer counted. JQL stays unsupported.
+- Required Node.js is 20+ (was 16, with an upper bound below 22).
+
+### Deprecated
+
+- `config.logQueueMetrics = true` still prints `[hirefire:router] queue=<N>ms` for Logplex QueueTime. Setting it once-warns to prefer HireFire Request Queue Time plus `HIREFIRE_TOKEN`.
+- Bare `config.dyno("web")` (no sampler) is a once-warn no-op. Request queue time is armed by platform web identity and HTTP middleware traffic.
 
 ### Removed
 
-- `config.service(...)` and `{ tracking: "http" | "cpu" }` declaration paths.
-- `UnexpectedSamplerError` and `UnknownCollectorError`.
-- Declared multi-name CPU collector lists (`config.cpu` public array).
-
-### Fixed
-
-- Sample-wave token fencing on the ports above: a raised `beforeSampleJobQueues` skips that adapter's `afterSampleJobQueues` (successful `null` still gets after). Hook errors log and do not abort the wave or remaining adapters.
-- Unresolved process identity no longer synthesizes RQT liveness heartbeats.
-- Soft identity re-resolves on every access and rebuilds always-on HTTP/CPU sources when the identity name changes.
-- BullMQ `jobQueueSize` counts `prioritized` and `paused` queues (and discovers them via SCAN), so priority and paused backlog are no longer undercounted. Pipeline command errors are treated as zero for that field rather than throwing.
+- Serving `GET /hirefire/:token/info`. Job metrics are push-only.
+- Official support for Node.js 16 and 18.
 
 ## [1.2.0] - 2026-02-03
 
