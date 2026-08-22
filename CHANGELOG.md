@@ -9,28 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Push job-queue and request-queue-time metrics to `https://data.hirefire.io` (lease plus nested ingest) so HireFire no longer polls the app.
-- Always-on request queue time on the HTTP middleware path, and always-on CPU when process identity resolves (`DYNO`, `HIREFIRE_SERVICE_NAME`, or `RENDER_SERVICE_NAME`).
-- `HireFire.boot()` for token-only zero-config. Local `config.dyno` job-queue samplers remain for custom probes and root installs.
-- Job-queue working count (`jobQueueWorking`) and nested `wrk` beside `jql`/`jqs` for BullMQ, classic Bull, and pg-boss.
-- Lease collection plans: the server grant can drive allowlisted macros (`bullmq`, `bull`, `pg_boss`). Strategy-only entries still run the matching local `config.dyno` sampler.
-- Classic Bull (OptimalBits/`bull`) adapter: waiting-only `jobQueueSize` (`wait` plus `paused` plus due `delayed`). Job queue latency is unsupported.
-- pg-boss adapter (`pg_boss` plan key): waiting-only size and latency via read-only SQL. Official support is pg-boss 10 to 12.
+- The library now pushes metrics to `https://data.hirefire.io`. HireFire no longer polls the app.
+- Request queue time is sampled automatically from HTTP traffic. You do not need a web `dyno` line.
+- CPU activity is sampled automatically.
+- Optional token-only setup with `HireFire.boot()`. Existing `config.dyno` job queue blocks still work.
+- Count of jobs still being processed (`jobQueueWorking`) for BullMQ, classic Bull, and pg-boss.
+- Classic Bull: job queue size only. Job queue latency is unsupported.
+- pg-boss 10 to 12: job queue size and job queue latency.
+- Support Node.js 22 and newer.
+- The package now ships TypeScript declarations.
 
 ### Changed
 
-- Job-queue macros count only the waiting set (live plus due scheduled plus due retry). In-flight jobs are no longer included in JQL or JQS.
-- BullMQ `jobQueueSize` is waiting-only: live (`wait` plus `paused` plus `prioritized`) plus due delayed. Active jobs are no longer counted. JQL stays unsupported.
-- Required Node.js is 20+ (was 16, with an upper bound below 22).
+- Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
+- BullMQ job queue size no longer counts active jobs.
+- Required Node.js is 20+.
 
 ### Deprecated
 
-- `config.logQueueMetrics = true` still prints `[hirefire:router] queue=<N>ms` for Logplex QueueTime. Setting it once-warns to prefer HireFire Request Queue Time plus `HIREFIRE_TOKEN`.
-- Bare `config.dyno("web")` (no sampler) is a once-warn no-op. Request queue time is armed by platform web identity and HTTP middleware traffic.
+- Bare `config.dyno("web")` (no sampler) is deprecated. It does nothing. Request queue time is sampled automatically from HTTP traffic. You can remove the line. Leaving it does not break anything.
 
 ### Removed
 
-- Serving `GET /hirefire/:token/info`. Job metrics are push-only.
+- Serving `GET /hirefire/:token/info`.
 - Official support for Node.js 16 and 18.
 
 ## [1.2.0] - 2026-02-03
