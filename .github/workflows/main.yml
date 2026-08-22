@@ -46,7 +46,7 @@ jobs:
       - name: Run build
         run: npm run build:types
       - name: Verify package artifacts
-        run: node bin/verify-package
+        run: bin/verify-package
 
   validate:
     needs: matrix
@@ -131,6 +131,6 @@ jobs:
             exit 1
           fi
       - name: Verify package artifacts
-        run: node bin/verify-package
+        run: bin/verify-package
       - name: Publish package
         run: npm publish --access public

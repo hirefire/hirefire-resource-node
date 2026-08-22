@@ -2,6 +2,7 @@
 *.log
 dump.rdb
 .env
+.pytest_cache/
 coverage
 dist
 node_modules
