@@ -74,11 +74,6 @@ class Configuration {
      */
     this.logger = console
     /**
-     * @type {boolean}
-     */
-    this._logQueueMetrics = false
-    this._logQueueMetricsWarned = false
-    /**
      * @type {Map<string, string[]>}
      */
     this._sourcesByName = new Map()
@@ -139,26 +134,6 @@ class Configuration {
   }
 
   /**
-   * Legacy flag: when true, middleware still prints `[hirefire:router] queue=…ms`
-   * to stdout (Logplex QueueTime BC). Setting true once-warns to migrate to HireFire
-   * Request Queue Time with `HIREFIRE_TOKEN`. Preferred web RQT is push to
-   * data.hirefire.io.
-   *
-   * @type {boolean}
-   */
-  get logQueueMetrics() {
-    return this._logQueueMetrics
-  }
-
-  /**
-   * @param {boolean} value
-   */
-  set logQueueMetrics(value) {
-    this._logQueueMetrics = Boolean(value)
-    if (this._logQueueMetrics) this._warnLogQueueMetricsOnce()
-  }
-
-  /**
    * Declares a process by dyno name (Heroku Procfile-shaped).
    *
    * A sampler function registers a local job-queue source (`jql` / `jqs` under the lease
@@ -166,10 +141,10 @@ class Configuration {
    * adapters in the HireFire UI for managed job queues. Use {@link Configuration#dyno} with
    * a sampler for custom probes or strategy-only (custom configuration) plan entries.
    *
-   * Bare `dyno("web")` (no sampler, name `"web"` case-insensitive) is accepted for 1.x
-   * backwards compatibility but does nothing: RQT is armed only by platform web role and
-   * middleware traffic. A once-per-process warning explains that the line can be removed.
-   * `dyno("web", sampler)` still registers a job-queue sampler under `"web"`.
+   * Bare `dyno("web")` (no sampler, name `"web"` case-insensitive) is deprecated. It is
+   * accepted so 1.x configs do not break, but it does nothing. Request queue time is
+   * sampled automatically from HTTP traffic. A once-per-process warning says the line
+   * can be removed. `dyno("web", sampler)` still registers a job-queue sampler under `"web"`.
    *
    * @overload
    * @param {string} name - The process name. Bare `"web"` is a no-op with a once-warn.
@@ -364,21 +339,9 @@ class Configuration {
     safeLog(
       this.logger,
       "warn",
-      '[HireFire] config.dyno("web") without a sampler is no longer necessary. ' +
-        "Request queue time is armed by platform web identity (for example DYNO type web " +
-        "or RENDER_SERVICE_TYPE=web) and by HTTP middleware traffic. You can remove this line.",
-    )
-  }
-
-  _warnLogQueueMetricsOnce() {
-    if (this._logQueueMetricsWarned) return
-    this._logQueueMetricsWarned = true
-    safeLog(
-      this.logger,
-      "warn",
-      "[HireFire] config.logQueueMetrics is deprecated. Prefer the HireFire Request " +
-        "Queue Time strategy, set HIREFIRE_TOKEN, then remove this logQueueMetrics = " +
-        "true line. Stdout [hirefire:router] lines still emit while this flag is set.",
+      '[HireFire] config.dyno("web") is deprecated. It does nothing. ' +
+        "Request queue time is sampled automatically from HTTP traffic. You can remove this " +
+        "line. Leaving it does not break anything.",
     )
   }
 

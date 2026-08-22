@@ -31,15 +31,6 @@ function resolveRequestStart(requestStart, queueStart) {
  * @param {string|null|undefined} requestStart
  * @param {string|null|undefined} [queueStart]
  */
-/**
- * Logplex QueueTime BC: exact 1.x stdout shape. No token required.
- *
- * @param {number} requestQueueTime
- */
-function logRequestQueueTime(requestQueueTime) {
-  console.log(`[hirefire:router] queue=${requestQueueTime}ms`)
-}
-
 function processRequestQueueTime(requestStart, queueStart) {
   const header =
     arguments.length >= 2
@@ -52,10 +43,6 @@ function processRequestQueueTime(requestStart, queueStart) {
     if (requestQueueTime === null) return
 
     const configuration = HireFire.configuration
-
-    if (configuration.logQueueMetrics) {
-      logRequestQueueTime(requestQueueTime)
-    }
 
     if (configuration.token) {
       configuration.markHttpActive()
@@ -104,7 +91,6 @@ function calculateRequestQueueTime(requestStart) {
 module.exports = {
   processRequestQueueTime,
   calculateRequestQueueTime,
-  logRequestQueueTime,
   presentHeader,
   resolveRequestStart,
 }

@@ -49,12 +49,11 @@ describe("Configuration", () => {
     config.dyno("Web")
     expect(
       warn.mock.calls.filter((c) =>
-        String(c[0]).includes(
-          'config.dyno("web") without a sampler is no longer',
-        ),
+        String(c[0]).includes('config.dyno("web") is deprecated'),
       ).length,
     ).toBe(1)
     expect(String(warn.mock.calls[0][0])).toMatch(/You can remove/)
+    expect(String(warn.mock.calls[0][0])).toMatch(/does nothing/)
   })
 
   test("dyno with a function configures a worker", async () => {
@@ -297,39 +296,6 @@ describe("Configuration", () => {
     expect(
       warn.mock.calls.filter((c) => String(c[0]).includes("app-wide")).length,
     ).toBe(1)
-  })
-
-  test("logQueueMetrics defaults to false", () => {
-    expect(config.logQueueMetrics).toBe(false)
-  })
-
-  test("logQueueMetrics can be set", () => {
-    config.logQueueMetrics = true
-    expect(config.logQueueMetrics).toBe(true)
-  })
-
-  test("logQueueMetrics true warns once", () => {
-    const warn = jest.fn()
-    config.logger = { info() {}, warn, error() {} }
-    config.logQueueMetrics = true
-    config.logQueueMetrics = true
-    expect(
-      warn.mock.calls.filter((c) =>
-        String(c[0]).includes("config.logQueueMetrics is deprecated"),
-      ).length,
-    ).toBe(1)
-    const msg = String(warn.mock.calls[0][0])
-    expect(msg).toMatch(/HireFire Request Queue Time/)
-    expect(msg).toMatch(/HIREFIRE_TOKEN/)
-    expect(msg).toMatch(/remove this logQueueMetrics = true line/)
-    expect(msg).toMatch(/still emit/)
-  })
-
-  test("logQueueMetrics false is silent", () => {
-    const warn = jest.fn()
-    config.logger = { info() {}, warn, error() {} }
-    config.logQueueMetrics = false
-    expect(warn).not.toHaveBeenCalled()
   })
 
   test("token defaults to env", () => {
