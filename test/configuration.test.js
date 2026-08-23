@@ -266,6 +266,7 @@ describe("Configuration", () => {
     config.logger = { info() {}, warn() {}, error }
     process.env.HIREFIRE_SERVICE_NAME = "x".repeat(129)
     expect(config.httpName).toBeNull()
+    expect(config.httpSource).toBeNull()
     expect(config.activeCpuSources()).toEqual([])
     expect(
       error.mock.calls.some((c) => String(c[0]).includes("exceeds 128")),

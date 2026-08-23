@@ -63,6 +63,15 @@ describe("Sails", () => {
     expect(start).toHaveBeenCalled()
   })
 
+  test("passes through without a token", async () => {
+    process.env.DYNO = "web.1"
+    await request(app)
+      .get("/")
+      .set("X-Request-Start", String(Date.now() - 1000))
+    expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
+    expect(start).not.toHaveBeenCalled()
+  })
+
   test("falls back to X-Queue-Start when X-Request-Start is absent", async () => {
     process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
     const second = Math.floor(Date.now() / 1000)

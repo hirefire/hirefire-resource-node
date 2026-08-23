@@ -7,7 +7,7 @@ jest.mock(
 )
 
 const IORedis = require("ioredis")
-const { jobQueueSize } = require("../../src/macro/bullmq")
+const { jobQueueSize, jobQueueWorking } = require("../../src/macro/bullmq")
 
 function emptyQueueResults(count = 1) {
   const rows = []
@@ -244,5 +244,22 @@ describe("BullMQ connection lifecycle", () => {
     ).rejects.toThrow("redis down")
     expect(quit).toHaveBeenCalledTimes(1)
     expect(disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  test("jobQueueWorking quits Redis after sampling", async () => {
+    exec.mockResolvedValueOnce([[null, 2]])
+    await expect(
+      jobQueueWorking("default", { connection: "redis://localhost:6379/0" }),
+    ).resolves.toBe(2)
+    expect(quit).toHaveBeenCalledTimes(1)
+    expect(pipeline.llen).toHaveBeenCalledWith("bull:default:active")
+  })
+
+  test("jobQueueWorking quits Redis when sampling fails", async () => {
+    exec.mockRejectedValueOnce(new Error("redis down"))
+    await expect(
+      jobQueueWorking("default", { connection: "redis://localhost:6379/0" }),
+    ).rejects.toThrow("redis down")
+    expect(quit).toHaveBeenCalledTimes(1)
   })
 })

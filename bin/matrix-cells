@@ -2,15 +2,30 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-jq -c '[
-  .node[] as $node
-  | .integrations[] as $integration
-  | $integration.majors[] as $major
-  | {
-      node: $node,
-      package: $integration.package,
-      major: $major,
-      test: $integration.test,
-      name: (if $integration.package == "core" then "core" else "\($integration.package)@\($major)" end)
-    }
-]' test/matrix.json
+jq -c '
+  . as $root
+  | [
+      $root.node[] as $node
+      | $root.integrations[] as $integration
+      | $integration.majors[] as $major
+      | select(
+          ($root.excludes // [])
+          | all(
+              .package != $integration.package
+                or .major != $major
+                or .node != $node
+            )
+        )
+      | {
+          node: $node,
+          package: $integration.package,
+          major: $major,
+          test: $integration.test,
+          name: (
+            if $integration.package == "core" then "core"
+            else "\($integration.package)@\($major)"
+            end
+          )
+        }
+    ]
+' test/matrix.json

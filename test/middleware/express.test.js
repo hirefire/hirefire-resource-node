@@ -77,4 +77,30 @@ describe("Express", () => {
       [second]: { sum: 1234, count: 1 },
     })
   })
+
+  test("info path is passed through to the app", async () => {
+    process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+    process.env.DYNO = "web.1"
+    const infoApp = express()
+    infoApp.use(HireFireMiddlewareExpress)
+    infoApp.get("/hirefire/SOME_TOKEN/info", (_req, res) =>
+      res.status(200).send("DEFAULT"),
+    )
+    const response = await request(infoApp).get("/hirefire/SOME_TOKEN/info")
+    expect(response.status).toBe(200)
+    expect(response.text).toBe("DEFAULT")
+    expect(HireFire.configuration.buffer.flush()).toEqual({})
+  })
+
+  test("an error raised by the host app still propagates", async () => {
+    process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+    process.env.DYNO = "web.1"
+    const boomApp = express()
+    boomApp.use(HireFireMiddlewareExpress)
+    boomApp.get("/boom", () => {
+      throw new Error("host boom")
+    })
+    const response = await request(boomApp).get("/boom")
+    expect(response.status).toBeGreaterThanOrEqual(500)
+  })
 })

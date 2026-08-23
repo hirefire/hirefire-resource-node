@@ -191,4 +191,17 @@ describe("JobQueues", () => {
     )
     expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
   })
+
+  test("sampleJobQueue reports under an explicit name", async () => {
+    const configuration = configure()
+    configuration.dyno("Worker", () => 7)
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jqs",
+      { name: "worker" },
+    )
+    const data = configuration.buffer.flush()
+    expect(strategyValue(data, "worker", "jqs")).toBe(7)
+    expect(data.Worker).toBeUndefined()
+  })
 })

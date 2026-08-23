@@ -8,6 +8,7 @@ try {
 const {
   jobQueueSize,
   jobQueueLatency,
+  jobQueueWorking,
   _resetBlockedColumnCacheForTests,
 } = require("../../src/macro/pg_boss")
 
@@ -202,6 +203,26 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expect(sizeSql).toMatch(/name = ANY\(\$1::text\[\]\)/)
     expectWaitingSql(sizeSql)
     expect(query.mock.calls[1][1]).toEqual([["email", "sms"]])
+  })
+
+  test("working SQL counts active rows with optional queue filter", async () => {
+    query
+      .mockResolvedValueOnce({ rows: [] }) // blocked column probe
+      .mockResolvedValueOnce({ rows: [{ job_queue_working: "2" }] })
+    await expect(
+      jobQueueWorking("email", {
+        connection: "postgres://localhost/jobs",
+        schema: "pgboss",
+      }),
+    ).resolves.toBe(2)
+    const workingSql = query.mock.calls[1][0]
+    expect(workingSql).toMatch(
+      /SELECT COUNT\(\*\)::bigint AS job_queue_working/,
+    )
+    expect(workingSql).toMatch(/state = 'active'/)
+    expect(workingSql).toMatch(/name = ANY\(\$1::text\[\]\)/)
+    expect(workingSql).not.toMatch(/FOR UPDATE/i)
+    expect(query.mock.calls[1][1]).toEqual([["email"]])
   })
 
   test("all-queues size omits name filter", async () => {

@@ -23,7 +23,7 @@ describe("BullMQ", () => {
   })
 
   beforeEach(async () => {
-    redis.flushdb()
+    await redis.flushdb()
     defaultQueue = new Queue("default", { connection: redis })
     mailerQueue = new Queue("mailer", { connection: redis })
     jest.useFakeTimers({
@@ -57,6 +57,41 @@ describe("BullMQ", () => {
     expect(
       await jobQueueSize("default", "mailer", { connection: redisURL }),
     ).toBe(2)
+  })
+
+  test("jobQueueSize includes paused jobs", async () => {
+    await defaultQueue.add("liveJob", {})
+    await defaultQueue.pause()
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
+  })
+
+  test("jobQueueSize counts prioritized jobs once", async () => {
+    await defaultQueue.add("prioJob", {}, { priority: 1 })
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
+  })
+
+  test("jobQueueSize uses REDIS_URL ladder and ignores HIREFIRE_BULLMQ_URL", async () => {
+    await defaultQueue.add("liveJob", {})
+    const keys = [
+      "REDIS_TLS_URL",
+      "REDIS_URL",
+      "REDISTOGO_URL",
+      "REDISCLOUD_URL",
+      "OPENREDIS_URL",
+      "HIREFIRE_BULLMQ_URL",
+    ]
+    const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]))
+    try {
+      for (const k of keys) delete process.env[k]
+      process.env.HIREFIRE_BULLMQ_URL = "redis://127.0.0.1:1/0"
+      process.env.REDIS_URL = redisURL
+      expect(await jobQueueSize("default")).toBe(1)
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k]
+        else process.env[k] = saved[k]
+      }
+    }
   })
 
   test("jobQueueSize with jobs scheduled in the past", async () => {

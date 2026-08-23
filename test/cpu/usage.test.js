@@ -240,6 +240,14 @@ describe("CPU.Usage", () => {
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
+    test("ignores a non-positive v1 quota", () => {
+      stubReads({
+        [Usage.CGROUP_V1_QUOTA]: "0",
+        [Usage.CGROUP_V1_PERIOD]: "100000",
+      })
+      expect(Usage.availableCpus()).toBe(Usage.processorCount())
+    })
+
     test("falls back to the processor count", () => {
       stubReads({})
       expect(Usage.availableCpus()).toBe(Usage.processorCount())

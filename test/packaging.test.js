@@ -23,6 +23,10 @@ describe("TypeScript packaging", () => {
       expect(entry.default).toMatch(/\.js$/)
       expect(subpath && entry.types).toBeTruthy()
     }
+
+    expect(pkg.typesVersions["*"]["macro/pg-boss"]).toEqual([
+      "./types/macro/pg_boss.d.ts",
+    ])
   })
 
   test("tsconfig emits declarations from JavaScript and does not enable checkJs", () => {

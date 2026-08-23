@@ -39,7 +39,7 @@
     },
     {
       "package": "bullmq",
-      "majors": [4, 5],
+      "majors": [4, 5, 6],
       "test": "test/macro/bullmq.test.js"
     },
     {
@@ -52,5 +52,9 @@
       "majors": [10, 11, 12],
       "test": "test/macro/pg_boss"
     }
+  ],
+  "excludes": [
+    { "package": "pg-boss", "major": 11, "node": 20 },
+    { "package": "pg-boss", "major": 12, "node": 20 }
   ]
 }

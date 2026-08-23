@@ -46,8 +46,6 @@ function processRequestQueueTime(requestStart, queueStart) {
 
     if (configuration.token) {
       configuration.markHttpActive()
-      configuration.dispatcher.start()
-      configuration.dispatcher.ensureJobQueueLoop()
       try {
         const source = configuration.httpSource
         if (source) source.sample(requestQueueTime)
@@ -58,6 +56,8 @@ function processRequestQueueTime(requestStart, queueStart) {
           `[HireFire] Middleware error: ${sampleError?.message ?? sampleError}`,
         )
       }
+      configuration.dispatcher.start()
+      configuration.dispatcher.ensureJobQueueLoop()
     }
   } catch (error) {
     safeLog(

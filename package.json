@@ -78,6 +78,9 @@
       "middleware/*": [
         "./types/middleware/*.d.ts"
       ],
+      "macro/pg-boss": [
+        "./types/macro/pg_boss.d.ts"
+      ],
       "macro/*": [
         "./types/macro/*.d.ts"
       ]

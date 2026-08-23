@@ -42,12 +42,17 @@ class JobQueues {
     if (!jobQueue) return
 
     const live = options && options.live
+    const explicitName = options && options.name
+    const reportName =
+      explicitName == null || !String(explicitName).trim()
+        ? jobQueue.name
+        : String(explicitName).trim()
     strategy = String(strategy)
     if (strategy !== "jql" && strategy !== "jqs") {
       this._logger().error(
         `[HireFire] Unknown job-queue strategy ${JSON.stringify(
           strategy,
-        )} for ` + `${JSON.stringify(jobQueue.name)}. Sample dropped.`,
+        )} for ` + `${JSON.stringify(reportName)}. Sample dropped.`,
       )
       return
     }
@@ -58,9 +63,7 @@ class JobQueues {
 
       if (!validSample(value)) {
         this._logger().error(
-          `[HireFire] The sampler for ${JSON.stringify(
-            jobQueue.name,
-          )} returned ` +
+          `[HireFire] The sampler for ${JSON.stringify(reportName)} returned ` +
             `${inspect(
               value,
             )}, expected a non-negative number. Sample dropped.`,
@@ -68,7 +71,7 @@ class JobQueues {
         return
       }
 
-      this._configuration.buffer.sample(jobQueue.name, strategy, Number(value))
+      this._configuration.buffer.sample(reportName, strategy, Number(value))
     } catch (error) {
       const reason =
         error instanceof Error
@@ -76,7 +79,7 @@ class JobQueues {
           : inspect(error)
       this._logger().error(
         `[HireFire] The sampler for ${JSON.stringify(
-          jobQueue.name,
+          reportName,
         )} raised ${reason}`,
       )
     }

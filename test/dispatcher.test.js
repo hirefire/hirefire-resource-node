@@ -984,7 +984,6 @@ describe("Dispatcher", () => {
     captureIngestBodies()
     const dispatcher = configureWebOnly()
     dispatcher._running = true
-    dispatcher._pid = process.pid
     dispatcher._dispatchLoopPromise = null
     dispatcher._jobLoopPromise = null
     dispatcher._dispatch = async () => {
@@ -1094,6 +1093,33 @@ describe("Dispatcher", () => {
     expect(hits.length).toBe(1)
     expect(hits[0]).toMatch(/config\.dyno/)
     expect(hits[0]).toMatch(/You can remove/)
+  })
+
+  test("strategy-only plan reports lease name not local dyno spelling", async () => {
+    stubLease(
+      true,
+      JSON.stringify({
+        version: 1,
+        job_queues: [
+          {
+            name: "worker",
+            strategy: "jqs",
+            adapter: null,
+            queues: [],
+            options: {},
+          },
+        ],
+      }),
+    )
+    const bodies = captureIngestBodies()
+    config().dyno("Worker", () => 7)
+    const dispatcher = config().dispatcher
+    freezeTime(1000)
+    await dispatcher._workerTick()
+    await dispatcher._dispatch()
+    const names = bodies[0].map((e) => e.name)
+    expect(names).toContain("worker")
+    expect(names).not.toContain("Worker")
   })
 
   test("strategy-only plan uses local sampler without override warn", async () => {
@@ -1584,6 +1610,7 @@ describe("Dispatcher", () => {
           strategy: "jqs",
         }),
         config(),
+        undefined,
       )
       expect(execute).toHaveBeenNthCalledWith(
         2,
@@ -1593,6 +1620,7 @@ describe("Dispatcher", () => {
           strategy: "jqs",
         }),
         config(),
+        undefined,
       )
       expect(order).toEqual([
         "around-enter",

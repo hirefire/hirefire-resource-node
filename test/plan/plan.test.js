@@ -254,6 +254,30 @@ describe("Plan", () => {
     }
   })
 
+  test("execute live gate drops a sample that returns after stop", async () => {
+    const macro = require("../../src/macro/bullmq")
+    const origSize = macro.jobQueueSize
+    const origWorking = macro.jobQueueWorking
+    macro.jobQueueSize = async () => 11
+    macro.jobQueueWorking = async () => 3
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+        () => false,
+      )
+      expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
+    } finally {
+      macro.jobQueueSize = origSize
+      macro.jobQueueWorking = origWorking
+    }
+  })
+
   test("execute calls macro and buffers nested metric", async () => {
     const sample = jest.fn(async () => 1.5)
     const macro = require("../../src/macro/bullmq")

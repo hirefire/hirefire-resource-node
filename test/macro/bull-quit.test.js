@@ -20,8 +20,8 @@ function loadBullWithMockedIORedis(clientFactory) {
     const resolved = require.resolve("ioredis")
     jest.doMock(resolved, () => IORedis)
   } catch {}
-  const { jobQueueSize } = require("../../src/macro/bull")
-  return { IORedis, jobQueueSize }
+  const { jobQueueSize, jobQueueWorking } = require("../../src/macro/bull")
+  return { IORedis, jobQueueSize, jobQueueWorking }
 }
 
 describe("Bull connection lifecycle", () => {
@@ -30,6 +30,7 @@ describe("Bull connection lifecycle", () => {
   let pipeline
   let IORedis
   let jobQueueSize
+  let jobQueueWorking
 
   function defaultClient() {
     return {
@@ -48,7 +49,8 @@ describe("Bull connection lifecycle", () => {
       zcount: jest.fn().mockReturnThis(),
       exec,
     }
-    ;({ IORedis, jobQueueSize } = loadBullWithMockedIORedis(defaultClient))
+    ;({ IORedis, jobQueueSize, jobQueueWorking } =
+      loadBullWithMockedIORedis(defaultClient))
   })
 
   afterEach(() => {
@@ -654,5 +656,14 @@ describe("Bull connection lifecycle", () => {
       "-inf",
       expect.any(Number),
     )
+  })
+
+  test("jobQueueWorking quits Redis after sampling", async () => {
+    exec.mockResolvedValueOnce([[null, 2]])
+    await expect(
+      jobQueueWorking("default", { connection: "redis://localhost:6379/0" }),
+    ).resolves.toBe(2)
+    expect(quit).toHaveBeenCalledTimes(1)
+    expect(pipeline.llen).toHaveBeenCalledWith("bull:default:active")
   })
 })

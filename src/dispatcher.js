@@ -306,7 +306,11 @@ class Dispatcher {
     if (generation != null && !this._loopActive(generation)) return
 
     await this._guard(() =>
-      this._lease.sampleIfDue(() => this._sampleJobQueues()),
+      this._lease.sampleIfDue(() =>
+        this._sampleJobQueues(
+          generation != null ? () => this._loopActive(generation) : undefined,
+        ),
+      ),
     )
   }
 
@@ -341,17 +345,18 @@ class Dispatcher {
     })
   }
 
-  async _sampleJobQueues() {
+  async _sampleJobQueues(live) {
     const wave = SampleTraceWave.start()
     await Plan.aroundJobQueueSample(async () => {
       const localJobQueues = this._configuration.jobQueues
 
       for (const entry of this._lease.jobQueues) {
         await wave.measure(entry, async () => {
+          if (live && !live()) return
           if (this._adapterPresent(entry)) {
-            await this._samplePlanAdapter(entry, localJobQueues)
+            await this._samplePlanAdapter(entry, localJobQueues, live)
           } else {
-            await this._sampleStrategyOnly(entry, localJobQueues)
+            await this._sampleStrategyOnly(entry, localJobQueues, live)
           }
         })
       }
@@ -368,7 +373,7 @@ class Dispatcher {
     return lower !== "0" && lower !== "false" && lower !== "no"
   }
 
-  async _samplePlanAdapter(entry, localJobQueues) {
+  async _samplePlanAdapter(entry, localJobQueues, live) {
     const name = String(entry.name ?? "")
     const adapter = entry.adapter
     const strategy = entry.strategy
@@ -382,7 +387,8 @@ class Dispatcher {
       if (localJobQueues.findByName(name)) {
         this._warnPlanOverrideOnce(name)
       }
-      await Plan.execute(entry, this._configuration)
+      if (live && !live()) return
+      await Plan.execute(entry, this._configuration, live)
     } else if (Plan.knownAdapter(adapter)) {
       this._warnUnloadedAdapterOnce(name, adapter)
     } else {
@@ -390,7 +396,7 @@ class Dispatcher {
     }
   }
 
-  async _sampleStrategyOnly(entry, localJobQueues) {
+  async _sampleStrategyOnly(entry, localJobQueues, live) {
     const name = String(entry.name ?? "")
     const strategy = String(entry.strategy ?? "")
 
@@ -401,7 +407,10 @@ class Dispatcher {
 
     const jobQueue = localJobQueues.findByName(name)
     if (jobQueue) {
-      await localJobQueues.sampleJobQueue(jobQueue, strategy)
+      await localJobQueues.sampleJobQueue(jobQueue, strategy, {
+        live,
+        name: name.trim(),
+      })
     }
   }
 

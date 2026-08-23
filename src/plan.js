@@ -122,7 +122,7 @@ const Plan = {
     }
   },
 
-  async execute(entry, configuration) {
+  async execute(entry, configuration, live) {
     const adapter = String(entry.adapter ?? entry["adapter"] ?? "").trim()
     const strategy = String(entry.strategy ?? entry["strategy"] ?? "").trim()
     const name = String(entry.name ?? entry["name"] ?? "").trim()
@@ -203,6 +203,7 @@ const Plan = {
         queues,
         options,
         logger,
+        live,
       )
       if (!ok) return
 
@@ -214,6 +215,7 @@ const Plan = {
           queues,
           options,
           logger,
+          live,
         )
       }
     } catch (error) {
@@ -238,8 +240,10 @@ async function sampleJobStrategy(
   queues,
   options,
   logger,
+  live,
 ) {
   const value = await method(...queues, options)
+  if (live && !live()) return false
 
   if (!validSample(value)) {
     safeLog(
@@ -264,9 +268,11 @@ async function sampleWorking(
   queues,
   options,
   logger,
+  live,
 ) {
   try {
     const wrk = await method(...queues, options)
+    if (live && !live()) return
     if (!validSample(wrk)) {
       safeLog(
         logger,

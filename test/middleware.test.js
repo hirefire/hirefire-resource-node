@@ -124,6 +124,29 @@ describe("middleware", () => {
       expect(errorLog).toHaveBeenCalledWith(
         expect.stringContaining("Middleware error"),
       )
+      expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+        1700000001: { sum: 1000, count: 1 },
+      })
+    })
+
+    test("a raising logger still records rqt", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      process.env.DYNO = "web.1"
+      HireFire.configuration.logger = {
+        info() {},
+        warn() {},
+        error() {
+          throw new Error("logger down")
+        },
+      }
+      start.mockImplementation(() => {
+        throw new Error("boom")
+      })
+      freezeTime(1700000001)
+      expect(() => processRequestQueueTime("1700000000000")).not.toThrow()
+      expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+        1700000001: { sum: 1000, count: 1 },
+      })
     })
   })
 
@@ -172,6 +195,27 @@ describe("middleware", () => {
       freezeTime(1700000000)
       expect(calculateRequestQueueTime("1699999940000")).toBe(60000)
       expect(calculateRequestQueueTime("1699999939999")).toBeNull()
+    })
+
+    test("rounds a fractional millisecond remainder", () => {
+      freezeTime(1700000001)
+      expect(calculateRequestQueueTime("t=1700000000.2506")).toBe(749)
+    })
+
+    test("drops a negative request start", () => {
+      expect(calculateRequestQueueTime("-1700000000250")).toBeNull()
+    })
+
+    test("normalizes t-prefix milliseconds", () => {
+      freezeTime(1700000001)
+      expect(calculateRequestQueueTime("t=1700000000250")).toBe(750)
+    })
+
+    test("reads a folded duplicate header", () => {
+      freezeTime(1700000001)
+      expect(calculateRequestQueueTime("1700000000000, 1700000000500")).toBe(
+        1000,
+      )
     })
   })
 
