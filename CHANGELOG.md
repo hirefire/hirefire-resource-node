@@ -16,14 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Count of jobs still being processed (`jobQueueWorking`) for BullMQ, classic Bull, and pg-boss.
 - Classic Bull: job queue size only. Job queue latency is unsupported.
 - pg-boss 10 to 12: job queue size and job queue latency.
-- Support Node.js 22 and newer.
+- Support Node.js 22, 24, and 26.
 - The package now ships TypeScript declarations.
 
 ### Changed
 
 - Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
 - BullMQ job queue size no longer counts active jobs.
-- Required Node.js is 20+.
+- Required Node.js is 20+. Official Express support is 4+.
 
 ### Deprecated
 

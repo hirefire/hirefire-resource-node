@@ -41,6 +41,12 @@ describe("Bull", () => {
     }
   })
 
+  test("libraryLoaded is true when the bull package is imported", () => {
+    expect(Plan.libraryLoaded("bull")).toBe(true)
+    expect(Plan.executable("bull")).toBe(true)
+    expect(Plan.anyAllowlistedJobQueueLibraryLoaded()).toBe(true)
+  })
+
   test("jobQueueLatency is unsupported (async reject, not sync throw)", async () => {
     let threwSync = false
     let pending

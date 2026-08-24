@@ -175,6 +175,12 @@ describe("pg-boss", () => {
     _resetBlockedColumnCacheForTests()
   })
 
+  test("libraryLoaded is true when the pg-boss package is imported", () => {
+    expect(Plan.libraryLoaded("pg_boss")).toBe(true)
+    expect(Plan.executable("pg_boss")).toBe(true)
+    expect(Plan.anyAllowlistedJobQueueLibraryLoaded()).toBe(true)
+  })
+
   test("empty queues report size 0 and latency 0", async () => {
     expect(await jobQueueSize(sampleOpts)).toBe(0)
     expect(await jobQueueSize("email", sampleOpts)).toBe(0)

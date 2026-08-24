@@ -23,7 +23,7 @@ Job Queue Latency, and Job Queue Size. Set `HIREFIRE_TOKEN` for the library to r
 
 - BullMQ 4+ (size only, no job queue latency)
 - Bull 4+ (classic OptimalBits/bull, size only, no job queue latency)
-- pg-boss 10-12 (job queue size and latency via read-only SQL)
+- pg-boss 10-12 (job queue size and latency via read-only SQL). Versions 11 and 12 require Node 22+.
 
 The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
 

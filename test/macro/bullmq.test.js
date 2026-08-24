@@ -38,6 +38,12 @@ describe("BullMQ", () => {
     await mailerQueue.close()
   })
 
+  test("libraryLoaded is true when the bullmq package is imported", () => {
+    expect(Plan.libraryLoaded("bullmq")).toBe(true)
+    expect(Plan.executable("bullmq")).toBe(true)
+    expect(Plan.anyAllowlistedJobQueueLibraryLoaded()).toBe(true)
+  })
+
   test("jobQueueLatency is unsupported", async () => {
     await expect(jobQueueLatency()).rejects.toThrow(
       JobQueueLatencyUnsupportedError,

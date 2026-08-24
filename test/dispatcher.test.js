@@ -1718,6 +1718,7 @@ describe("Dispatcher", () => {
     config().buffer.sample("web", "rqt", 7)
     await dispatcher._dispatchTick()
     expect(config().buffer.flush().web).toBeUndefined()
+    expect(dispatcher._lastRqtSecond).toBe(1000)
     expect(loggerErrors()).not.toContain("Dispatch error")
   })
 

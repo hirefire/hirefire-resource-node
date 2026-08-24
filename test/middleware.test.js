@@ -202,6 +202,11 @@ describe("middleware", () => {
       expect(calculateRequestQueueTime("t=1700000000.2506")).toBe(749)
     })
 
+    test("rounds a fractional nanosecond remainder", () => {
+      freezeTime(1700000001)
+      expect(calculateRequestQueueTime("1700000000250600000")).toBe(749)
+    })
+
     test("drops a negative request start", () => {
       expect(calculateRequestQueueTime("-1700000000250")).toBeNull()
     })
