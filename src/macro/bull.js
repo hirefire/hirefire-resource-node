@@ -3,8 +3,6 @@ const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
-const Hooks = require("../plan/hooks")
-
 function loadIORedis() {
   return require("ioredis")
 }
@@ -77,6 +75,57 @@ async function jobQueueLatency(...args) {
  * the socket is ready still run; bound wait with connect/command timeouts and
  * cap retries so an unreachable Redis cannot hang the plan path indefinitely.
  */
+let waveEnumCache = null
+
+/**
+ * Open a process-local all-queues SCAN memo for one Dispatcher sample wave
+ * so size and working share one walk.
+ *
+ * @returns {true}
+ */
+function beforeSampleJobQueues() {
+  waveEnumCache = new Map()
+  return true
+}
+
+/**
+ * Close the all-queues SCAN memo from {@link beforeSampleJobQueues}.
+ *
+ * @param {*} [_token]
+ * @returns {void}
+ */
+function afterSampleJobQueues(_token) {
+  waveEnumCache = null
+}
+
+/**
+ * Drop an inherited all-queues SCAN memo.
+ *
+ * @returns {void}
+ */
+function reinitAfterFork() {
+  waveEnumCache = null
+}
+
+function connectionEnumKey(connection, userConnectionOptions) {
+  if (typeof connection === "string") return connection
+  try {
+    return JSON.stringify({ connection, userConnectionOptions })
+  } catch {
+    return "object"
+  }
+}
+
+async function resolveQueueNames(redis, queues, cacheKey) {
+  if (queues.length > 0) return queues
+  if (waveEnumCache && waveEnumCache.has(cacheKey)) {
+    return waveEnumCache.get(cacheKey)
+  }
+  const names = await enumerateQueues(redis)
+  if (waveEnumCache) waveEnumCache.set(cacheKey, names)
+  return names
+}
+
 const SAMPLE_REDIS_OPTIONS = {
   maxRetriesPerRequest: 1,
   connectTimeout: 5000,
@@ -117,9 +166,11 @@ async function jobQueueSize(...args) {
   redis.on("error", () => {})
 
   try {
-    if (queues.length === 0) {
-      queues = await enumerateQueues(redis)
-    }
+    queues = await resolveQueueNames(
+      redis,
+      queues,
+      connectionEnumKey(connection, userConnectionOptions),
+    )
 
     let totalCount = 0
     const pipeline = redis.pipeline()
@@ -196,9 +247,11 @@ async function jobQueueWorking(...args) {
   redis.on("error", () => {})
 
   try {
-    if (queues.length === 0) {
-      queues = await enumerateQueues(redis)
-    }
+    queues = await resolveQueueNames(
+      redis,
+      queues,
+      connectionEnumKey(connection, userConnectionOptions),
+    )
 
     let totalCount = 0
     const pipeline = redis.pipeline()
@@ -300,7 +353,7 @@ module.exports = {
   planOptions,
   planConnectionOptions,
   supportsPlanStrategy,
-  beforeSampleJobQueues: Hooks.beforeSampleJobQueues,
-  afterSampleJobQueues: Hooks.afterSampleJobQueues,
-  reinitAfterFork: Hooks.reinitAfterFork,
+  beforeSampleJobQueues,
+  afterSampleJobQueues,
+  reinitAfterFork,
 }

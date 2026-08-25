@@ -206,23 +206,23 @@ describeIfPg("pg-boss connection lifecycle", () => {
   })
 
   test("working SQL counts active rows with optional queue filter", async () => {
-    query
-      .mockResolvedValueOnce({ rows: [] }) // blocked column probe
-      .mockResolvedValueOnce({ rows: [{ job_queue_working: "2" }] })
+    query.mockResolvedValueOnce({ rows: [{ job_queue_working: "2" }] })
     await expect(
       jobQueueWorking("email", {
         connection: "postgres://localhost/jobs",
         schema: "pgboss",
       }),
     ).resolves.toBe(2)
-    const workingSql = query.mock.calls[1][0]
+    expect(query).toHaveBeenCalledTimes(1)
+    const workingSql = query.mock.calls[0][0]
     expect(workingSql).toMatch(
       /SELECT COUNT\(\*\)::bigint AS job_queue_working/,
     )
     expect(workingSql).toMatch(/state = 'active'/)
     expect(workingSql).toMatch(/name = ANY\(\$1::text\[\]\)/)
+    expect(workingSql).not.toMatch(/information_schema/)
     expect(workingSql).not.toMatch(/FOR UPDATE/i)
-    expect(query.mock.calls[1][1]).toEqual([["email"]])
+    expect(query.mock.calls[0][1]).toEqual([["email"]])
   })
 
   test("all-queues size omits name filter", async () => {
@@ -289,29 +289,42 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expectWaitingSql(query.mock.calls[1][0])
   })
 
-  test("absence of blocked is not sticky; presence is cached", async () => {
-    const url = "postgres://localhost/cache-probe"
-    query
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
-    await jobQueueSize({ connection: url, schema: "pgboss" })
-    expect(query.mock.calls[0][0]).toMatch(/information_schema/)
-    expect(query.mock.calls[1][0]).not.toMatch(/NOT blocked/)
+  test("absence of blocked is cached briefly; presence is cached", async () => {
+    jest.useFakeTimers()
+    try {
+      const url = "postgres://localhost/cache-probe"
+      query
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
+      await jobQueueSize({ connection: url, schema: "pgboss" })
+      expect(query.mock.calls[0][0]).toMatch(/information_schema/)
+      expect(query.mock.calls[1][0]).not.toMatch(/NOT blocked/)
 
-    query
-      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
-      .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
-    await jobQueueSize({ connection: url, schema: "pgboss" })
-    expect(query.mock.calls[2][0]).toMatch(/information_schema/)
-    expect(query.mock.calls[3][0]).toMatch(/NOT blocked/)
+      query.mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
+      await jobQueueSize({ connection: url, schema: "pgboss" })
+      expect(query).toHaveBeenCalledTimes(3)
+      expect(query.mock.calls[2][0]).not.toMatch(/information_schema/)
+      expect(query.mock.calls[2][0]).not.toMatch(/NOT blocked/)
 
-    query.mockResolvedValueOnce({ rows: [{ job_queue_size: "1" }] })
-    await expect(
-      jobQueueSize({ connection: url, schema: "pgboss" }),
-    ).resolves.toBe(1)
-    expect(query).toHaveBeenCalledTimes(5)
-    expect(query.mock.calls[4][0]).toMatch(/NOT blocked/)
-    expect(query.mock.calls[4][0]).not.toMatch(/information_schema/)
+      jest.advanceTimersByTime(60_000)
+
+      query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
+      await jobQueueSize({ connection: url, schema: "pgboss" })
+      expect(query.mock.calls[3][0]).toMatch(/information_schema/)
+      expect(query.mock.calls[4][0]).toMatch(/NOT blocked/)
+
+      query.mockResolvedValueOnce({ rows: [{ job_queue_size: "1" }] })
+      await expect(
+        jobQueueSize({ connection: url, schema: "pgboss" }),
+      ).resolves.toBe(1)
+      expect(query).toHaveBeenCalledTimes(6)
+      expect(query.mock.calls[5][0]).toMatch(/NOT blocked/)
+      expect(query.mock.calls[5][0]).not.toMatch(/information_schema/)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   test("HIREFIRE_PG_BOSS_URL wins over DATABASE_URL when both set", async () => {

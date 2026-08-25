@@ -753,15 +753,19 @@ describe("Plan", () => {
     }
   })
 
-  test("allowlisted macros re-export sample-wave hooks as no-ops", () => {
+  test("allowlisted macros expose sample-wave hooks", () => {
     const Hooks = require("../../src/plan/hooks")
-    for (const name of ["bull", "bullmq", "pg_boss"]) {
+    const pgBoss = require("../../src/macro/pg_boss")
+    expect(pgBoss.beforeSampleJobQueues).toBe(Hooks.beforeSampleJobQueues)
+    expect(pgBoss.afterSampleJobQueues).toBe(Hooks.afterSampleJobQueues)
+    expect(pgBoss.reinitAfterFork).toBe(Hooks.reinitAfterFork)
+    expect(pgBoss.beforeSampleJobQueues()).toBeNull()
+
+    for (const name of ["bull", "bullmq"]) {
       const macro = require(`../../src/macro/${name}`)
-      expect(macro.beforeSampleJobQueues).toBe(Hooks.beforeSampleJobQueues)
-      expect(macro.afterSampleJobQueues).toBe(Hooks.afterSampleJobQueues)
-      expect(macro.reinitAfterFork).toBe(Hooks.reinitAfterFork)
-      expect(macro.beforeSampleJobQueues()).toBeNull()
-      expect(macro.afterSampleJobQueues("token")).toBeUndefined()
+      expect(macro.beforeSampleJobQueues).not.toBe(Hooks.beforeSampleJobQueues)
+      expect(macro.beforeSampleJobQueues()).toBe(true)
+      expect(macro.afterSampleJobQueues()).toBeUndefined()
       expect(macro.reinitAfterFork()).toBeUndefined()
     }
   })

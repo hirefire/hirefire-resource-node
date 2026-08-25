@@ -7,7 +7,12 @@ jest.mock(
 )
 
 const IORedis = require("ioredis")
-const { jobQueueSize, jobQueueWorking } = require("../../src/macro/bullmq")
+const {
+  jobQueueSize,
+  jobQueueWorking,
+  beforeSampleJobQueues,
+  afterSampleJobQueues,
+} = require("../../src/macro/bullmq")
 
 function emptyQueueResults(count = 1) {
   const rows = []
@@ -253,6 +258,53 @@ describe("BullMQ connection lifecycle", () => {
     ).resolves.toBe(2)
     expect(quit).toHaveBeenCalledTimes(1)
     expect(pipeline.llen).toHaveBeenCalledWith("bull:default:active")
+  })
+
+  test("all-queues size then working in one wave SCANs once", async () => {
+    const scan = jest.fn().mockResolvedValue(["0", ["bull:default:wait"]])
+    exec
+      .mockResolvedValueOnce(emptyQueueResults(1))
+      .mockResolvedValueOnce([[null, 0]])
+    IORedis.mockImplementation(() => ({
+      pipeline: () => pipeline,
+      scan,
+      quit,
+      on: jest.fn(),
+    }))
+
+    beforeSampleJobQueues()
+    try {
+      await expect(
+        jobQueueSize({ connection: "redis://localhost:6379/0" }),
+      ).resolves.toBe(0)
+      await expect(
+        jobQueueWorking({ connection: "redis://localhost:6379/0" }),
+      ).resolves.toBe(0)
+    } finally {
+      afterSampleJobQueues()
+    }
+    expect(scan).toHaveBeenCalledTimes(1)
+  })
+
+  test("all-queues size then working without a wave SCANs twice", async () => {
+    const scan = jest.fn().mockResolvedValue(["0", ["bull:default:wait"]])
+    exec
+      .mockResolvedValueOnce(emptyQueueResults(1))
+      .mockResolvedValueOnce([[null, 0]])
+    IORedis.mockImplementation(() => ({
+      pipeline: () => pipeline,
+      scan,
+      quit,
+      on: jest.fn(),
+    }))
+
+    await expect(
+      jobQueueSize({ connection: "redis://localhost:6379/0" }),
+    ).resolves.toBe(0)
+    await expect(
+      jobQueueWorking({ connection: "redis://localhost:6379/0" }),
+    ).resolves.toBe(0)
+    expect(scan).toHaveBeenCalledTimes(2)
   })
 
   test("jobQueueWorking quits Redis when sampling fails", async () => {

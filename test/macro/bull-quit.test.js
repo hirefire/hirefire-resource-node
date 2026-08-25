@@ -20,8 +20,19 @@ function loadBullWithMockedIORedis(clientFactory) {
     const resolved = require.resolve("ioredis")
     jest.doMock(resolved, () => IORedis)
   } catch {}
-  const { jobQueueSize, jobQueueWorking } = require("../../src/macro/bull")
-  return { IORedis, jobQueueSize, jobQueueWorking }
+  const {
+    jobQueueSize,
+    jobQueueWorking,
+    beforeSampleJobQueues,
+    afterSampleJobQueues,
+  } = require("../../src/macro/bull")
+  return {
+    IORedis,
+    jobQueueSize,
+    jobQueueWorking,
+    beforeSampleJobQueues,
+    afterSampleJobQueues,
+  }
 }
 
 describe("Bull connection lifecycle", () => {
@@ -31,6 +42,8 @@ describe("Bull connection lifecycle", () => {
   let IORedis
   let jobQueueSize
   let jobQueueWorking
+  let beforeSampleJobQueues
+  let afterSampleJobQueues
 
   function defaultClient() {
     return {
@@ -49,8 +62,13 @@ describe("Bull connection lifecycle", () => {
       zcount: jest.fn().mockReturnThis(),
       exec,
     }
-    ;({ IORedis, jobQueueSize, jobQueueWorking } =
-      loadBullWithMockedIORedis(defaultClient))
+    ;({
+      IORedis,
+      jobQueueSize,
+      jobQueueWorking,
+      beforeSampleJobQueues,
+      afterSampleJobQueues,
+    } = loadBullWithMockedIORedis(defaultClient))
   })
 
   afterEach(() => {
@@ -656,6 +674,37 @@ describe("Bull connection lifecycle", () => {
       "-inf",
       expect.any(Number),
     )
+  })
+
+  test("all-queues size then working in one wave SCANs once", async () => {
+    const scan = jest.fn().mockResolvedValue(["0", ["bull:default:wait"]])
+    ;({
+      jobQueueSize,
+      jobQueueWorking,
+      beforeSampleJobQueues,
+      afterSampleJobQueues,
+    } = loadBullWithMockedIORedis(() => ({
+      pipeline: () => pipeline,
+      scan,
+      quit,
+      on: jest.fn(),
+    })))
+    exec
+      .mockResolvedValueOnce(emptyQueueResults(1))
+      .mockResolvedValueOnce([[null, 0]])
+
+    beforeSampleJobQueues()
+    try {
+      await expect(
+        jobQueueSize({ connection: "redis://localhost:6379/0" }),
+      ).resolves.toBe(0)
+      await expect(
+        jobQueueWorking({ connection: "redis://localhost:6379/0" }),
+      ).resolves.toBe(0)
+    } finally {
+      afterSampleJobQueues()
+    }
+    expect(scan).toHaveBeenCalledTimes(1)
   })
 
   test("jobQueueWorking quits Redis after sampling", async () => {

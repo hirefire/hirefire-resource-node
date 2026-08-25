@@ -14,7 +14,9 @@ const SAMPLE_POOL_OPTIONS = {
   statement_timeout: SAMPLE_QUERY_TIMEOUT_MS,
 }
 
+const BLOCKED_ABSENT_TTL_MS = 60_000
 const blockedColumnPresentCache = new Set()
+const blockedColumnAbsentUntil = new Map()
 const connectionIdMap = new WeakMap()
 let connectionIdSeq = 0
 
@@ -145,18 +147,22 @@ async function jobQueueLatency(...args) {
  * await jobQueueWorking("email", "sms")
  */
 async function jobQueueWorking(...args) {
-  return withConnection(args, async (client, queues, schema) => {
-    const parts = [`state = 'active'`]
-    if (queues.length) parts.push(`name = ANY($1::text[])`)
-    const sql = `
+  return withConnection(
+    args,
+    async (client, queues, schema) => {
+      const parts = [`state = 'active'`]
+      if (queues.length) parts.push(`name = ANY($1::text[])`)
+      const sql = `
       SELECT COUNT(*)::bigint AS job_queue_working
       FROM ${schema}.job
       WHERE ${parts.join("\n  AND ")}
     `
-    const values = queues.length ? [queues] : []
-    const { rows } = await client.query(sql, values)
-    return Number(rows[0].job_queue_working) || 0
-  })
+      const values = queues.length ? [queues] : []
+      const { rows } = await client.query(sql, values)
+      return Number(rows[0].job_queue_working) || 0
+    },
+    { detectBlocked: false },
+  )
 }
 
 /**
@@ -197,7 +203,7 @@ function supportsPlanStrategy(strategy) {
   return s === "jql" || s === "jqs"
 }
 
-async function withConnection(args, fn) {
+async function withConnection(args, fn, { detectBlocked = true } = {}) {
   const { queues: rawQueues, options } = unpack(args)
   const queues = normalizeQueues(rawQueues)
   const schema = resolveSchema(options).toLowerCase()
@@ -236,11 +242,9 @@ async function withConnection(args, fn) {
 
   try {
     const flags = {
-      hasBlockedColumn: await detectHasBlockedColumn(
-        queryable,
-        schema,
-        cacheKey,
-      ),
+      hasBlockedColumn: detectBlocked
+        ? await detectHasBlockedColumn(queryable, schema, cacheKey)
+        : false,
     }
     return await fn(queryable, queues, schema, flags)
   } finally {
@@ -327,6 +331,10 @@ async function detectHasBlockedColumn(client, schema, cacheKey) {
   if (blockedColumnPresentCache.has(cacheKey)) {
     return true
   }
+  const absentUntil = blockedColumnAbsentUntil.get(cacheKey)
+  if (absentUntil != null && Date.now() < absentUntil) {
+    return false
+  }
   const { rows } = await client.query(
     `SELECT 1
        FROM information_schema.columns
@@ -337,13 +345,19 @@ async function detectHasBlockedColumn(client, schema, cacheKey) {
     [schema],
   )
   const has = rows.length > 0
-  if (has) blockedColumnPresentCache.add(cacheKey)
+  if (has) {
+    blockedColumnPresentCache.add(cacheKey)
+    blockedColumnAbsentUntil.delete(cacheKey)
+  } else {
+    blockedColumnAbsentUntil.set(cacheKey, Date.now() + BLOCKED_ABSENT_TTL_MS)
+  }
   return has
 }
 
-/** @internal Test-only: clear positive blocked-column cache between unit cases. */
+/** @internal Test-only: clear blocked-column caches between unit cases. */
 function _resetBlockedColumnCacheForTests() {
   blockedColumnPresentCache.clear()
+  blockedColumnAbsentUntil.clear()
 }
 
 module.exports = {
