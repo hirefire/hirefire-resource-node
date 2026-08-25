@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Working count is still sampled when job queue size or latency is invalid.
+- The count of jobs still being processed is still reported when the queue size or latency reading fails.
 - An oversized support sample-trace is dropped so ordinary metrics still ship.
 
 ## [1.2.0] - 2026-02-03

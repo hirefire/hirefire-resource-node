@@ -241,23 +241,34 @@ async function sampleJobStrategy(
   logger,
   live,
 ) {
-  const value = await method(...queues, options)
-  if (live && !live()) return false
+  try {
+    const value = await method(...queues, options)
+    if (live && !live()) return false
 
-  if (!validSample(value)) {
+    if (!validSample(value)) {
+      safeLog(
+        logger,
+        "error",
+        `[HireFire] Plan sampler for ${JSON.stringify(name)} returned ` +
+          `${formatSampleValue(
+            value,
+          )}, expected a non-negative number. Sample dropped.`,
+      )
+      return false
+    }
+
+    configuration.buffer.sample(name, strategy, Number(value))
+    return true
+  } catch (error) {
+    const reason =
+      error instanceof Error ? `${error.name}: ${error.message}` : String(error)
     safeLog(
       logger,
       "error",
-      `[HireFire] Plan sampler for ${JSON.stringify(name)} returned ` +
-        `${formatSampleValue(
-          value,
-        )}, expected a non-negative number. Sample dropped.`,
+      `[HireFire] Plan sampler for ${JSON.stringify(name)} raised ${reason}`,
     )
     return false
   }
-
-  configuration.buffer.sample(name, strategy, Number(value))
-  return true
 }
 
 async function sampleWorking(

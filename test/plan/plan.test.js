@@ -894,6 +894,51 @@ describe("Plan", () => {
     }
   })
 
+  test("execute still samples wrk when job strategy raises", async () => {
+    let workingCalled = false
+    const mod = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+      jobQueueSize: async () => {
+        throw new Error("jqs boom")
+      },
+      jobQueueWorking: async () => {
+        workingCalled = true
+        return 3
+      },
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      const data = configuration.buffer.flush()
+      expect(data.worker && data.worker.jqs).toBeUndefined()
+      expect(Object.values(data.worker.wrk)[0]).toBe(3)
+      expect(workingCalled).toBe(true)
+      const messages = configuration.logger.error.mock.calls.map((c) =>
+        String(c[0]),
+      )
+      expect(messages.some((m) => m.includes("Plan sampler for"))).toBe(true)
+      expect(messages.some((m) => m.includes("raised"))).toBe(true)
+      expect(messages.some((m) => m.includes("jqs boom"))).toBe(true)
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
   test("execute skips wrk when macro lacks jobQueueWorking", async () => {
     const mod = {
       supportsPlanStrategy: () => true,
