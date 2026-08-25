@@ -1,5 +1,3 @@
-require("../support")
-
 describe("BullMQ plan hooks", () => {
   let bullmq
 

@@ -66,12 +66,6 @@ async function jobQueueLatency(...args) {
  * @param {...any} args
  * @returns {Promise<number>}
  */
-/**
- * Defaults for short-lived sample connections (audit H1).
- * Keep enableOfflineQueue at ioredis default (true) so commands issued before
- * the socket is ready still run; bound wait with connect/command timeouts and
- * cap retries so an unreachable Redis cannot hang the plan path indefinitely.
- */
 let waveEnumCache = null
 
 /**
@@ -136,7 +130,7 @@ const SAMPLE_REDIS_OPTIONS = {
 async function jobQueueSize(...args) {
   const IORedis = loadIORedis()
   let { queues, options } = unpack(args)
-  queues = normalizeQueues(queues)
+  queues = normalizeQueues(queues, { allowEmpty: true })
 
   const connection =
     options.connection ||
@@ -225,7 +219,7 @@ async function jobQueueSize(...args) {
 async function jobQueueWorking(...args) {
   const IORedis = loadIORedis()
   let { queues, options } = unpack(args)
-  queues = normalizeQueues(queues)
+  queues = normalizeQueues(queues, { allowEmpty: true })
 
   const connection =
     options.connection ||

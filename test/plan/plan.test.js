@@ -1,4 +1,3 @@
-require("../support")
 const Plan = require("../../src/plan")
 const Configuration = require("../../src/configuration")
 

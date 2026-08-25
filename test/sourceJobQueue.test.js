@@ -1,4 +1,3 @@
-require("./support")
 const JobQueue = require("../src/source/jobQueue")
 
 describe("JobQueue", () => {

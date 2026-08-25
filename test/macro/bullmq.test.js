@@ -151,6 +151,116 @@ describe("BullMQ", () => {
     expect(typeof count).toBe("number")
   })
 
+  test("jobQueueSize excludes completed and failed terminal jobs", async () => {
+    await defaultQueue.add("liveJob", {})
+    await defaultQueue.add("liveJob", {})
+    await redis.zadd("bull:default:completed", Date.now(), "job-done-1")
+    await redis.zadd("bull:default:failed", Date.now(), "job-fail-1")
+    expect(await redis.zcard("bull:default:completed")).toBe(1)
+    expect(await redis.zcard("bull:default:failed")).toBe(1)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
+    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
+    await redis.del("bull:default:wait")
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
+  })
+
+  test("jobQueueSize sums multi-queue wait and due delayed", async () => {
+    await defaultQueue.add("liveJob", {})
+    await defaultQueue.add("liveJob", {})
+    await mailerQueue.add("liveJob", {})
+    await mailerQueue.add("dueDelayedJob", {}, { delay: 1 })
+    jest.advanceTimersByTime(1)
+    expect(
+      await jobQueueSize("default", "mailer", { connection: redisURL }),
+    ).toBe(4)
+    expect(await jobQueueSize({ connection: redisURL })).toBe(4)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
+    expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(2)
+  })
+
+  test("jobQueueSize accepts object-form connection options", async () => {
+    await defaultQueue.add("liveJob", {})
+    const url = new URL(redisURL)
+    const count = await jobQueueSize("default", {
+      connection: {
+        host: url.hostname,
+        port: Number(url.port || 6379),
+        db: Number((url.pathname || "/0").replace(/^\//, "") || 0),
+      },
+    })
+    expect(count).toBe(1)
+  })
+
+  test("jobQueueSize drops blank and whitespace-only queue names", async () => {
+    await defaultQueue.add("liveJob", {})
+    await mailerQueue.add("liveJob", {})
+    expect(
+      await jobQueueSize("default", "  ", "", null, undefined, {
+        connection: redisURL,
+      }),
+    ).toBe(1)
+    expect(await jobQueueSize("  ", "", { connection: redisURL })).toBe(2)
+  })
+
+  test("jobQueueSize uses delayed score upper bound (due vs not-due boundary)", async () => {
+    const frozenNow = 1_700_000_000_000
+    const delayedUpper = (frozenNow + 1) * 0x1000 - 1
+    jest.setSystemTime(frozenNow)
+
+    await redis.zadd("bull:default:delayed", delayedUpper, "job-due-edge")
+    await redis.zadd(
+      "bull:default:delayed",
+      delayedUpper + 1,
+      "job-future-edge",
+    )
+    await redis.zadd(
+      "bull:default:delayed",
+      frozenNow * 0x1000,
+      "job-packed-due",
+    )
+    await redis.zadd(
+      "bull:default:delayed",
+      (frozenNow + 60_000) * 0x1000,
+      "job-packed-future",
+    )
+    expect(await redis.zcard("bull:default:delayed")).toBe(4)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
+  })
+
+  test("jobQueueSize excludes repeatable configs and stalled bookkeeping keys", async () => {
+    await defaultQueue.add("liveJob", {})
+    await defaultQueue.add("liveJob", {})
+    await redis.zadd("bull:default:repeat", Date.now(), "repeat:cron:cfg")
+    await redis.sadd("bull:default:stalled", "job-stalled-1")
+    await redis.set("bull:default:stalled-check", "1")
+    expect(await redis.zcard("bull:default:repeat")).toBe(1)
+    expect(await redis.scard("bull:default:stalled")).toBe(1)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
+    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
+    await redis.del("bull:default:wait")
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
+  })
+
+  test("jobQueueSize counts priority jobs once after global pause", async () => {
+    await defaultQueue.add("prioJob", {}, { priority: 1 })
+    await defaultQueue.add("prioJob", {}, { priority: 5 })
+    await defaultQueue.add("plainJob", {})
+    await defaultQueue.pause()
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(3)
+  })
+
+  test("jobQueueSize rejects when Redis is unreachable", async () => {
+    jest.useRealTimers()
+    await expect(
+      jobQueueSize({ connection: "redis://127.0.0.1:1/0" }),
+    ).rejects.toThrow()
+  })
+
+  test("jobQueueSize all-queues is 0 on empty Redis", async () => {
+    await redis.flushdb()
+    expect(await jobQueueSize({ connection: redisURL })).toBe(0)
+  })
+
   test("jobQueueWorking idle is zero", async () => {
     expect(await jobQueueWorking({ connection: redisURL })).toBe(0)
     expect(await jobQueueWorking("default", { connection: redisURL })).toBe(0)

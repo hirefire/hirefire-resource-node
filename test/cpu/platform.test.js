@@ -1,4 +1,3 @@
-require("../support")
 const fs = require("fs")
 const path = require("path")
 const Usage = require("../../src/source/cpu/usage")

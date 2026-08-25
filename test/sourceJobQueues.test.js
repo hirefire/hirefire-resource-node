@@ -1,4 +1,3 @@
-require("./support")
 const Configuration = require("../src/configuration")
 const JobQueues = require("../src/source/jobQueues")
 const JobQueue = require("../src/source/jobQueue")

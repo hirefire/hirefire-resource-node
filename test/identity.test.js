@@ -1,4 +1,3 @@
-require("./support")
 const Identity = require("../src/identity")
 
 describe("Identity", () => {

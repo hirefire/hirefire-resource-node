@@ -2,7 +2,6 @@
 *.log
 dump.rdb
 .env
-coverage
 node_modules
 types
 AGENTS.md

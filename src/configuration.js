@@ -154,7 +154,7 @@ class Configuration {
    * @throws {MissingSamplerError} A name other than `"web"` given without a sampler.
    * @throws {DuplicateDynoError} The name was already declared for the same source kind.
    * @example
-   * config.dyno("web") // no-op BC; safe to remove
+   * config.dyno("web") // does nothing, safe to remove
    * config.dyno("worker", () => jobQueueSize("default"))
    */
   /**

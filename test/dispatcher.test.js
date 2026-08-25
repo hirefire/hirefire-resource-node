@@ -170,7 +170,7 @@ describe("Dispatcher", () => {
     expect(Array.isArray(wrkLeaf)).toBe(false)
   })
 
-  test("vector C encode mean and count", async () => {
+  test("encodes an rqt leaf as mean and count", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
     freezeTime(1000)

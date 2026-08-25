@@ -1,5 +1,3 @@
-require("../support")
-
 describe("Bull plan hooks", () => {
   let bull
   let savedHirefireBullUrl

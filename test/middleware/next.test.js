@@ -1,4 +1,3 @@
-require("../support")
 const HireFire = require("../../src")
 const Dispatcher = require("../../src/dispatcher")
 const { NextRequest, NextResponse } = require("next/server")

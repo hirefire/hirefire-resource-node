@@ -61,6 +61,36 @@ describe("middleware", () => {
       })
     })
 
+    test("absent X-Request-Start falls back to X-Queue-Start", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      process.env.DYNO = "web.1"
+      freezeTime(1700000001)
+      processRequestQueueTime(undefined, "1700000000000")
+      expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+        1700000001: { sum: 1000, count: 1 },
+      })
+    })
+
+    test("present X-Request-Start wins over a present X-Queue-Start", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      process.env.DYNO = "web.1"
+      freezeTime(1700000001)
+      processRequestQueueTime("1700000000000", "1699999996000")
+      expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+        1700000001: { sum: 1000, count: 1 },
+      })
+    })
+
+    test("blank X-Request-Start falls back to X-Queue-Start", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      process.env.DYNO = "web.1"
+      freezeTime(1700000001)
+      processRequestQueueTime("", "1700000000000")
+      expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
+        1700000001: { sum: 1000, count: 1 },
+      })
+    })
+
     test("starts the dispatcher on a web request", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
@@ -129,6 +159,20 @@ describe("middleware", () => {
       })
     })
 
+    test("a raising httpSource.sample does not start the dispatcher", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      process.env.DYNO = "web.1"
+      const source = HireFire.configuration.httpSource
+      jest.spyOn(source, "sample").mockImplementation(() => {
+        throw new Error("sample boom")
+      })
+      freezeTime(1700000001)
+      expect(() => processRequestQueueTime("1700000000000")).not.toThrow()
+      expect(start).not.toHaveBeenCalled()
+      expect(ensure).not.toHaveBeenCalled()
+      expect(HireFire.configuration.dispatcher.running()).toBe(false)
+    })
+
     test("a raising logger still records rqt", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
@@ -183,6 +227,16 @@ describe("middleware", () => {
     test("clamps a future request start to zero", () => {
       freezeTime(1700000001)
       expect(calculateRequestQueueTime("1700000005000")).toBe(0)
+    })
+
+    test("clamps a future microsecond start to zero", () => {
+      freezeTime(1700000001)
+      expect(calculateRequestQueueTime("1700000005000000")).toBe(0)
+    })
+
+    test("a nanosecond start beyond 60000 ms returns null", () => {
+      freezeTime(1700000000)
+      expect(calculateRequestQueueTime("1699999000000000000")).toBeNull()
     })
 
     test("accepts the 1e9 lower-guard boundary and rejects below it", () => {

@@ -27,8 +27,6 @@ Job Queue Latency, and Job Queue Size. Set `HIREFIRE_TOKEN` for the library to r
 
 The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
 
-**pg-boss connection:** optional `HIREFIRE_PG_BOSS_URL` (then `DATABASE_URL`), schema via `HIREFIRE_PG_BOSS_SCHEMA` or options (default `pgboss`). The macro opens Postgres with the app's `pg` driver. It never claims jobs.
-
 **TypeScript:**
 
 The package ships `.d.ts` declarations generated from its JSDoc. No separate `@types` package is needed.
@@ -41,7 +39,7 @@ Public API prose is JSDoc on the consumer-facing surface. Changelog lives in [CH
 
 Since 2011, HireFire has helped over 1,500 companies autoscale more than 5,000 [Heroku] applications across 10,000+ web and worker dynos.
 
-HireFire autoscales both web and worker dynos, on all dyno tiers, using whichever signal fits the workload: request queue time or requests per minute for web dynos, job queue latency or job queue size for worker dynos, and CPU Activity for compute-bound web or worker dynos. Each tracks real demand, so dynos are added when you need them and removed when you don't. You pay only for what you use.
+HireFire autoscales both web and worker processes, on every plan tier, using whichever signal fits the workload: request queue time or requests per minute for web processes, job queue latency or job queue size for worker processes, and CPU Activity for compute-bound processes. Each tracks real demand, so capacity is added when you need it and removed when you don't. You pay only for what you use.
 
 Learn more at the [home page][HireFire].
 

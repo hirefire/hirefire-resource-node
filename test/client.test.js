@@ -1,4 +1,3 @@
-require("./support")
 const http = require("http")
 const net = require("net")
 const nock = require("nock")
@@ -36,6 +35,16 @@ describe("Client", () => {
   test("submitSamples returns null on unauthorized", async () => {
     nock(BASE).post("/metrics/ingest").reply(401)
     expect(await client.submitSamples(BODY)).toBeNull()
+  })
+
+  test("rebuilds the keep-alive agent when the base URL scheme changes", async () => {
+    nock("http://metrics.example").post("/metrics/ingest").reply(200)
+    process.env.HIREFIRE_DATA_URL = "http://metrics.example"
+    await client.submitSamples(BODY)
+
+    nock("https://metrics.example").post("/metrics/ingest").reply(200)
+    process.env.HIREFIRE_DATA_URL = "https://metrics.example"
+    await client.submitSamples(BODY)
   })
 
   test("returns payload_too_large on 413", async () => {

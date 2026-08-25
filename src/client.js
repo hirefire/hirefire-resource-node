@@ -34,6 +34,7 @@ class Client {
     this._configuration = configuration
     this._timeout = timeout
     this._agent = null
+    this._agentTransport = null
     /** @type {Set<Promise<unknown>>} */
     this._pending = new Set()
   }
@@ -103,6 +104,7 @@ class Client {
         this._agent.destroy()
       } catch {}
       this._agent = null
+      this._agentTransport = null
     }
   }
 
@@ -225,12 +227,19 @@ class Client {
   }
 
   _agentFor(transport) {
+    if (this._agent && this._agentTransport !== transport) {
+      try {
+        this._agent.destroy()
+      } catch {}
+      this._agent = null
+    }
     if (!this._agent) {
       this._agent = new transport.Agent({
         keepAlive: true,
         maxSockets: 1,
         maxFreeSockets: 1,
       })
+      this._agentTransport = transport
     }
     return this._agent
   }

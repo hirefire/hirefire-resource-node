@@ -25,11 +25,11 @@ function unpack(args) {
  * Trim and de-duplicate queue names into a set, matching the adapter contract.
  *
  * @param {Iterable<string>} queues
- * @param {{allowEmpty?: boolean}} [opts]
+ * @param {{allowEmpty: boolean}} opts
  * @returns {string[]}
  * @throws {MissingQueueError} when empty and allowEmpty is false
  */
-function normalizeQueues(queues, { allowEmpty = true } = {}) {
+function normalizeQueues(queues, { allowEmpty }) {
   const names = new Set()
   for (const queue of queues) {
     const name = queue == null ? "" : String(queue).trim()

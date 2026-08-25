@@ -19,24 +19,37 @@ function freezeTime(seconds) {
   jest.spyOn(performance, "now").mockReturnValue(seconds * 1000)
 }
 
+const originalReset = HireFire.reset.bind(HireFire)
+HireFire.reset = async function resetWithSilentLogger(...args) {
+  const result = await originalReset(...args)
+  HireFire.configuration.logger = silentLogger()
+  return result
+}
+
 async function resetState() {
   delete process.env.HIREFIRE_TOKEN
   delete process.env.HIREFIRE_DATA_URL
   delete process.env.HIREFIRE_VERBOSE
   IDENTITY_ENV.forEach((key) => delete process.env[key])
   await HireFire.reset()
-  HireFire.configuration.logger = silentLogger()
 }
 
-beforeEach(async () => {
-  await resetState()
-})
+const testPath = expect.getState().testPath ?? ""
+const skipGlobalReset =
+  /[\\/]test[\\/]macro[\\/]/.test(testPath) &&
+  !/-plan\.test\.js$/.test(testPath)
 
-afterEach(async () => {
-  jest.restoreAllMocks()
-  nock.cleanAll()
-  nock.abortPendingRequests()
-  await resetState()
-})
+if (!skipGlobalReset) {
+  beforeEach(async () => {
+    await resetState()
+  })
+
+  afterEach(async () => {
+    jest.restoreAllMocks()
+    nock.cleanAll()
+    nock.abortPendingRequests()
+    await resetState()
+  })
+}
 
 module.exports = { silentLogger, freezeTime }

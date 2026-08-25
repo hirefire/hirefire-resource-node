@@ -205,7 +205,7 @@ function supportsPlanStrategy(strategy) {
 
 async function withConnection(args, fn, { detectBlocked = true } = {}) {
   const { queues: rawQueues, options } = unpack(args)
-  const queues = normalizeQueues(rawQueues)
+  const queues = normalizeQueues(rawQueues, { allowEmpty: true })
   const schema = resolveSchema(options).toLowerCase()
   if (!SCHEMA_RE.test(schema)) {
     throw new Error(`Invalid pg-boss schema name: ${schema}`)

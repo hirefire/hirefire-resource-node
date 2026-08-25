@@ -1,4 +1,3 @@
-require("./support")
 const HireFire = require("../src/hirefire")
 const Configuration = require("../src/configuration")
 const Dispatcher = require("../src/dispatcher")

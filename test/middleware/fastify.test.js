@@ -1,4 +1,3 @@
-require("../support")
 const supertest = require("supertest")
 const fastify = require("fastify")
 const HireFireMiddlewareFastify = require("../../src/middleware/fastify")

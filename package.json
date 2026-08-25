@@ -108,6 +108,9 @@
   "jest": {
     "setupFiles": [
       "<rootDir>/test/load-env.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/test/support.js"
     ]
   },
   "engines": {

@@ -1,4 +1,3 @@
-require("./support")
 const Configuration = require("../src/configuration")
 const Dispatcher = require("../src/dispatcher")
 const Buffer = require("../src/buffer")

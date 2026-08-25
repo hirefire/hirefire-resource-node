@@ -1,4 +1,3 @@
-require("../support")
 const request = require("supertest")
 const Koa = require("koa")
 const HireFireMiddlewareKoa = require("../../src/middleware/koa")

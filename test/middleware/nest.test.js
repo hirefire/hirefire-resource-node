@@ -1,5 +1,4 @@
 require("reflect-metadata")
-require("../support")
 const request = require("supertest")
 const { NestFactory } = require("@nestjs/core")
 const { Module } = require("@nestjs/common")

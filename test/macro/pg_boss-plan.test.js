@@ -1,5 +1,3 @@
-require("../support")
-
 describe("pg-boss plan hooks", () => {
   let pgBossMacro
 

@@ -48,7 +48,7 @@ describe("Buffer", () => {
     expect(Object.keys(buffer.flush())).toHaveLength(0)
   })
 
-  test("repopulate merges sum and count (vector C)", () => {
+  test("repopulate merges sum and count into an existing bucket", () => {
     freezeTime(100)
     buffer.repopulate("web", "rqt", { 100: { sum: 10, count: 1 } })
     buffer.sample("web", "rqt", 15)

@@ -1,4 +1,3 @@
-require("../support")
 const request = require("supertest")
 const express = require("express")
 const HireFireMiddlewareExpress = require("../../src/middleware/express")

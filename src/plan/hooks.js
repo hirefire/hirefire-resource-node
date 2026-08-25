@@ -1,7 +1,7 @@
 const KNOWN_STRATEGIES = new Set(["jql", "jqs"])
 
 /**
- * Uniform plan hooks for every queue macro. Plan always calls these; adapters
+ * Uniform plan hooks for every queue macro. Plan always calls these. Adapters
  * override when they accept lease options, need connection options, or hold
  * sample-wave / process-local state (defaults are no-ops so ports stay aligned
  * with Ruby even when no adapter uses the lifecycle yet).
@@ -64,7 +64,7 @@ const Hooks = {
 
   /**
    * Reset process-local macro state after fork or abandoned inherited state.
-   * Default is a no-op. Node has no process fork model; the hook still exists
+   * Default is a no-op. Node has no process fork model. The hook still exists
    * so the surface matches Ruby/Python when a consumer appears. May be sync or
    * return a Promise.
    *

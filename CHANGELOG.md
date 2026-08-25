@@ -15,8 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional token-only setup with `HireFire.boot()`. Existing `config.dyno` job queue blocks still work.
 - Count of jobs still being processed (`jobQueueWorking`) for BullMQ, classic Bull, and pg-boss.
 - Classic Bull: job queue size only. Job queue latency is unsupported.
-- pg-boss 10 to 12: job queue size and job queue latency.
+- pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them.
 - Support Node.js 22, 24, and 26.
+- Support Express 5, Fastify 5, Koa 3, Nest 11, Next.js 15 and 16, and BullMQ 5 and 6.
 - The package now ships TypeScript declarations.
 
 ### Changed
@@ -24,7 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
 - BullMQ job queue size no longer counts active jobs.
 - Required Node.js is 20+. Official Express support is 4+.
-- pg-boss job queue readings detect support for dependency-blocked jobs once per process, and re-check at most once a minute after a pg-boss upgrade.
 
 ### Deprecated
 
@@ -34,12 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Serving `GET /hirefire/:token/info`.
 - Official support for Node.js 16 and 18.
-
-### Fixed
-
-- Working count is still sampled when job queue size or latency is invalid.
-- The count of jobs still being processed is still reported when the queue size or latency reading fails.
-- An oversized support sample-trace is dropped so ordinary metrics still ship.
 
 ## [1.2.0] - 2026-02-03
 
