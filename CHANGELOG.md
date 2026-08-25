@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
 - BullMQ job queue size no longer counts active jobs.
 - Required Node.js is 20+. Official Express support is 4+.
+- pg-boss job queue readings detect support for dependency-blocked jobs once per process, and re-check at most once a minute after a pg-boss upgrade.
 
 ### Deprecated
 
