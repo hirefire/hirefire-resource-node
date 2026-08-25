@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Serving `GET /hirefire/:token/info`.
 - Official support for Node.js 16 and 18.
 
+### Fixed
+
+- Working count is still sampled when job queue size or latency is invalid.
+- An oversized support sample-trace is dropped so ordinary metrics still ship.
+
 ## [1.2.0] - 2026-02-03
 
 ### Added

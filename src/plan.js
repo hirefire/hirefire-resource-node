@@ -195,7 +195,7 @@ const Plan = {
         return
       }
 
-      const ok = await sampleJobStrategy(
+      await sampleJobStrategy(
         configuration,
         name,
         strategy,
@@ -205,7 +205,6 @@ const Plan = {
         logger,
         live,
       )
-      if (!ok) return
 
       if (typeof macro.jobQueueWorking === "function") {
         await sampleWorking(

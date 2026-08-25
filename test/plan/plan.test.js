@@ -853,7 +853,7 @@ describe("Plan", () => {
     }
   })
 
-  test("execute skips wrk when job strategy sample is invalid", async () => {
+  test("execute still samples wrk when job strategy sample is invalid", async () => {
     let workingCalled = false
     const mod = {
       supportsPlanStrategy: () => true,
@@ -883,8 +883,8 @@ describe("Plan", () => {
       )
       const data = configuration.buffer.flush()
       expect(data.worker && data.worker.jqs).toBeUndefined()
-      expect(data.worker && data.worker.wrk).toBeUndefined()
-      expect(workingCalled).toBe(false)
+      expect(Object.values(data.worker.wrk)[0]).toBe(3)
+      expect(workingCalled).toBe(true)
     } finally {
       Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
     }

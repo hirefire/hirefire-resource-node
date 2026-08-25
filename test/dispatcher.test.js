@@ -840,6 +840,37 @@ describe("Dispatcher", () => {
     expect(bodies[0].slice(1).every((e) => !e.sample_trace)).toBe(true)
   })
 
+  test("oversized sample_trace is stripped so metrics still ship", async () => {
+    stubLease()
+    const bodies = captureIngestBodies()
+    const dispatcher = configureWebOnly()
+    dispatcher._lease.trace = () => true
+    dispatcher._pendingSampleTrace = {
+      wave_ms: 1.0,
+      ops: [
+        {
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["q".repeat(40000)],
+          options: {},
+          ms: 1.0,
+        },
+      ],
+    }
+    freezeTime(1000)
+    config().buffer.sample("web", "rqt", 7)
+    await dispatcher._dispatch()
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0][0].sample_trace).toBeUndefined()
+    expect(bodies[0][0].metrics.rqt).toBeTruthy()
+    expect(
+      logger.error.mock.calls.some((args) =>
+        String(args[0]).includes("Dropped metrics payload"),
+      ),
+    ).toBe(false)
+    expect(dispatcher._pendingSampleTrace).toBeNull()
+  })
+
   test("sample_trace absent without grant trace", async () => {
     stubLease(
       true,

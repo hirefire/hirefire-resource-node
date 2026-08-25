@@ -13,6 +13,7 @@ class Dispatcher {
   static RQT_BACKFILL_LIMIT = 60
 
   static PAYLOAD_SIZE_LIMIT = 32768
+  static WARN_MAP_LIMIT = 128
   static SAMPLE_COUNT_LIMIT = MetricsBuffer.SAMPLE_COUNT_LIMIT
   static METRIC_VALUE_LIMIT = 1e15
 
@@ -291,7 +292,11 @@ class Dispatcher {
   async _dispatchTick(generation) {
     if (generation != null && !this._loopActive(generation)) return
 
-    for (const collector of this._configuration.activeCpuSources()) {
+    let collectors = []
+    await this._guard(() => {
+      collectors = this._configuration.activeCpuSources() || []
+    })
+    for (const collector of collectors) {
       await this._guard(() => collector.sample())
     }
     await this._dispatchIfDue(generation)
@@ -414,9 +419,16 @@ class Dispatcher {
     }
   }
 
+  _rememberWarn(map, key) {
+    if (map[key]) return true
+    const keys = Object.keys(map)
+    if (keys.length >= Dispatcher.WARN_MAP_LIMIT) delete map[keys[0]]
+    map[key] = true
+    return false
+  }
+
   _warnUnloadedAdapterOnce(name, adapter) {
-    if (this._unloadedAdapterWarned[name]) return
-    this._unloadedAdapterWarned[name] = true
+    if (this._rememberWarn(this._unloadedAdapterWarned, name)) return
     this._logger().error(
       `[HireFire] Plan adapter ${JSON.stringify(adapter)} for ${JSON.stringify(
         name,
@@ -425,20 +437,18 @@ class Dispatcher {
   }
 
   _warnPlanOverrideOnce(name) {
-    if (this._planOverrideWarned[name]) return
-    this._planOverrideWarned[name] = true
+    if (this._rememberWarn(this._planOverrideWarned, name)) return
     this._logger().warn(
       `[HireFire] A HireFire UI adapter is configured for ` +
         `${JSON.stringify(name)}, so config.dyno(${JSON.stringify(
           name,
         )}) with a local sampler is ignored. ` +
-        `You can remove that local configuration; the UI adapter is used instead.`,
+        `You can remove that local configuration. The UI adapter is used instead.`,
     )
   }
 
   _warnUnknownAdapterOnce(name, adapter) {
-    if (this._unknownAdapterWarned[name]) return
-    this._unknownAdapterWarned[name] = true
+    if (this._rememberWarn(this._unknownAdapterWarned, name)) return
     this._logger().error(
       `[HireFire] Unknown plan adapter ` +
         `${JSON.stringify(adapter)} for ${JSON.stringify(
@@ -449,8 +459,7 @@ class Dispatcher {
 
   _warnUnsupportedStrategyOnce(name, adapter, strategy) {
     const key = `${name}\0${adapter}\0${strategy}`
-    if (this._unsupportedStrategyWarned[key]) return
-    this._unsupportedStrategyWarned[key] = true
+    if (this._rememberWarn(this._unsupportedStrategyWarned, key)) return
     this._logger().error(
       `[HireFire] Plan adapter ${JSON.stringify(adapter)} does not support ` +
         `strategy ${JSON.stringify(strategy)} for ${JSON.stringify(
@@ -461,8 +470,7 @@ class Dispatcher {
 
   _warnUnknownStrategyOnce(name, strategy) {
     const key = `${name}\0${strategy}`
-    if (this._unknownStrategyWarned[key]) return
-    this._unknownStrategyWarned[key] = true
+    if (this._rememberWarn(this._unknownStrategyWarned, key)) return
     this._logger().error(
       `[HireFire] Unknown plan strategy ${JSON.stringify(strategy)} for ` +
         `${JSON.stringify(name)}. Entry skipped.`,
@@ -508,7 +516,15 @@ class Dispatcher {
       const { entries, watermark } = this._buildPayload(data)
       if (entries.length === 0) return
 
-      const body = JSON.stringify(entries)
+      let payload = entries
+      let body = JSON.stringify(payload)
+      if (
+        Buffer.byteLength(body) > Dispatcher.PAYLOAD_SIZE_LIMIT &&
+        this._payloadHasSampleTrace(payload)
+      ) {
+        payload = this._stripSampleTrace(payload)
+        body = JSON.stringify(payload)
+      }
       if (Buffer.byteLength(body) > Dispatcher.PAYLOAD_SIZE_LIMIT) {
         if (
           generation == null ||
@@ -584,6 +600,7 @@ class Dispatcher {
   }
 
   _dropOversizedPayload(body, watermark, server = false) {
+    this._pendingSampleTrace = null
     if (watermark !== undefined) this._lastRqtSecond = watermark
     const source = server
       ? "server rejected (413)"
@@ -627,6 +644,30 @@ class Dispatcher {
 
     this._attachSampleTrace(entries)
     return { entries, watermark }
+  }
+
+  _payloadHasSampleTrace(payload) {
+    return Boolean(
+      payload[0] &&
+        typeof payload[0] === "object" &&
+        Object.prototype.hasOwnProperty.call(payload[0], "sample_trace"),
+    )
+  }
+
+  _stripSampleTrace(payload) {
+    this._pendingSampleTrace = null
+    return payload.map((entry) => {
+      if (
+        entry &&
+        typeof entry === "object" &&
+        Object.prototype.hasOwnProperty.call(entry, "sample_trace")
+      ) {
+        const copy = { ...entry }
+        delete copy.sample_trace
+        return copy
+      }
+      return entry
+    })
   }
 
   _attachSampleTrace(entries) {
