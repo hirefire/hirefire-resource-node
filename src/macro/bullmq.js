@@ -3,6 +3,7 @@ const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
+
 function loadIORedis() {
   return require("ioredis")
 }
@@ -29,6 +30,7 @@ async function jobQueueLatency(...args) {
  *   options object. Sampling requires the `ioredis` package. When omitted, the
  *   `REDIS_TLS_URL`, `REDIS_URL`, `REDISTOGO_URL`, `REDISCLOUD_URL`, `OPENREDIS_URL`
  *   environment variables are tried in order, then `redis://localhost:6379/0`.
+ *   Plan path may inject `HIREFIRE_BULLMQ_URL` via {@link planConnectionOptions}.
  * @property {object} [connectionOptions] - Passed as the second argument to the IORedis
  *   constructor, for further customization (e.g. TLS options, retry strategies).
  */

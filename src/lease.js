@@ -45,9 +45,7 @@ class Lease {
 
   demote() {
     this._epoch += 1
-    this._granted = false
-    this._trace = false
-    this._jobQueues = []
+    this._clearGrant()
     this._expiresAt = performance.now()
     this._nextSampleAt = performance.now()
   }
@@ -70,9 +68,7 @@ class Lease {
       response = await this._client.requestLease(this._processId)
     } catch (error) {
       if (this._epoch !== epoch) return
-      this._granted = false
-      this._trace = false
-      this._jobQueues = []
+      this._clearGrant()
       throw error
     }
 
@@ -80,16 +76,12 @@ class Lease {
 
     const status = response.statusCode
     if (status === 401) {
-      this._granted = false
-      this._trace = false
-      this._jobQueues = []
+      this._clearGrant()
       return
     }
 
     if (status < 200 || status >= 300) {
-      this._granted = false
-      this._trace = false
-      this._jobQueues = []
+      this._clearGrant()
       throw new RequestError(`Lease request failed with ${status} status.`)
     }
 
@@ -136,9 +128,7 @@ class Lease {
     this._expiresAt = nextExpiresAt
 
     if (granted && !holdOk) {
-      this._granted = false
-      this._trace = false
-      this._jobQueues = []
+      this._clearGrant()
       this._processId = crypto.randomUUID()
       safeLog(
         this._configuration.logger,
@@ -254,6 +244,12 @@ class Lease {
     }
 
     return { job_queues: accepted, trace }
+  }
+
+  _clearGrant() {
+    this._granted = false
+    this._trace = false
+    this._jobQueues = []
   }
 }
 

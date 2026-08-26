@@ -33,7 +33,6 @@ class Dispatcher {
     this._stoppingFlush = false
     this._generation = 0
     this._lastRqtSecond = null
-    this._interval = 1
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
     this._nextDispatchAt = null
     this._pendingSampleTrace = null
@@ -86,7 +85,7 @@ class Dispatcher {
       )
       if (this._enterRace()) {
         this._jobLoopPromise = this._loop(generation, () =>
-          this._workerTick(generation),
+          this._jobQueueTick(generation),
         )
       } else {
         this._jobLoopPromise = null
@@ -125,7 +124,7 @@ class Dispatcher {
 
       const generation = this._generation
       this._jobLoopPromise = this._loop(generation, () =>
-        this._workerTick(generation),
+        this._jobQueueTick(generation),
       )
     } catch (error) {
       this._logger().error(
@@ -284,7 +283,7 @@ class Dispatcher {
     while (this._loopActive(generation)) {
       await tick()
       if (!this._loopActive(generation)) break
-      await this._sleep(this._interval * 1000)
+      await this._sleep(1000)
     }
   }
 
@@ -311,30 +310,32 @@ class Dispatcher {
   async _dispatchTick(generation) {
     if (generation != null && !this._loopActive(generation)) return
 
-    let collectors = []
+    let sources = []
     await this._guard(() => {
-      collectors = this._configuration.activeCpuSources() || []
+      sources = this._configuration.activeCpuSources()
     })
-    for (const collector of collectors) {
-      await this._guard(() => collector.sample())
+    for (const source of sources) {
+      await this._guard(() => source.sample())
     }
     await this._dispatchIfDue(generation)
   }
 
-  async _workerTick(generation) {
-    if (generation != null && !this._loopActive(generation)) return
+  _loopLive(generation) {
+    if (generation != null) return () => this._loopActive(generation)
+    return () => true
+  }
+
+  async _jobQueueTick(generation) {
+    const live = this._loopLive(generation)
+    if (!live()) return
 
     await this._guard(() =>
       this._lease.requestIfDue({ hold: (plan) => this._holdLease(plan) }),
     )
-    if (generation != null && !this._loopActive(generation)) return
+    if (!live()) return
 
     await this._guard(() =>
-      this._lease.sampleIfDue(() =>
-        this._sampleJobQueues(
-          generation != null ? () => this._loopActive(generation) : undefined,
-        ),
-      ),
+      this._lease.sampleIfDue(() => this._sampleJobQueues(live)),
     )
   }
 
@@ -395,6 +396,8 @@ class Dispatcher {
   }
 
   async _samplePlanAdapter(entry, localJobQueues, live) {
+    if (live && !live()) return
+
     const name = String(entry.name ?? "")
     const adapter = entry.adapter
     const strategy = entry.strategy
@@ -405,10 +408,7 @@ class Dispatcher {
         return
       }
 
-      if (
-        Plan.queuesRequired(adapter) &&
-        !Plan.namedPlanQueues(entry.queues ?? entry["queues"])
-      ) {
+      if (Plan.queuesRequired(adapter) && !Plan.namedPlanQueues(entry.queues)) {
         this._warnEmptyQueuesOnce(name, adapter)
         return
       }
@@ -426,6 +426,8 @@ class Dispatcher {
   }
 
   async _sampleStrategyOnly(entry, localJobQueues, live) {
+    if (live && !live()) return
+
     const name = String(entry.name ?? "")
     const strategy = String(entry.strategy ?? "")
 
@@ -758,16 +760,6 @@ class Dispatcher {
 
   _encodeLeaf(strategy, bucket) {
     if (strategy === "rqt") {
-      if (bucket && typeof bucket === "object" && !Array.isArray(bucket)) {
-        const sumRaw = Number(bucket.sum)
-        const countRaw = Number(bucket.count)
-        if (!Number.isFinite(sumRaw) || !Number.isFinite(countRaw)) {
-          this._logger().error(
-            "[HireFire] Omitting rqt second: non-finite or out-of-range mean.",
-          )
-          return undefined
-        }
-      }
       const { sum, count } = rqtParts(bucket)
       if (count === 0) return []
       const mean = sum / count
@@ -787,13 +779,12 @@ class Dispatcher {
           : Math.trunc(count)
       return [mean, n]
     }
-    if (typeof bucket !== "number" || !Number.isFinite(bucket)) {
-      this._logger().error(
-        `[HireFire] Omitting ${strategy} second: non-finite or out-of-range value.`,
-      )
-      return undefined
-    }
-    if (bucket < 0 || bucket > Dispatcher.METRIC_VALUE_LIMIT) {
+    if (
+      typeof bucket !== "number" ||
+      !Number.isFinite(bucket) ||
+      bucket < 0 ||
+      bucket > Dispatcher.METRIC_VALUE_LIMIT
+    ) {
       this._logger().error(
         `[HireFire] Omitting ${strategy} second: non-finite or out-of-range value.`,
       )

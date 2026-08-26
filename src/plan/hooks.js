@@ -1,25 +1,24 @@
-const KNOWN_STRATEGIES = new Set(["jql", "jqs"])
-
 /**
  * Uniform plan hooks for every queue macro. Plan always calls these. Adapters
- * override when they accept lease options, need connection options, or hold
- * sample-wave / process-local state (defaults are no-ops so ports stay aligned
- * with Ruby even when no adapter uses the lifecycle yet).
+ * override when they accept lease options or need connection options.
+ *
+ * For lease JSON `options`, prefer a strategy → field → type schema and
+ * {@link Hooks.extractPlanOptions} so filtering/coercion stays in one place.
  */
 const Hooks = {
   /**
    * Filter/coerce plan JSON `options` for `strategy` (`"jql"` / `"jqs"`).
    *
    * @param {string} _strategy
-   * @param {*} _options
-   * @returns {object}
+   * @param {*} _options raw lease `options` (usually an object)
+   * @returns {object} args safe to pass to `jobQueueLatency` / `jobQueueSize`
    */
   planOptions(_strategy, _options) {
     return {}
   },
 
   /**
-   * Connection-related options from the environment.
+   * Connection-related options from the environment (for example a broker URL).
    *
    * @returns {object}
    */
@@ -28,18 +27,20 @@ const Hooks = {
   },
 
   /**
-   * Whether this adapter can sample `strategy` (`"jql"` / `"jqs"`).
+   * Whether this adapter can sample `strategy` (`"jql"` / `"jqs"`). Defaults
+   * to true for known strategies. Macros that cannot measure latency override
+   * via `JobQueueLatencyUnsupportedError`.
    *
    * @param {string|symbol} strategy
    * @returns {boolean}
    */
   supportsPlanStrategy(strategy) {
-    return KNOWN_STRATEGIES.has(String(strategy))
+    return require("../plan").knownStrategy(strategy)
   },
 
   /**
    * Whether an empty plan queue list is invalid (named queues required).
-   * Enumerating adapters leave this false (empty = all queues).
+   * Enumerating adapters override this to false (empty = all queues).
    *
    * @returns {boolean}
    */
@@ -53,8 +54,9 @@ const Hooks = {
    * return an opaque token for {@link Hooks.afterSampleJobQueues}.
    *
    * Called for every allowlisted macro on each job-queue sample wave, whether
-   * or not that adapter appears in the current lease plan. May be sync or
-   * return a Promise (Plan awaits either).
+   * or not that adapter appears in the current lease plan (legacy dyno
+   * callbacks may still invoke the macro). May be sync or return a Promise
+   * (Plan awaits either).
    *
    * @returns {*|null|Promise<*|null>} opaque token passed to `afterSampleJobQueues`
    */
@@ -74,9 +76,8 @@ const Hooks = {
 
   /**
    * Reset process-local macro state after fork or abandoned inherited state.
-   * Default is a no-op. Node has no process fork model. The hook still exists
-   * so the surface matches Ruby/Python when a consumer appears. May be sync or
-   * return a Promise.
+   * Default is a no-op. Called next to buffer reinit on the same dispatcher
+   * sites. May be sync or return a Promise.
    *
    * @returns {void|Promise<void>}
    */
@@ -84,6 +85,10 @@ const Hooks = {
 
   /**
    * Slice and coerce lease `options` using a strategy-keyed schema.
+   *
+   * `schema` maps strategy string to field name string to type name
+   * (`boolean`, `non_negative_integer`). Unknown strategies, non-object
+   * options, unknown fields, and failed coercions are dropped.
    *
    * @param {string|symbol} strategy
    * @param {*} options
@@ -111,7 +116,8 @@ const Hooks = {
   },
 
   /**
-   * Coerce a single plan option value. Returns `null` when not acceptable.
+   * Coerce a single plan option value. Returns `null` when the value is not
+   * acceptable for `type` (caller drops the key).
    *
    * @param {string} type - `"boolean"` or `"non_negative_integer"`
    * @param {*} value

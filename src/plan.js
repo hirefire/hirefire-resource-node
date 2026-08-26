@@ -74,8 +74,8 @@ const Plan = {
   },
 
   sampleableEntry(entry) {
-    const adapter = entry.adapter ?? entry["adapter"]
-    const strategy = entry.strategy ?? entry["strategy"]
+    const adapter = entry.adapter
+    const strategy = entry.strategy
     if (
       !this.executable(adapter) ||
       !this.supportsStrategy(adapter, strategy)
@@ -83,7 +83,7 @@ const Plan = {
       return false
     }
     if (!this.queuesRequired(adapter)) return true
-    return this.namedPlanQueues(entry.queues ?? entry["queues"])
+    return this.namedPlanQueues(entry.queues)
   },
 
   async aroundJobQueueSample(fn, configuration) {
@@ -151,9 +151,9 @@ const Plan = {
   },
 
   async execute(entry, configuration, live) {
-    const adapter = String(entry.adapter ?? entry["adapter"] ?? "").trim()
-    const strategy = String(entry.strategy ?? entry["strategy"] ?? "").trim()
-    const name = String(entry.name ?? entry["name"] ?? "").trim()
+    const adapter = String(entry.adapter ?? "").trim()
+    const strategy = String(entry.strategy ?? "").trim()
+    const name = String(entry.name ?? "").trim()
     const methodName = STRATEGIES[strategy]
     const logger = configuration.logger
 
@@ -194,11 +194,7 @@ const Plan = {
       return
     }
 
-    const queues = normalizePlanQueues(
-      entry.queues ?? entry["queues"],
-      name,
-      logger,
-    )
+    const queues = normalizePlanQueues(entry.queues, name, logger)
     if (queues === null) return
 
     if (this.queuesRequired(adapter) && queues.length === 0) {
@@ -212,15 +208,10 @@ const Plan = {
     }
 
     try {
-      const planOpts =
-        typeof macro.planOptions === "function"
-          ? macro.planOptions(strategy, entry.options ?? entry["options"])
-          : {}
-      const connOpts =
-        typeof macro.planConnectionOptions === "function"
-          ? macro.planConnectionOptions()
-          : {}
-      const options = { ...planOpts, ...connOpts }
+      const options = {
+        ...macro.planOptions(strategy, entry.options),
+        ...macro.planConnectionOptions(),
+      }
       const method = macro[methodName]
       if (typeof method !== "function") {
         safeLog(

@@ -14,7 +14,7 @@ class MissingQueueError extends Error {
 }
 
 /**
- * Thrown when a queue library has no latency metric (e.g. BullMQ).
+ * Raised when a queue library has no latency metric (e.g. BullMQ).
  */
 class JobQueueLatencyUnsupportedError extends Error {
   /**
@@ -26,13 +26,6 @@ class JobQueueLatencyUnsupportedError extends Error {
   }
 }
 
-/**
- * Throws {@link JobQueueLatencyUnsupportedError} for a queue library that has no latency metric.
- *
- * @param {string} name - The queue library name (e.g. "BullMQ").
- * @returns {never} Always throws.
- * @throws {JobQueueLatencyUnsupportedError} Always.
- */
 function jobQueueLatencyUnsupported(name) {
   throw new JobQueueLatencyUnsupportedError(name)
 }

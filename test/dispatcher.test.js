@@ -640,7 +640,7 @@ describe("Dispatcher", () => {
     const dispatcher = config().dispatcher
     freezeTime(1000)
     config().buffer.sample("web", "rqt", 3)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(
       logger.info.mock.calls.some((c) =>
@@ -893,7 +893,7 @@ describe("Dispatcher", () => {
     stubLease(true, JSON.stringify({ version: 1, job_queues: [] }))
     config().dyno("worker", () => 5)
     const dispatcher = config().dispatcher
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     expect(dispatcher._lease.granted()).toBe(true)
   })
 
@@ -926,7 +926,7 @@ describe("Dispatcher", () => {
     config().dyno("mailer", () => 18)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     expect(bodies[0][0].sample_trace).toBeTruthy()
     const entry = bodies[0][0]
@@ -994,7 +994,7 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 42)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     expect(bodies[0].every((e) => !e.sample_trace)).toBe(true)
   })
@@ -1018,7 +1018,7 @@ describe("Dispatcher", () => {
     )
     config().dyno("worker", () => 42)
     const dispatcher = config().dispatcher
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     const info = logger.info.mock.calls.map((c) => c[0]).join("\n")
     expect(info).toContain("sample_job_queues wave_ms=")
     expect(info).toContain("sample adapter=")
@@ -1045,7 +1045,7 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 11)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     const entry = bodies[0].find((e) => e.name === "worker")
     expect(Object.values(entry.metrics.jqs)[0]).toBe(11)
@@ -1101,8 +1101,8 @@ describe("Dispatcher", () => {
     )
     config().dyno("other", () => 0)
     const dispatcher = config().dispatcher
-    await dispatcher._workerTick()
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
+    await dispatcher._jobQueueTick()
 
     const msgs = logger.error.mock.calls.map((c) => String(c[0]))
     expect(msgs.filter((m) => m.includes("does not support")).length).toBe(3)
@@ -1222,7 +1222,7 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 1)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     const entry = bodies[0].find((e) => e.name === "worker")
     expect(entry.metrics.jql).toBeDefined()
@@ -1252,8 +1252,8 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 99)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
+    await dispatcher._jobQueueTick()
     const msgs = logger.warn.mock.calls.map((c) => String(c[0]))
     const hits = msgs.filter((m) => m.includes("UI adapter is configured"))
     expect(hits.length).toBe(1)
@@ -1281,7 +1281,7 @@ describe("Dispatcher", () => {
     config().dyno("Worker", () => 7)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     const names = bodies[0].map((e) => e.name)
     expect(names).toContain("worker")
@@ -1308,7 +1308,7 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 7)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     const entry = bodies[0].find((e) => e.name === "worker")
     expect(Object.values(entry.metrics.jqs)[0]).toBe(7)
@@ -1339,7 +1339,7 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 42)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     expect(bodies).toEqual([])
     expect(
@@ -1371,8 +1371,8 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 42)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     expect(bodies).toEqual([])
     const msgs = logger.error.mock.calls.map((c) => String(c[0]))
@@ -1418,7 +1418,7 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     expect(dispatcher._enterRace()).toBe(true)
     expect(config().jobQueues.any()).toBe(false)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     expect(dispatcher._lease.granted()).toBe(true)
     await dispatcher._dispatch()
     const entry = bodies[0].find((e) => e.name === "worker")
@@ -1448,7 +1448,7 @@ describe("Dispatcher", () => {
     )
     const dispatcher = config().dispatcher
     expect(dispatcher._enterRace()).toBe(true)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     expect(dispatcher._lease.granted()).toBe(false)
   })
 
@@ -1473,7 +1473,7 @@ describe("Dispatcher", () => {
     )
     const dispatcher = config().dispatcher
     expect(dispatcher._enterRace()).toBe(true)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     expect(dispatcher._lease.granted()).toBe(false)
   })
 
@@ -1520,9 +1520,9 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     expect(dispatcher._lease.granted()).toBe(true)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     const names = bodies[0].map((e) => e.name)
     expect(names).toContain("worker")
@@ -1579,7 +1579,7 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     expect(dispatcher._lease.granted()).toBe(true)
     await dispatcher._dispatch()
     const entry = bodies[0].find((e) => e.name === "worker")
@@ -1620,8 +1620,8 @@ describe("Dispatcher", () => {
     config().dyno("other", () => 0)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
     expect(latency).not.toHaveBeenCalled()
     const msgs = logger.error.mock.calls.map((c) => String(c[0]))
@@ -1863,7 +1863,7 @@ describe("Dispatcher", () => {
     nock(BASE).persist().post("/metrics/lease").reply(401)
     const bodies = captureIngestBodies()
     const dispatcher = configureWorkersOnly()
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(bodies).toEqual([])
     expect(loggerErrors()).not.toMatch(/\b401\b/)
@@ -1914,7 +1914,7 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 42)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     expect(bodies).toEqual([])
     await dispatcher._dispatchTick()
     expect(bodies.length).toBe(1)
@@ -1929,7 +1929,7 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     const dispatcher = configureWebAndWorkers()
     config().buffer.sample("web", "rqt", 5)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     const entries = bodies[0]
     expect(
@@ -1945,7 +1945,7 @@ describe("Dispatcher", () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWorkersOnly()
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(
       bodies[0].some((e) => e.name === "worker" && e.metrics && e.metrics.jql),
@@ -1956,7 +1956,7 @@ describe("Dispatcher", () => {
     stubLease()
     const bodies = captureIngestBodies()
     const dispatcher = configureWorkersOnly()
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(bodies).toEqual([])
   })
@@ -2034,7 +2034,7 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     const dispatcher = configureWebAndWorkers()
     config().buffer.sample("web", "rqt", 12)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(bodies.length).toBe(1)
     expect(loggerErrors()).toMatch(/Network error|ECONNREFUSED|Error/)
@@ -2049,7 +2049,7 @@ describe("Dispatcher", () => {
     })
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(bodies.length).toBe(1)
     expect(bodies[0].map((e) => e.name)).toEqual(["web"])
@@ -2139,7 +2139,7 @@ describe("Dispatcher", () => {
     nock(BASE).persist().post("/metrics/ingest").reply(500)
     const dispatcher = configureWorkersOnly()
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(config().buffer.flush().web).toBeUndefined()
     expect(loggerErrors()).toContain("Dispatch error")
@@ -2196,7 +2196,7 @@ describe("Dispatcher", () => {
     freezeTime(1000)
     config().dyno("worker", () => 3)
     const dispatcher = config().dispatcher
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
     expect(loggerErrors()).toContain("Dispatch error")
@@ -2252,7 +2252,7 @@ describe("Dispatcher", () => {
     config().dyno("worker", () => 7)
     const dispatcher = config().dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     expect(bodies).toEqual([])
     expect(loggerErrors()).toContain("Unknown plan strategy")
@@ -2268,7 +2268,7 @@ describe("Dispatcher", () => {
     const dispatcher = config().dispatcher
     config().buffer.sample("web", "rqt", 12)
     config().buffer.sample("web", "cpu", 25.0)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
     const payload = bodies[0]
     const web = payload.find((e) => e.name === "web")

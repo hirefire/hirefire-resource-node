@@ -183,7 +183,7 @@ describe("HireFire", () => {
 
     const dispatcher = hirefire.configuration.dispatcher
     freezeTime(1000)
-    await dispatcher._workerTick()
+    await dispatcher._jobQueueTick()
     await dispatcher._dispatch()
 
     expect(

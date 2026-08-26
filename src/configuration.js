@@ -18,8 +18,8 @@ const safeLog = require("./log")
  */
 
 /**
- * Thrown when {@link Configuration#dyno} cannot resolve a source because a name other than
- * `"web"` was given without a sampler. Bare `dyno("web")` is a backwards-compatible no-op.
+ * Raised when {@link Configuration#dyno} cannot resolve a source because a name was given
+ * without a sampler (except bare `"web"`, which is a no-op for backwards compatibility).
  */
 class MissingSamplerError extends Error {
   /**
@@ -32,7 +32,7 @@ class MissingSamplerError extends Error {
 }
 
 /**
- * Thrown when a dyno name was already declared for the same source kind (names are compared
+ * Raised when a dyno name was already declared for the same source kind (names are compared
  * case-insensitively).
  */
 class DuplicateDynoError extends Error {
@@ -52,18 +52,16 @@ const MAX_NAME_BYTES = 128
  *
  * Always-on sources (request queue time on the HTTP middleware path, and CPU when process
  * identity resolves) do not require an explicit dyno declaration. Local job-queue sampler
- * functions remain the escape hatch for custom probes until lease plans cover them fully.
+ * functions remain the escape hatch for custom probes and legacy root installs until
+ * lease plans cover them fully.
  */
 class Configuration {
   constructor() {
     /**
-     * Always `null`. Kept for readers that still check `configuration.http`. Request queue
-     * time uses always-on sources under {@link Configuration#httpName} (process identity).
      * @type {import("./source/http") | null}
      */
     this.http = null
     /**
-     * Local job-queue sources declared via sampler functions on {@link Configuration#dyno}.
      * @type {import("./source/jobQueues")}
      */
     this.jobQueues = new JobQueues(this)
@@ -154,7 +152,7 @@ class Configuration {
    * @throws {MissingSamplerError} A name other than `"web"` given without a sampler.
    * @throws {DuplicateDynoError} The name was already declared for the same source kind.
    * @example
-   * config.dyno("web") // does nothing, safe to remove
+   * config.dyno("web") // no-op BC, safe to remove
    * config.dyno("worker", () => jobQueueSize("default"))
    */
   /**
@@ -305,9 +303,6 @@ class Configuration {
     this._sourcesByName.set(key, kinds.concat(source))
   }
 
-  /**
-   * @returns {string|null}
-   */
   _softIdentity() {
     this._warnHerokuConflictOnce()
     const name = Identity.resolve()

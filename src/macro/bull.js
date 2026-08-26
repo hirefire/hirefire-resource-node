@@ -3,6 +3,7 @@ const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
+
 function loadIORedis() {
   return require("ioredis")
 }
