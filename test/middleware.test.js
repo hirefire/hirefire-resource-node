@@ -19,7 +19,7 @@ describe("middleware", () => {
   })
 
   describe("processRequestQueueTime", () => {
-    test("collects a web sample", () => {
+    test("collects web sample", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
@@ -29,7 +29,7 @@ describe("middleware", () => {
       })
     })
 
-    test("always on without web collector under dyno web.1", () => {
+    test("always on samples without a http source", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
@@ -51,7 +51,7 @@ describe("middleware", () => {
       })
     })
 
-    test("whitespace request start falls back to queue start", () => {
+    test("falls back to x queue start when request start is whitespace", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
@@ -61,7 +61,7 @@ describe("middleware", () => {
       })
     })
 
-    test("absent X-Request-Start falls back to X-Queue-Start", () => {
+    test("reads x queue start when request start is absent", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
@@ -71,7 +71,7 @@ describe("middleware", () => {
       })
     })
 
-    test("present X-Request-Start wins over a present X-Queue-Start", () => {
+    test("prefers x request start over x queue start", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
@@ -81,7 +81,7 @@ describe("middleware", () => {
       })
     })
 
-    test("blank X-Request-Start falls back to X-Queue-Start", () => {
+    test("falls back to x queue start when request start is blank", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
@@ -91,7 +91,7 @@ describe("middleware", () => {
       })
     })
 
-    test("starts the dispatcher on a web request", () => {
+    test("starts dispatcher on web request", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
@@ -119,7 +119,7 @@ describe("middleware", () => {
       ).not.toThrow()
     })
 
-    test("does not start the dispatcher without a token", () => {
+    test("does not start dispatcher without token", () => {
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")
@@ -127,14 +127,14 @@ describe("middleware", () => {
       expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
     })
 
-    test("ignores an implausible request start without sampling", () => {
+    test("ignores implausible request start", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       processRequestQueueTime("t=0.05")
       expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
     })
 
-    test("does not sample an over-the-limit queue time", () => {
+    test("does not sample an over the limit queue time", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       freezeTime(1700000000)
@@ -142,7 +142,7 @@ describe("middleware", () => {
       expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
     })
 
-    test("no identity no sample when required", () => {
+    test("does not sample without identity or explicit http name", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")
@@ -150,7 +150,7 @@ describe("middleware", () => {
       expect(start).toHaveBeenCalled()
     })
 
-    test("no request-start header is a noop", () => {
+    test("no request start header is a noop", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       processRequestQueueTime(undefined)
@@ -158,7 +158,7 @@ describe("middleware", () => {
       expect(start).not.toHaveBeenCalled()
     })
 
-    test("an internal failure is swallowed, not raised into the request", () => {
+    test("an internal failure does not break the request", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       const errorLog = jest
@@ -178,7 +178,7 @@ describe("middleware", () => {
       })
     })
 
-    test("a raising httpSource.sample does not start the dispatcher", () => {
+    test("a raising http source sample does not start the dispatcher", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       const source = HireFire.configuration.httpSource
@@ -192,7 +192,7 @@ describe("middleware", () => {
       expect(HireFire.configuration.dispatcher.running()).toBe(false)
     })
 
-    test("a raising logger still records rqt", () => {
+    test("a raising logger does not break the request", () => {
       process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
       process.env.DYNO = "web.1"
       HireFire.configuration.logger = {
@@ -230,16 +230,16 @@ describe("middleware", () => {
       expect(calculateRequestQueueTime("1700000000250000000")).toBe(750)
     })
 
-    test("ignores non finite values", () => {
+    test("ignores non finite request start headers", () => {
       expect(calculateRequestQueueTime("Infinity")).toBeNull()
       expect(calculateRequestQueueTime("NaN")).toBeNull()
     })
 
-    test("ignores an unparseable value", () => {
+    test("ignores unparseable request start", () => {
       expect(calculateRequestQueueTime("garbage")).toBeNull()
     })
 
-    test("ignores an implausible value", () => {
+    test("ignores implausible value", () => {
       expect(calculateRequestQueueTime("t=0.05")).toBeNull()
     })
 
@@ -253,18 +253,18 @@ describe("middleware", () => {
       expect(calculateRequestQueueTime("1700000005000000")).toBe(0)
     })
 
-    test("a nanosecond start beyond 60000 ms returns null", () => {
+    test("drops an over the limit nanosecond start", () => {
       freezeTime(1700000000)
       expect(calculateRequestQueueTime("1699999000000000000")).toBeNull()
     })
 
-    test("accepts the 1e9 lower-guard boundary and rejects below it", () => {
+    test("lower guard boundary accepts 1e9 and rejects below", () => {
       freezeTime(1000000001)
       expect(calculateRequestQueueTime("1000000000")).toBe(1000)
       expect(calculateRequestQueueTime("999999999")).toBeNull()
     })
 
-    test("keeps exactly the cap limit and drops one over", () => {
+    test("cap boundary keeps exactly the limit and drops one over", () => {
       freezeTime(1700000000)
       expect(calculateRequestQueueTime("1699999940000")).toBe(60000)
       expect(calculateRequestQueueTime("1699999939999")).toBeNull()
@@ -289,12 +289,12 @@ describe("middleware", () => {
       expect(calculateRequestQueueTime("-1700000000250")).toBeNull()
     })
 
-    test("normalizes t-prefix milliseconds", () => {
+    test("t prefix milliseconds normalizes", () => {
       freezeTime(1700000001)
       expect(calculateRequestQueueTime("t=1700000000250")).toBe(750)
     })
 
-    test("reads a folded duplicate header", () => {
+    test("proxy folded request start uses the leading timestamp", () => {
       freezeTime(1700000001)
       expect(calculateRequestQueueTime("1700000000000, 1700000000500")).toBe(
         1000,
@@ -302,7 +302,7 @@ describe("middleware", () => {
     })
   })
 
-  test("tokened traffic without platform web role marks http active and enables rqt", () => {
+  test("marks http active for tokened request without platform web role", () => {
     process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
     process.env.HIREFIRE_SERVICE_NAME = "api"
     expect(HireFire.configuration.rqtEnabled).toBe(false)
@@ -313,7 +313,7 @@ describe("middleware", () => {
     expect(data.api.rqt).toBeDefined()
   })
 
-  test("request without token does not mark http active", () => {
+  test("does not mark http active without token", () => {
     process.env.HIREFIRE_SERVICE_NAME = "api"
     freezeTime(1700000001)
     processRequestQueueTime("1700000000000")

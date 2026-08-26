@@ -19,7 +19,7 @@ describe("Client", () => {
     if (client) await client.close()
   })
 
-  test("submitSamples sends the payload with the agent header", async () => {
+  test("submit samples sends payload", async () => {
     const scope = nock(BASE, {
       reqheaders: {
         "content-type": "application/json",
@@ -37,22 +37,24 @@ describe("Client", () => {
     expect(scope.isDone()).toBe(true)
   })
 
-  test("submitSamples returns null on unauthorized", async () => {
+  test("submit samples returns null on unauthorized", async () => {
     nock(BASE).post("/metrics/ingest").reply(401)
     expect(await client.submitSamples(BODY)).toBeNull()
   })
 
-  test("rebuilds the keep-alive agent when the base URL scheme changes", async () => {
-    nock("http://metrics.example").post("/metrics/ingest").reply(200)
-    process.env.HIREFIRE_DATA_URL = "http://metrics.example"
-    await client.submitSamples(BODY)
-
-    nock("https://metrics.example").post("/metrics/ingest").reply(200)
-    process.env.HIREFIRE_DATA_URL = "https://metrics.example"
-    await client.submitSamples(BODY)
+  test("submit samples raises on server error", async () => {
+    nock(BASE).post("/metrics/ingest").reply(500)
+    await expect(client.submitSamples(BODY)).rejects.toThrow("500")
   })
 
-  test("returns payload_too_large on 413", async () => {
+  test("submit samples raises on unexpected status", async () => {
+    nock(BASE).post("/metrics/ingest").reply(422)
+    await expect(client.submitSamples(BODY)).rejects.toThrow(
+      "Unexpected response code 422",
+    )
+  })
+
+  test("submit samples returns payload too large on 413", async () => {
     nock(BASE)
       .post("/metrics/ingest")
       .reply(413, { error: "payload too large" })
@@ -60,19 +62,7 @@ describe("Client", () => {
     expect(result).toBe("payload_too_large")
   })
 
-  test("submitSamples raises on server error", async () => {
-    nock(BASE).post("/metrics/ingest").reply(500)
-    await expect(client.submitSamples(BODY)).rejects.toThrow("500")
-  })
-
-  test("submitSamples raises on an unexpected status", async () => {
-    nock(BASE).post("/metrics/ingest").reply(422)
-    await expect(client.submitSamples(BODY)).rejects.toThrow(
-      "Unexpected response code 422",
-    )
-  })
-
-  test("submitSamples raises on timeout", async () => {
+  test("submit samples raises on timeout", async () => {
     const slowClient = new Client(
       { token: "test-token-value" },
       { timeout: 0.1 },
@@ -85,7 +75,7 @@ describe("Client", () => {
     }
   })
 
-  test("submitSamples raises on transport errors", async () => {
+  test("submit samples raises on transport errors", async () => {
     for (const error of [
       { code: "ECONNREFUSED" },
       { code: "ENOTFOUND" },
@@ -99,12 +89,7 @@ describe("Client", () => {
     }
   })
 
-  test("maps a socket ETIMEDOUT to a timeout error", async () => {
-    nock(BASE).post("/metrics/ingest").replyWithError({ code: "ETIMEDOUT" })
-    await expect(client.submitSamples(BODY)).rejects.toThrow("timed out")
-  })
-
-  test("requestLease sends the process id and token", async () => {
+  test("request lease sends process id", async () => {
     const scope = nock(BASE, {
       reqheaders: {
         "hirefire-token": "test-token-value",
@@ -124,7 +109,7 @@ describe("Client", () => {
     expect(response.statusCode).toBe(200)
   })
 
-  test("requestLease raises on timeout", async () => {
+  test("request lease raises on timeout", async () => {
     const slowClient = new Client(
       { token: "test-token-value" },
       { timeout: 0.1 },
@@ -139,7 +124,83 @@ describe("Client", () => {
     }
   })
 
-  test("requestLease sends the agent header", async () => {
+  test("raises without token", async () => {
+    const tokenless = new Client({ token: null })
+    await expect(tokenless.submitSamples("[]")).rejects.toThrow(
+      "HireFire token is not set",
+    )
+  })
+
+  test("raises with empty token", async () => {
+    const tokenless = new Client({ token: "" })
+    await expect(tokenless.submitSamples("[]")).rejects.toThrow(
+      "HireFire token is not set",
+    )
+  })
+
+  test("blank and slash only data url falls back to default", async () => {
+    for (const value of ["", "   ", "/", "///"]) {
+      process.env.HIREFIRE_DATA_URL = value
+      const scope = nock(BASE).post("/metrics/ingest").reply(200)
+      await client.submitSamples(BODY)
+      expect(scope.isDone()).toBe(true)
+    }
+  })
+
+  test("whitespace padded data url is stripped", async () => {
+    process.env.HIREFIRE_DATA_URL = "  https://custom.hirefire.io  "
+    const scope = nock("https://custom.hirefire.io")
+      .post("/metrics/ingest")
+      .reply(200)
+    await client.submitSamples(BODY)
+    expect(scope.isDone()).toBe(true)
+  })
+
+  test("custom data url", async () => {
+    process.env.HIREFIRE_DATA_URL = "https://custom.hirefire.io"
+    const scope = nock("https://custom.hirefire.io")
+      .post("/metrics/ingest")
+      .reply(200)
+
+    await client.submitSamples(BODY)
+
+    expect(scope.isDone()).toBe(true)
+  })
+
+  test("custom data url over plain http", async () => {
+    process.env.HIREFIRE_DATA_URL = "http://localhost:9999"
+    const scope = nock("http://localhost:9999")
+      .post("/metrics/ingest")
+      .reply(200)
+
+    await client.submitSamples(BODY)
+
+    expect(scope.isDone()).toBe(true)
+  })
+
+  test("custom data url with a trailing slash does not double the path", async () => {
+    process.env.HIREFIRE_DATA_URL = "https://custom.hirefire.io/prefix/"
+    const scope = nock("https://custom.hirefire.io")
+      .post("/prefix/metrics/ingest")
+      .reply(200)
+
+    await client.submitSamples(BODY)
+
+    expect(scope.isDone()).toBe(true)
+  })
+
+  test("custom data url honors a path prefix", async () => {
+    process.env.HIREFIRE_DATA_URL = "https://proxy.example.com/hf"
+    const scope = nock("https://proxy.example.com")
+      .post("/hf/metrics/ingest")
+      .reply(200)
+
+    await client.submitSamples(BODY)
+
+    expect(scope.isDone()).toBe(true)
+  })
+
+  test("request lease sends the agent header", async () => {
     let sentAgent = "unset"
     const scope = nock(BASE)
       .post("/metrics/lease")
@@ -154,63 +215,23 @@ describe("Client", () => {
     expect(sentAgent).toBe(`Node-${VERSION}`)
   })
 
-  test("raises without a token", async () => {
-    const tokenless = new Client({ token: null })
-    await expect(tokenless.submitSamples("[]")).rejects.toThrow(
-      "HireFire token is not set",
-    )
+  test("close is safe without a connection", async () => {
+    await expect(new Client({ token: "t" }).close()).resolves.toBeUndefined()
   })
 
-  test("raises with an empty token", async () => {
-    const tokenless = new Client({ token: "" })
-    await expect(tokenless.submitSamples("[]")).rejects.toThrow(
-      "HireFire token is not set",
-    )
-  })
-
-  test("blank data url falls back to default", async () => {
-    process.env.HIREFIRE_DATA_URL = "   "
-    const scope = nock(BASE).post("/metrics/ingest").reply(200)
-    await client.submitSamples(BODY)
-    expect(scope.isDone()).toBe(true)
-  })
-
-  test("slash only data url falls back to default", async () => {
-    process.env.HIREFIRE_DATA_URL = "///"
-    const scope = nock(BASE).post("/metrics/ingest").reply(200)
-    await client.submitSamples(BODY)
-    expect(scope.isDone()).toBe(true)
-  })
-
-  test("whitespace padded data url is stripped", async () => {
-    process.env.HIREFIRE_DATA_URL = "  https://custom.hirefire.io  "
-    const scope = nock("https://custom.hirefire.io")
-      .post("/metrics/ingest")
-      .reply(200)
-    await client.submitSamples(BODY)
-    expect(scope.isDone()).toBe(true)
-  })
-
-  test("uses a custom data url", async () => {
-    process.env.HIREFIRE_DATA_URL = "https://custom.hirefire.io"
-    const scope = nock("https://custom.hirefire.io")
-      .post("/metrics/ingest")
-      .reply(200)
-
+  test("rebuilds the keep alive agent when the base url scheme changes", async () => {
+    nock("http://metrics.example").post("/metrics/ingest").reply(200)
+    process.env.HIREFIRE_DATA_URL = "http://metrics.example"
     await client.submitSamples(BODY)
 
-    expect(scope.isDone()).toBe(true)
+    nock("https://metrics.example").post("/metrics/ingest").reply(200)
+    process.env.HIREFIRE_DATA_URL = "https://metrics.example"
+    await client.submitSamples(BODY)
   })
 
-  test("uses a custom data url over plain http", async () => {
-    process.env.HIREFIRE_DATA_URL = "http://localhost:9999"
-    const scope = nock("http://localhost:9999")
-      .post("/metrics/ingest")
-      .reply(200)
-
-    await client.submitSamples(BODY)
-
-    expect(scope.isDone()).toBe(true)
+  test("maps a socket etimedout to a timeout error", async () => {
+    nock(BASE).post("/metrics/ingest").replyWithError({ code: "ETIMEDOUT" })
+    await expect(client.submitSamples(BODY)).rejects.toThrow("timed out")
   })
 
   test("tolerates a trailing slash in the data url", async () => {
@@ -224,26 +245,31 @@ describe("Client", () => {
     expect(scope.isDone()).toBe(true)
   })
 
-  test("tolerates a path prefix in the data url", async () => {
-    process.env.HIREFIRE_DATA_URL = "https://proxy.example.com/hf"
-    const scope = nock("https://proxy.example.com")
-      .post("/hf/metrics/ingest")
-      .reply(200)
+  test("lease response body error is mapped to a request error", async () => {
+    const client = new Client({ token: "t" })
+    const response = new EventEmitter()
+    response.resume = jest.fn()
+    const request = new EventEmitter()
+    request.reusedSocket = false
+    request.write = jest.fn()
+    request.end = jest.fn(() => {
+      queueMicrotask(() =>
+        response.emit("error", new Error("body stream failed")),
+      )
+    })
+    const transport = {
+      request: jest.fn((_options, callback) => {
+        queueMicrotask(() => callback(response))
+        return request
+      }),
+    }
 
-    await client.submitSamples(BODY)
-
-    expect(scope.isDone()).toBe(true)
-  })
-
-  test("path prefix with trailing slash does not double the path", async () => {
-    process.env.HIREFIRE_DATA_URL = "https://custom.hirefire.io/prefix/"
-    const scope = nock("https://custom.hirefire.io")
-      .post("/prefix/metrics/ingest")
-      .reply(200)
-
-    await client.submitSamples(BODY)
-
-    expect(scope.isDone()).toBe(true)
+    await expect(
+      client._attempt(transport, { method: "POST" }, undefined, {
+        readBody: true,
+        maxBodyBytes: 10,
+      }),
+    ).rejects.toBeInstanceOf(RequestError)
   })
 })
 
@@ -268,7 +294,7 @@ describe("Client (persistent connection)", () => {
     server = undefined
   })
 
-  test("reuses one socket across requests", async () => {
+  test("reuses a single connection across requests", async () => {
     await listen((req, res) => req.resume().on("end", () => res.end()))
     const client = new Client({ token: "t" })
 
@@ -279,7 +305,7 @@ describe("Client (persistent connection)", () => {
     await client.close()
   })
 
-  test("reconnects and retries once after a stale keep-alive socket", async () => {
+  test("reconnects and retries once on a stale keep alive socket", async () => {
     let requests = 0
     await listen((req, res) => {
       requests += 1
@@ -314,51 +340,7 @@ describe("Client (persistent connection)", () => {
     await client.close()
   })
 
-  test("a response stream error is mapped to a request error", async () => {
-    await listen((req, res) => {
-      req.resume().on("end", () => {
-        res.writeHead(200, { "Content-Length": "100" })
-        res.write("partial")
-        res.socket.end()
-      })
-    })
-    const client = new Client({ token: "t" })
-
-    const promise = client.submitSamples("[]")
-    await expect(promise).rejects.toBeInstanceOf(RequestError)
-    await expect(promise).rejects.toThrow(/Network error/)
-
-    await client.close()
-  })
-
-  test("a lease response body error is mapped to a request error", async () => {
-    const client = new Client({ token: "t" })
-    const response = new EventEmitter()
-    response.resume = jest.fn()
-    const request = new EventEmitter()
-    request.reusedSocket = false
-    request.write = jest.fn()
-    request.end = jest.fn(() => {
-      queueMicrotask(() =>
-        response.emit("error", new Error("body stream failed")),
-      )
-    })
-    const transport = {
-      request: jest.fn((_options, callback) => {
-        queueMicrotask(() => callback(response))
-        return request
-      }),
-    }
-
-    await expect(
-      client._attempt(transport, { method: "POST" }, undefined, {
-        readBody: true,
-        maxBodyBytes: 10,
-      }),
-    ).rejects.toBeInstanceOf(RequestError)
-  })
-
-  test("retries once when a reused socket reads back a garbled response", async () => {
+  test("reconnects and retries once on a desynced keep alive response", async () => {
     let requests = 0
     const raw = net.createServer((socket) => {
       let buffer = ""
@@ -388,7 +370,7 @@ describe("Client (persistent connection)", () => {
     await new Promise((resolve) => raw.close(resolve))
   })
 
-  test("close finishes the persistent socket", async () => {
+  test("close finishes and clears the persistent connection", async () => {
     await listen((req, res) => req.resume().on("end", () => res.end()))
     const client = new Client({ token: "t" })
     await client.submitSamples("[]")
@@ -402,11 +384,19 @@ describe("Client (persistent connection)", () => {
     expect(connections.size).toBe(0)
   })
 
-  test("close is safe without a connection", async () => {
-    await expect(new Client({ token: "t" }).close()).resolves.toBeUndefined()
+  test("close swallows a failing connection shutdown", async () => {
+    await listen((req, res) => req.resume().on("end", () => res.end()))
+    const client = new Client({ token: "t" })
+    await client.submitSamples("[]")
+    expect(client._agent).not.toBeNull()
+    client._agent.destroy = () => {
+      throw new Error("destroy boom")
+    }
+    await expect(client.close()).resolves.toBeUndefined()
+    expect(client._agent).toBeNull()
   })
 
-  test("does not retry twice on persistent stale keep-alive errors", async () => {
+  test("does not retry twice on persistent stale errors", async () => {
     let requests = 0
     await listen((req, res) => {
       requests += 1
@@ -428,7 +418,24 @@ describe("Client (persistent connection)", () => {
     await client.close()
   })
 
-  test("requestLease returns the response body string", async () => {
+  test("response stream error is mapped to a request error", async () => {
+    await listen((req, res) => {
+      req.resume().on("end", () => {
+        res.writeHead(200, { "Content-Length": "100" })
+        res.write("partial")
+        res.socket.end()
+      })
+    })
+    const client = new Client({ token: "t" })
+
+    const promise = client.submitSamples("[]")
+    await expect(promise).rejects.toBeInstanceOf(RequestError)
+    await expect(promise).rejects.toThrow(/Network error/)
+
+    await client.close()
+  })
+
+  test("request lease returns response body string", async () => {
     await listen((req, res) => {
       req.resume().on("end", () => {
         res.writeHead(200, {
@@ -463,7 +470,7 @@ describe("Client (persistent connection)", () => {
     await client.close()
   })
 
-  test("close waits for in-flight requests", async () => {
+  test("close waits for inflight requests", async () => {
     let release
     const gate = new Promise((resolve) => {
       release = resolve
@@ -489,17 +496,5 @@ describe("Client (persistent connection)", () => {
     await inflight
     await closePromise
     expect(completed).toBe(true)
-  })
-
-  test("close swallows destroy failure", async () => {
-    await listen((req, res) => req.resume().on("end", () => res.end()))
-    const client = new Client({ token: "t" })
-    await client.submitSamples("[]")
-    expect(client._agent).not.toBeNull()
-    client._agent.destroy = () => {
-      throw new Error("destroy boom")
-    }
-    await expect(client.close()).resolves.toBeUndefined()
-    expect(client._agent).toBeNull()
   })
 })

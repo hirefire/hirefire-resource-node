@@ -1,7 +1,7 @@
 const Hooks = require("../../src/plan/hooks")
 
 describe("Plan.Hooks", () => {
-  test("defaults", () => {
+  test("default plan hooks empty", () => {
     expect(Hooks.planOptions("jqs", { a: 1 })).toEqual({})
     expect(Hooks.planConnectionOptions()).toEqual({})
     expect(Hooks.supportsPlanStrategy("jql")).toBe(true)
@@ -13,7 +13,7 @@ describe("Plan.Hooks", () => {
     expect(Hooks.reinitAfterFork()).toBeUndefined()
   })
 
-  test("extractPlanOptions allowlist and coerce", () => {
+  test("extract allowlists and coerces", () => {
     const schema = {
       jqs: {
         prioritized: "boolean",
@@ -35,7 +35,7 @@ describe("Plan.Hooks", () => {
     ).toEqual({ prioritized: true, limit: 10 })
   })
 
-  test("coercePlanValue strict integer and boolean", () => {
+  test("coerce plan value", () => {
     expect(Hooks.coercePlanValue("boolean", true)).toBe(true)
     expect(Hooks.coercePlanValue("boolean", false)).toBe(false)
     expect(Hooks.coercePlanValue("boolean", "true")).toBeNull()
@@ -47,7 +47,7 @@ describe("Plan.Hooks", () => {
     expect(Hooks.coercePlanValue("non_negative_integer", "5.0")).toBeNull()
   })
 
-  test("extractPlanOptions ignores invalid option containers and types", () => {
+  test("extract drops invalid and non hash", () => {
     const schema = { jqs: { limit: "unknown" } }
 
     expect(Hooks.extractPlanOptions("jqs", null, schema)).toEqual({})

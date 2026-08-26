@@ -9,7 +9,7 @@ describe("Plan", () => {
     configuration.logger = { info() {}, warn() {}, error: jest.fn() }
   })
 
-  test("known adapter and strategy", () => {
+  test("known adapters", () => {
     expect(Plan.knownAdapter("bullmq")).toBe(true)
     expect(Plan.knownAdapter("bull")).toBe(true)
     expect(Plan.knownAdapter("pg_boss")).toBe(true)
@@ -18,6 +18,9 @@ describe("Plan", () => {
     expect(Plan.knownAdapter("toString")).toBe(false)
     expect(Plan.knownAdapter("valueOf")).toBe(false)
     expect(Plan.knownAdapter("__proto__")).toBe(false)
+  })
+
+  test("known strategy", () => {
     expect(Plan.knownStrategy("jqs")).toBe(true)
     expect(Plan.knownStrategy("jql")).toBe(true)
   })
@@ -38,7 +41,7 @@ describe("Plan", () => {
     expect(Plan.supportsStrategy("pg_boss", "rpm")).toBe(false)
   })
 
-  test("libraryLoaded for pg_boss requires both pg-boss and pg", () => {
+  test("library loaded for pg boss requires both pg boss and pg", () => {
     const planModule = require.cache[require.resolve("../../src/plan")]
     const originalResolve = planModule.require.resolve
     const present = new Set(["pg-boss", "pg"])
@@ -76,7 +79,7 @@ describe("Plan", () => {
     }
   })
 
-  test("libraryLoaded isolates bull from bullmq package names", () => {
+  test("library loaded isolates bull from bullmq package names", () => {
     const planModule = require.cache[require.resolve("../../src/plan")]
     const originalResolve = planModule.require.resolve
     const present = new Set()
@@ -127,7 +130,7 @@ describe("Plan", () => {
     }
   })
 
-  test("supports strategy rejects unknown adapter and strategy", () => {
+  test("supports strategy rejects unknown strategy with known adapter", () => {
     expect(Plan.supportsStrategy("unknown", "jql")).toBe(false)
     expect(Plan.supportsStrategy("bullmq", "rpm")).toBe(false)
     expect(Plan.supportsStrategy("bullmq", "unknown")).toBe(false)
@@ -161,7 +164,7 @@ describe("Plan", () => {
     expect(configuration.logger.error).toHaveBeenCalled()
   })
 
-  test("execute unknown adapter", async () => {
+  test("execute unknown adapter logs and skips", async () => {
     await Plan.execute(
       {
         name: "worker",
@@ -238,7 +241,7 @@ describe("Plan", () => {
     }
   })
 
-  test("normalize queues null becomes empty", async () => {
+  test("normalize queues null means all queues", async () => {
     const sample = jest.fn(async () => 1)
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
@@ -270,7 +273,7 @@ describe("Plan", () => {
     }
   })
 
-  test('JSON null queue elements are dropped (not the name "null")', async () => {
+  test("json null queue elements are dropped not the name null", async () => {
     const sample = jest.fn(async () => 1)
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
@@ -319,7 +322,7 @@ describe("Plan", () => {
     }
   })
 
-  test("invalid sample dropped", async () => {
+  test("execute drops invalid samples", async () => {
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
     const origWorking = macro.jobQueueWorking
@@ -452,7 +455,7 @@ describe("Plan", () => {
     }
   })
 
-  test("execute rescues macro errors and logs without throwing", async () => {
+  test("execute rescues macro errors and logs", async () => {
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
     const origWorking = macro.jobQueueWorking
@@ -512,7 +515,7 @@ describe("Plan", () => {
     )
   })
 
-  test("execute merges planConnectionOptions into macro call", async () => {
+  test("execute merges adapter plan connection options", async () => {
     const sample = jest.fn(async () => 1)
     const macro = {
       supportsPlanStrategy: () => true,
@@ -536,7 +539,7 @@ describe("Plan", () => {
     expect(sample).toHaveBeenCalledWith("default", { url: "redis://plan" })
   })
 
-  test("normalize queues truncates to MAX_QUEUES and strips", async () => {
+  test("normalize queues truncates and strips", async () => {
     const sample = jest.fn(async () => 1)
     const queues = Array.from(
       { length: Plan.MAX_QUEUES + 5 },
@@ -566,7 +569,7 @@ describe("Plan", () => {
     expect(sample.mock.calls[0].length - 1).toBe(Plan.MAX_QUEUES)
   })
 
-  test("normalize queues non-array skips entry", async () => {
+  test("normalize queues skips non array", async () => {
     const sample = jest.fn(async () => 1)
     const macro = {
       supportsPlanStrategy: () => true,
@@ -620,7 +623,7 @@ describe("Plan", () => {
     )
   })
 
-  test("aroundJobQueueSample calls before and after on every adapter", async () => {
+  test("around job queue sample calls before and after on every adapter", async () => {
     const events = []
     const a = {
       beforeSampleJobQueues: () => {
@@ -677,7 +680,7 @@ describe("Plan", () => {
     }
   })
 
-  test("aroundJobQueueSample runs after when body raises", async () => {
+  test("around job queue sample runs after when body raises", async () => {
     const afterTokens = []
     const mod = {
       beforeSampleJobQueues: () => "wave",
@@ -711,7 +714,7 @@ describe("Plan", () => {
     }
   })
 
-  test("reinitMacrosAfterFork notifies every adapter", async () => {
+  test("reinit macros after fork notifies every adapter", async () => {
     const called = []
     const a = {
       reinitAfterFork: () => {
@@ -750,7 +753,7 @@ describe("Plan", () => {
     }
   })
 
-  test("aroundJobQueueSample continues when before raises and skips its after", async () => {
+  test("around job queue sample rescues raising before hook and still runs body and after", async () => {
     const events = []
     const a = {
       beforeSampleJobQueues: () => {
@@ -809,7 +812,7 @@ describe("Plan", () => {
     }
   })
 
-  test("aroundJobQueueSample logs primitive before failures", async () => {
+  test("around job queue sample logs primitive before failures", async () => {
     const mod = {
       beforeSampleJobQueues: () => {
         throw "before-a"
@@ -843,7 +846,7 @@ describe("Plan", () => {
     }
   })
 
-  test("aroundJobQueueSample continues remaining afters when one after raises", async () => {
+  test("around job queue sample rescues raising after hook and still runs other afters", async () => {
     const events = []
     const a = {
       beforeSampleJobQueues: () => "token_a",
@@ -894,7 +897,7 @@ describe("Plan", () => {
     }
   })
 
-  test("reinitMacrosAfterFork continues when one adapter raises", async () => {
+  test("reinit macros after fork rescues raising adapter and continues", async () => {
     const called = []
     const a = {
       reinitAfterFork: () => {
@@ -939,7 +942,7 @@ describe("Plan", () => {
     }
   })
 
-  test("allowlisted macros expose sample-wave hooks", () => {
+  test("allowlisted macros expose sample wave hooks", () => {
     const Hooks = require("../../src/plan/hooks")
     const pgBoss = require("../../src/macro/pg_boss")
     expect(pgBoss.beforeSampleJobQueues).toBe(Hooks.beforeSampleJobQueues)
@@ -956,7 +959,7 @@ describe("Plan", () => {
     }
   })
 
-  test("aroundJobQueueSample calls after with successful null token", async () => {
+  test("around job queue sample calls after with successful null token", async () => {
     const afterTokens = []
     const mod = {
       beforeSampleJobQueues: () => null,
@@ -987,7 +990,7 @@ describe("Plan", () => {
     }
   })
 
-  test("aroundJobQueueSample with empty adapters still runs body", async () => {
+  test("around job queue sample with empty adapters still runs body", async () => {
     const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
     for (const key of Object.keys(Plan.ADAPTERS)) {
       delete Plan.ADAPTERS[key]
@@ -1005,7 +1008,7 @@ describe("Plan", () => {
     }
   })
 
-  test("execute samples wrk when macro implements jobQueueWorking", async () => {
+  test("execute samples wrk when macro implements job queue working", async () => {
     const mod = {
       supportsPlanStrategy: () => true,
       planOptions: () => ({}),
@@ -1043,7 +1046,7 @@ describe("Plan", () => {
     }
   })
 
-  test("execute still samples wrk when job strategy sample is invalid", async () => {
+  test("execute still samples wrk when job strategy sample invalid", async () => {
     let workingCalled = false
     const mod = {
       supportsPlanStrategy: () => true,
@@ -1125,7 +1128,7 @@ describe("Plan", () => {
     }
   })
 
-  test("execute skips wrk when macro lacks jobQueueWorking", async () => {
+  test("execute skips wrk when macro lacks job queue working", async () => {
     const mod = {
       supportsPlanStrategy: () => true,
       planOptions: () => ({}),
@@ -1156,7 +1159,7 @@ describe("Plan", () => {
     }
   })
 
-  test("execute keeps jqs when jobQueueWorking raises", async () => {
+  test("execute keeps jqs when job queue working raises", async () => {
     const mod = {
       supportsPlanStrategy: () => true,
       planOptions: () => ({}),
@@ -1198,7 +1201,7 @@ describe("Plan", () => {
     }
   })
 
-  test("execute drops invalid wrk keeps jqs", async () => {
+  test("execute drops invalid wrk without clearing jqs", async () => {
     const mod = {
       supportsPlanStrategy: () => true,
       planOptions: () => ({}),
@@ -1234,7 +1237,7 @@ describe("Plan", () => {
     }
   })
 
-  test("sampleableEntry is false for queues-required empty lists", () => {
+  test("sampleable entry is false for queues required empty lists", () => {
     const required = {
       supportsPlanStrategy: () => true,
       queuesRequired: () => true,
@@ -1268,7 +1271,7 @@ describe("Plan", () => {
     ).toBe(true)
   })
 
-  test("sampleableEntry accepts only valid named queues", () => {
+  test("sampleable entry accepts only valid named queues", () => {
     const required = {
       supportsPlanStrategy: () => true,
       queuesRequired: () => true,
@@ -1295,7 +1298,7 @@ describe("Plan", () => {
     ).toBe(true)
   })
 
-  test("execute skips queues-required entries with no named queues", async () => {
+  test("execute skips queues required adapter with empty queues", async () => {
     const sample = jest.fn(async () => 4)
     const macro = {
       supportsPlanStrategy: () => true,

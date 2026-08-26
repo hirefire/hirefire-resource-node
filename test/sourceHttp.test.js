@@ -9,16 +9,15 @@ describe("HTTP", () => {
     configuration = { buffer: new Buffer() }
   })
 
-  test("coerces the name to a string", () => {
-    expect(new HTTP("web", configuration).name).toBe("web")
+  test("name", () => {
     expect(new HTTP("api", configuration).name).toBe("api")
   })
 
   test("sample buffers request queue time", () => {
-    freezeTime(1000)
-    new HTTP("web", configuration).sample(42)
+    freezeTime(100)
+    new HTTP("web", configuration).sample(25)
     expect(configuration.buffer.flush().web.rqt).toEqual({
-      1000: { sum: 42, count: 1 },
+      100: { sum: 25, count: 1 },
     })
   })
 })

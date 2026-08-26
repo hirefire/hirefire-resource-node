@@ -20,7 +20,7 @@ describe("HireFire", () => {
     instances.length = 0
   })
 
-  test("configure yields the configuration", () => {
+  test("configure yields configuration", () => {
     const hirefire = createHireFire()
     let received
     hirefire.configure((config) => {
@@ -30,7 +30,7 @@ describe("HireFire", () => {
     expect(received).toBe(hirefire.configuration)
   })
 
-  test("boot is configure with empty block", () => {
+  test("boot is configure with empty function", () => {
     process.env.HIREFIRE_TOKEN = "test-token-value"
     const start = jest
       .spyOn(Dispatcher.prototype, "start")
@@ -47,7 +47,7 @@ describe("HireFire", () => {
     expect(ensure).toHaveBeenCalled()
   })
 
-  test("configure starts the dispatcher when a token is set", () => {
+  test("configure starts dispatcher when token is set", () => {
     process.env.HIREFIRE_TOKEN = "test-token-value"
     const start = jest
       .spyOn(Dispatcher.prototype, "start")
@@ -64,7 +64,7 @@ describe("HireFire", () => {
     expect(ensure).toHaveBeenCalled()
   })
 
-  test("configure does not start the dispatcher without a token", () => {
+  test("configure does not start dispatcher without token", () => {
     const start = jest
       .spyOn(Dispatcher.prototype, "start")
       .mockReturnValue(true)
@@ -76,7 +76,7 @@ describe("HireFire", () => {
     expect(start).not.toHaveBeenCalled()
   })
 
-  test("configure does not start the dispatcher with an empty token", () => {
+  test("configure does not start dispatcher with empty token", () => {
     process.env.HIREFIRE_TOKEN = ""
     const start = jest
       .spyOn(Dispatcher.prototype, "start")
@@ -89,7 +89,7 @@ describe("HireFire", () => {
     expect(start).not.toHaveBeenCalled()
   })
 
-  test("configure does not start with whitespace only token", () => {
+  test("configure does not start dispatcher with whitespace only token", () => {
     process.env.HIREFIRE_TOKEN = "   "
     const start = jest
       .spyOn(Dispatcher.prototype, "start")
@@ -102,7 +102,7 @@ describe("HireFire", () => {
     expect(start).not.toHaveBeenCalled()
   })
 
-  test("configure does not start the dispatcher when the token is forced empty", () => {
+  test("configure does not start dispatcher when token is forced empty", () => {
     process.env.HIREFIRE_TOKEN = "from-env"
     const start = jest
       .spyOn(Dispatcher.prototype, "start")
@@ -117,7 +117,7 @@ describe("HireFire", () => {
     expect(start).not.toHaveBeenCalled()
   })
 
-  test("additive configure after boot starts ensure", () => {
+  test("additive configure after boot starts worker loop", () => {
     process.env.HIREFIRE_TOKEN = "test-token-value"
     const start = jest
       .spyOn(Dispatcher.prototype, "start")
@@ -194,7 +194,7 @@ describe("HireFire", () => {
     await hirefire.reset()
   })
 
-  test("reset stops the dispatcher and replaces the configuration", async () => {
+  test("reset stops dispatcher and replaces configuration", async () => {
     const hirefire = createHireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }
     process.env.DYNO = "web.1"
@@ -270,7 +270,7 @@ describe("HireFire", () => {
     expect(start).not.toHaveBeenCalled()
   })
 
-  test("configure token assignment starts dispatcher and job-queue loop", () => {
+  test("configure token assignment starts dispatcher and job queue loop", () => {
     const start = jest
       .spyOn(Dispatcher.prototype, "start")
       .mockReturnValue(true)

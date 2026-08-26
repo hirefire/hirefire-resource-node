@@ -13,51 +13,45 @@ function strategyValue(data, name, strategy) {
 }
 
 describe("JobQueues", () => {
-  test("ignores a missing job queue", async () => {
-    const configuration = configure()
-
-    await configuration.jobQueues.sampleJobQueue(null, "jql")
-
-    expect(configuration.logger.error).not.toHaveBeenCalled()
-  })
-
-  test("samples each job queue into the buffer under plan strategy", async () => {
+  test("sample job queue", async () => {
     const configuration = configure()
     configuration.dyno("worker", () => 42)
     configuration.dyno("mailer", () => 18)
 
-    for (const jobQueue of configuration.jobQueues) {
-      await configuration.jobQueues.sampleJobQueue(jobQueue, "jql")
-    }
+    const jobQueues = configuration.jobQueues
+    await jobQueues.sampleJobQueue(jobQueues.findByName("worker"), "jql")
+    await jobQueues.sampleJobQueue(jobQueues.findByName("mailer"), "jqs")
 
     const data = configuration.buffer.flush()
     expect(strategyValue(data, "worker", "jql")).toBe(42)
-    expect(strategyValue(data, "mailer", "jql")).toBe(18)
+    expect(strategyValue(data, "mailer", "jqs")).toBe(18)
   })
 
-  test("samples under jqs strategy", async () => {
+  test("sample job queue rejects unknown strategy", async () => {
     const configuration = configure()
-    configuration.dyno("worker", () => 7)
+    configuration.dyno("worker", () => 42)
     await configuration.jobQueues.sampleJobQueue(
       configuration.jobQueues.findByName("worker"),
-      "jqs",
+      "rpm",
     )
-    expect(strategyValue(configuration.buffer.flush(), "worker", "jqs")).toBe(7)
-  })
-
-  test("findByName is case insensitive", () => {
-    const configuration = configure()
-    configuration.dyno("Worker", () => 1)
-    expect(configuration.jobQueues.findByName("worker").name).toBe("Worker")
-    expect(configuration.jobQueues.findByName("WORKER")).toBe(
-      configuration.jobQueues.findByName("worker"),
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
+    expect(configuration.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Unknown job-queue strategy"),
     )
   })
 
-  test("findByName returns null for missing", () => {
+  test("find by name returns null for missing", () => {
     const configuration = configure()
     configuration.dyno("worker", () => 1)
     expect(configuration.jobQueues.findByName("missing")).toBeNull()
+  })
+
+  test("find by name is case insensitive and preserves canonical name", () => {
+    const configuration = configure()
+    configuration.dyno("Worker", () => 1)
+    const found = configuration.jobQueues.findByName("worker")
+    expect(found.name).toBe("Worker")
+    expect(configuration.jobQueues.findByName("WORKER")).toBe(found)
   })
 
   test("latest sample wins across multiple samples", async () => {
@@ -71,7 +65,7 @@ describe("JobQueues", () => {
     expect(strategyValue(configuration.buffer.flush(), "worker", "jql")).toBe(9)
   })
 
-  test("a raising sampler is isolated and logged", async () => {
+  test("raising sampler is isolated and logged", async () => {
     const configuration = configure()
     configuration.dyno("worker", () => {
       throw new Error("Redis down")
@@ -93,6 +87,115 @@ describe("JobQueues", () => {
     expect(configuration.logger.error).toHaveBeenCalledWith(
       expect.stringContaining("Redis down"),
     )
+  })
+
+  test("invalid sample values are dropped and logged", async () => {
+    const configuration = configure()
+    const values = ["10", null, -1, Infinity, NaN, 7]
+    let i = 0
+    configuration.dyno("worker", () => values[i++])
+    const jobQueue = configuration.jobQueues.findByName("worker")
+
+    for (let n = 0; n < 5; n++) {
+      await configuration.jobQueues.sampleJobQueue(jobQueue, "jql")
+    }
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
+
+    await configuration.jobQueues.sampleJobQueue(jobQueue, "jql")
+    expect(strategyValue(configuration.buffer.flush(), "worker", "jql")).toBe(7)
+  })
+
+  test("a raising logger does not escape sampling", async () => {
+    const configuration = configure()
+    configuration.dyno("worker", () => {
+      throw new Error("Redis down")
+    })
+    configuration.logger = {
+      info() {},
+      warn() {},
+      error() {
+        throw new Error("closed stream")
+      },
+    }
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jql",
+    )
+  })
+
+  test("samples write to the owning configuration not the global", async () => {
+    process.env.HIREFIRE_TOKEN = "old-token"
+    const old = new Configuration()
+    old.dyno("worker", () => 7)
+    const jobQueue = old.jobQueues.findByName("worker")
+
+    const HireFire = require("../src")
+    await HireFire.reset()
+    process.env.HIREFIRE_TOKEN = "new-token"
+    HireFire.configuration.dyno("web")
+
+    await old.jobQueues.sampleJobQueue(jobQueue, "jql")
+
+    expect(HireFire.configuration.buffer.flush().worker).toBeUndefined()
+    expect(strategyValue(old.buffer.flush(), "worker", "jql")).toBe(7)
+  })
+
+  test("sample job queue reports under explicit name", async () => {
+    const configuration = configure()
+    configuration.dyno("Worker", () => 4)
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jqs",
+      { name: "worker" },
+    )
+    const data = configuration.buffer.flush()
+    expect(strategyValue(data, "worker", "jqs")).toBe(4)
+    expect(data.Worker).toBeUndefined()
+  })
+
+  test("live gate drops a sample that returns after stop", async () => {
+    const configuration = configure()
+    configuration.dyno("worker", () => 9)
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jql",
+      { live: () => false },
+    )
+    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
+  })
+
+  test("enumerable", () => {
+    const jobQueues = new JobQueues({})
+    jobQueues.add(new JobQueue("worker", () => 1))
+    jobQueues.add(new JobQueue("mailer", () => 2))
+
+    expect([...jobQueues].map((q) => q.name)).toEqual(["worker", "mailer"])
+  })
+
+  test("any", () => {
+    const jobQueues = new JobQueues({})
+    expect(jobQueues.any()).toBe(false)
+
+    jobQueues.add(new JobQueue("worker", () => 1))
+    expect(jobQueues.any()).toBe(true)
+  })
+
+  test("zero sample is accepted", async () => {
+    const configuration = configure()
+    configuration.dyno("worker", () => 0)
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jql",
+    )
+    expect(strategyValue(configuration.buffer.flush(), "worker", "jql")).toBe(0)
+  })
+
+  test("ignores a missing job queue", async () => {
+    const configuration = configure()
+
+    await configuration.jobQueues.sampleJobQueue(null, "jql")
+
+    expect(configuration.logger.error).not.toHaveBeenCalled()
   })
 
   test("a non-Error sampler failure is logged without escaping", async () => {
@@ -144,119 +247,5 @@ describe("JobQueues", () => {
     expect(configuration.logger.error).toHaveBeenCalledWith(
       expect.stringContaining("object"),
     )
-  })
-
-  test("invalid sample values are dropped and logged", async () => {
-    const configuration = configure()
-    const values = ["10", null, -1, Infinity, NaN, 7]
-    let i = 0
-    configuration.dyno("worker", () => values[i++])
-    const jobQueue = configuration.jobQueues.findByName("worker")
-
-    for (let n = 0; n < 5; n++) {
-      await configuration.jobQueues.sampleJobQueue(jobQueue, "jql")
-    }
-    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
-
-    await configuration.jobQueues.sampleJobQueue(jobQueue, "jql")
-    expect(strategyValue(configuration.buffer.flush(), "worker", "jql")).toBe(7)
-  })
-
-  test("a zero sample is accepted", async () => {
-    const configuration = configure()
-    configuration.dyno("worker", () => 0)
-    await configuration.jobQueues.sampleJobQueue(
-      configuration.jobQueues.findByName("worker"),
-      "jql",
-    )
-    expect(strategyValue(configuration.buffer.flush(), "worker", "jql")).toBe(0)
-  })
-
-  test("is iterable", () => {
-    const jobQueues = new JobQueues({})
-    jobQueues.add(new JobQueue("worker", () => 1))
-    jobQueues.add(new JobQueue("mailer", () => 2))
-
-    expect([...jobQueues].map((q) => q.name)).toEqual(["worker", "mailer"])
-  })
-
-  test("any", () => {
-    const jobQueues = new JobQueues({})
-    expect(jobQueues.any()).toBe(false)
-
-    jobQueues.add(new JobQueue("worker", () => 1))
-    expect(jobQueues.any()).toBe(true)
-  })
-
-  test("unknown strategy is dropped and logged", async () => {
-    const configuration = configure()
-    configuration.dyno("worker", () => 1)
-    await configuration.jobQueues.sampleJobQueue(
-      configuration.jobQueues.findByName("worker"),
-      "rpm",
-    )
-    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
-    expect(configuration.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Unknown job-queue strategy"),
-    )
-  })
-
-  test("a raising logger does not escape sampling", async () => {
-    const configuration = configure()
-    configuration.dyno("worker", () => {
-      throw new Error("Redis down")
-    })
-    configuration.logger = {
-      info() {},
-      warn() {},
-      error() {
-        throw new Error("closed stream")
-      },
-    }
-    await configuration.jobQueues.sampleJobQueue(
-      configuration.jobQueues.findByName("worker"),
-      "jql",
-    )
-  })
-
-  test("samples write to the owning configuration not the global", async () => {
-    process.env.HIREFIRE_TOKEN = "old-token"
-    const old = new Configuration()
-    old.dyno("worker", () => 7)
-    const jobQueue = old.jobQueues.findByName("worker")
-
-    const HireFire = require("../src")
-    await HireFire.reset()
-    process.env.HIREFIRE_TOKEN = "new-token"
-    HireFire.configuration.dyno("web")
-
-    await old.jobQueues.sampleJobQueue(jobQueue, "jql")
-
-    expect(HireFire.configuration.buffer.flush().worker).toBeUndefined()
-    expect(strategyValue(old.buffer.flush(), "worker", "jql")).toBe(7)
-  })
-
-  test("live gate drops a sample that returns after stop", async () => {
-    const configuration = configure()
-    configuration.dyno("worker", () => 9)
-    await configuration.jobQueues.sampleJobQueue(
-      configuration.jobQueues.findByName("worker"),
-      "jql",
-      { live: () => false },
-    )
-    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
-  })
-
-  test("sampleJobQueue reports under an explicit name", async () => {
-    const configuration = configure()
-    configuration.dyno("Worker", () => 7)
-    await configuration.jobQueues.sampleJobQueue(
-      configuration.jobQueues.findByName("worker"),
-      "jqs",
-      { name: "worker" },
-    )
-    const data = configuration.buffer.flush()
-    expect(strategyValue(data, "worker", "jqs")).toBe(7)
-    expect(data.Worker).toBeUndefined()
   })
 })

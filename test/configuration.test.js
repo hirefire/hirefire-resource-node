@@ -14,28 +14,28 @@ describe("Configuration", () => {
     expect(new Configuration().logger).toBe(console)
   })
 
-  test("can set the logger", () => {
+  test("can set logger", () => {
     const custom = { info() {} }
     config.logger = custom
     expect(config.logger).toBe(custom)
   })
 
-  test("http defaults to null", () => {
+  test("web default to null", () => {
     expect(config.http).toBeNull()
   })
 
-  test("jobQueues default to empty", () => {
+  test("job queues default to empty", () => {
     expect(config.jobQueues.any()).toBe(false)
   })
 
-  test("dyno bare web is a noop", () => {
+  test("dyno bare web is noop", () => {
     config.dyno("web")
     expect(config.http).toBeNull()
     expect(config.rqtEnabled).toBe(false)
     expect(config.jobQueues.any()).toBe(false)
   })
 
-  test("dyno bare web is case-insensitive noop", () => {
+  test("dyno bare web is case insensitive noop", () => {
     config.dyno("Web")
     expect(config.http).toBeNull()
     expect(config.rqtEnabled).toBe(false)
@@ -55,7 +55,7 @@ describe("Configuration", () => {
     expect(String(warn.mock.calls[0][0])).toMatch(/does nothing/)
   })
 
-  test("dyno with a function configures a worker", async () => {
+  test("dyno with a function configures a job queue", async () => {
     config.dyno("worker", () => 1.23)
     config.dyno("mailer", () => 2.46)
     const workers = [...config.jobQueues]
@@ -64,7 +64,7 @@ describe("Configuration", () => {
     expect(await workers[1].sample()).toBe(2.46)
   })
 
-  test("dyno without function raises for a non-web name", () => {
+  test("dyno without function raises for a non web name", () => {
     expect(() => config.dyno("worker")).toThrow(
       Configuration.MissingSamplerError,
     )
@@ -96,7 +96,7 @@ describe("Configuration", () => {
     expect(() => config.dyno(tooLong, () => 1)).toThrow(/128/)
   })
 
-  test("dyno measures the name limit in UTF-8 bytes", () => {
+  test("dyno name limit counts utf8 bytes", () => {
     const accepted = "é".repeat(64)
     const tooLong = "é".repeat(65)
 
@@ -126,7 +126,7 @@ describe("Configuration", () => {
     expect([...config.jobQueues].map((w) => w.name)).toEqual(["web"])
   })
 
-  test("first seen casing is preserved for job queues", () => {
+  test("canonical name preserves first seen casing", () => {
     config.dyno("Web", () => 1)
     expect([...config.jobQueues][0].name).toBe("Web")
   })
@@ -139,16 +139,16 @@ describe("Configuration", () => {
     expect(config.jobQueues.findByName("worker").name).toBe("worker")
   })
 
-  test("httpName not forced by bare web", () => {
+  test("http name not forced by bare web", () => {
     config.dyno("web")
     expect(config.httpName).toBeNull()
   })
 
-  test("httpName null without explicit or identity", () => {
+  test("http name null without explicit or identity", () => {
     expect(config.httpName).toBeNull()
   })
 
-  test("httpName uses identity when unconfigured", () => {
+  test("http name uses identity when unconfigured", () => {
     process.env.DYNO = "api.1"
     expect(config.httpName).toBe("api")
   })
@@ -228,29 +228,29 @@ describe("Configuration", () => {
     expect(config.rqtLiveness).toBe(true)
   })
 
-  test("rqt enabled by platform web role", () => {
+  test("rqt enabled for heroku web process without explicit web", () => {
     process.env.DYNO = "web.1"
     expect(config.rqtEnabled).toBe(true)
   })
 
-  test("rqt enabled by traffic mark", () => {
+  test("rqt enabled after middleware marks http active", () => {
     process.env.HIREFIRE_SERVICE_NAME = "api"
     config.markHttpActive()
     expect(config.rqtEnabled).toBe(true)
   })
 
-  test("rqt not enabled by bare web", () => {
+  test("bare web does not arm rqt", () => {
     config.dyno("web")
     expect(config.rqtEnabled).toBe(false)
   })
 
-  test("hirefire service name web with worker dyno does not arm rqt", () => {
+  test("rqt not enabled by explicit service name web on worker dyno", () => {
     process.env.HIREFIRE_SERVICE_NAME = "web"
     process.env.DYNO = "worker.1"
     expect(config.rqtEnabled).toBe(false)
   })
 
-  test("httpSource always on under identity", () => {
+  test("http source always on under identity", () => {
     process.env.DYNO = "api.1"
     process.env.HIREFIRE_TOKEN = "t"
     config.markHttpActive()
@@ -260,7 +260,7 @@ describe("Configuration", () => {
     expect(config.buffer.flush().api.rqt).toBeDefined()
   })
 
-  test("soft identity rebuilds always on http when name changes", () => {
+  test("http source rebuilds when identity name changes", () => {
     process.env.DYNO = "api.1"
     const first = config.httpSource
     process.env.DYNO = "other.1"
@@ -269,7 +269,7 @@ describe("Configuration", () => {
     expect(second.name).toBe("other")
   })
 
-  test("soft identity overlong once error", () => {
+  test("soft identity over max bytes disables http and cpu and warns once", () => {
     const error = jest.fn()
     config.logger = { info() {}, warn() {}, error }
     process.env.HIREFIRE_SERVICE_NAME = "x".repeat(129)
@@ -292,7 +292,7 @@ describe("Configuration", () => {
     )
   })
 
-  test("heroku config var conflict warned only once across cpu and rqt", () => {
+  test("heroku config var conflict warned only once", () => {
     process.env.DYNO = "worker.1"
     process.env.HIREFIRE_SERVICE_NAME = "web"
     const warn = jest.fn()
@@ -318,7 +318,7 @@ describe("Configuration", () => {
     expect(config.token).toBe("custom-token")
   })
 
-  test("token empty string forces off", () => {
+  test("token empty string is treated as absent", () => {
     process.env.HIREFIRE_TOKEN = "from-env"
     config.token = ""
     expect(config.token).toBeNull()
@@ -354,7 +354,7 @@ describe("Configuration", () => {
     ).toHaveLength(1)
   })
 
-  test("rqt enabled for Render web service type", () => {
+  test("rqt enabled for render web service type", () => {
     process.env.RENDER_SERVICE_NAME = "api"
     process.env.RENDER_SERVICE_TYPE = "web"
     expect(config.rqtEnabled).toBe(true)
@@ -362,13 +362,13 @@ describe("Configuration", () => {
     expect(config.httpName).toBe("api")
   })
 
-  test("rqt not enabled for Render worker without traffic", () => {
+  test("rqt not enabled for render worker without traffic", () => {
     process.env.RENDER_SERVICE_NAME = "worker"
     process.env.RENDER_SERVICE_TYPE = "worker"
     expect(config.rqtEnabled).toBe(false)
   })
 
-  test("rqt false for non-http identity without explicit web", () => {
+  test("rqt liveness false for non http identity without explicit web", () => {
     process.env.HIREFIRE_SERVICE_NAME = "clock"
     expect(config.rqtEnabled).toBe(false)
     expect(config.rqtLiveness).toBe(false)

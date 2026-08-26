@@ -1,13 +1,13 @@
 const safeLog = require("../src/log")
 
 describe("safeLog", () => {
-  test("calls the matching logger method with the message", () => {
+  test("delegates to the logger", () => {
     const logger = { error: jest.fn() }
     safeLog(logger, "error", "boom")
     expect(logger.error).toHaveBeenCalledWith("boom")
   })
 
-  test("swallows a throwing logger method", () => {
+  test("swallows a raising logger", () => {
     const logger = {
       error() {
         throw new Error("logger is broken")
@@ -16,11 +16,11 @@ describe("safeLog", () => {
     expect(() => safeLog(logger, "error", "boom")).not.toThrow()
   })
 
-  test("skips a missing method instead of throwing", () => {
+  test("skips a logger that does not respond to the level", () => {
     expect(() => safeLog({}, "error", "boom")).not.toThrow()
   })
 
-  test("tolerates a null logger", () => {
+  test("safe with null logger", () => {
     expect(() => safeLog(null, "error", "boom")).not.toThrow()
   })
 })

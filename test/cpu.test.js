@@ -127,7 +127,7 @@ describe("CPU", () => {
     expect(configuration.buffer.flush().clock.cpu).toEqual({ 1002: 50.0 })
   })
 
-  test("a usage source switch only reseeds the baseline", () => {
+  test("source change skips and reseeds the baseline", () => {
     jest
       .spyOn(Usage, "reading")
       .mockReturnValueOnce(read(5.0, "process"))
@@ -146,7 +146,7 @@ describe("CPU", () => {
     expect(configuration.buffer.flush().clock.cpu).toEqual({ 1002: 50.0 })
   })
 
-  test("skips the sample when usage is unavailable", () => {
+  test("skips sample when usage unavailable", () => {
     mockReadings(null, null)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
@@ -158,7 +158,7 @@ describe("CPU", () => {
     expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
   })
 
-  test("non-positive elapsed delta skips the sample", () => {
+  test("non positive elapsed delta skips the sample", () => {
     mockReadings(10.0, 10.5)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
 
@@ -185,7 +185,7 @@ describe("CPU", () => {
     expect(configuration.buffer.flush().clock.cpu).toEqual({ 1000: 50.0 })
   })
 
-  test("skips the sample when available cpus is null", () => {
+  test("skips sample when available cpus is null", () => {
     mockReadings(0.0, 1.0)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(null)
 
@@ -197,7 +197,7 @@ describe("CPU", () => {
     expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
   })
 
-  test("skips the sample when available cpus is zero", () => {
+  test("skips sample when available cpus is zero", () => {
     mockReadings(0.0, 1.0)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(0.0)
 
@@ -246,15 +246,18 @@ describe("CPU", () => {
     expect(source).toBe("cgroupV1")
   })
 
-  test("available cpus ignores nan and infinity v2 quota", () => {
+  test("available cpus ignores nan v2 quota", () => {
     jest.spyOn(Usage, "processorCount").mockReturnValue(4)
     jest.spyOn(Usage, "read").mockImplementation((path) => {
       if (path === Usage.CGROUP_V2_QUOTA) return "NaN 100000"
       return null
     })
     expect(Usage.availableCpus()).toBe(4)
+  })
 
-    Usage.read.mockImplementation((path) => {
+  test("available cpus ignores infinity v2 quota", () => {
+    jest.spyOn(Usage, "processorCount").mockReturnValue(4)
+    jest.spyOn(Usage, "read").mockImplementation((path) => {
       if (path === Usage.CGROUP_V2_QUOTA) return "Infinity 100000"
       return null
     })

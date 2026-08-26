@@ -11,7 +11,7 @@ function stubReads(map) {
 
 describe("CPU.Usage", () => {
   describe("reading fallbacks", () => {
-    test("falls back to the proc namespace sum", () => {
+    test("reading falls back to proc namespace sum", () => {
       stubReads({
         "/proc/1/stat":
           "1 (ruby) S 0 1 1 0 -1 0 0 0 0 0 500 250 0 0 20 0 1 0 9 0 0",
@@ -25,7 +25,7 @@ describe("CPU.Usage", () => {
       expect(Usage.reading()).toEqual({ seconds: 10.0, source: "proc" })
     })
 
-    test("cgroup v2 without a usage_usec line falls through to v1", () => {
+    test("cgroup v2 without a usage usec line falls through to v1", () => {
       stubReads({
         [Usage.CGROUP_V2_USAGE]: "user_usec 1000000\nsystem_usec 500000",
         [Usage.CGROUP_V1_USAGE]: "3000000000",
@@ -33,7 +33,7 @@ describe("CPU.Usage", () => {
       expect(Usage.reading()).toEqual({ seconds: 3.0, source: "cgroupV1" })
     })
 
-    test("a malformed usage value falls through instead of returning NaN", () => {
+    test("reading falls through on malformed cgroup v2", () => {
       stubReads({
         [Usage.CGROUP_V2_USAGE]: "usage_usec notanumber",
         [Usage.CGROUP_V1_USAGE]: "3000000000",
@@ -48,7 +48,7 @@ describe("CPU.Usage", () => {
       expect(Usage.reading()).toEqual({ seconds: 2.5, source: "cgroupV2" })
     })
 
-    test("falls back to the process clock", () => {
+    test("reading falls back to process clock", () => {
       stubReads({})
       jest.spyOn(Usage, "procStatPaths").mockReturnValue([])
       const { seconds, source } = Usage.reading()
@@ -58,12 +58,12 @@ describe("CPU.Usage", () => {
   })
 
   describe("reading", () => {
-    test("reports the source that answered, for switch detection", () => {
+    test("reading labels the active source", () => {
       stubReads({ [Usage.CGROUP_V2_USAGE]: "usage_usec 2500000" })
       expect(Usage.reading()).toEqual({ seconds: 2.5, source: "cgroupV2" })
     })
 
-    test("labels the fallback source when higher ones are absent", () => {
+    test("reading labels the source it falls through to", () => {
       stubReads({ [Usage.CGROUP_V1_USAGE]: "3000000000" })
       expect(Usage.reading().source).toBe("cgroupV1")
     })
@@ -91,12 +91,12 @@ describe("CPU.Usage", () => {
   })
 
   describe("procNamespaceSeconds", () => {
-    test("null without proc", () => {
+    test("proc namespace seconds null without proc", () => {
       jest.spyOn(Usage, "procStatPaths").mockReturnValue([])
       expect(Usage.procNamespaceSeconds()).toBeNull()
     })
 
-    test("null when every entry is unreadable", () => {
+    test("proc namespace seconds null when every entry is unreadable", () => {
       jest
         .spyOn(Usage, "procStatPaths")
         .mockReturnValue(["/proc/1/stat", "/proc/2/stat"])
@@ -104,7 +104,7 @@ describe("CPU.Usage", () => {
       expect(Usage.procNamespaceSeconds()).toBeNull()
     })
 
-    test("a garbled proc stat entry is skipped and the rest are counted", () => {
+    test("a garbled proc stat entry is skipped and the rest counted", () => {
       stubReads({
         "/proc/1/stat":
           "1 (ruby) S 0 1 1 0 -1 0 0 0 0 0 500 250 0 0 20 0 1 0 9 0 0",
@@ -135,7 +135,7 @@ describe("CPU.Usage", () => {
   })
 
   describe("processorCount", () => {
-    test("falls back to os.cpus when availableParallelism is unavailable", () => {
+    test("falls back to os cpus when available parallelism is unavailable", () => {
       const original = os.availableParallelism
       os.availableParallelism = undefined
       try {
@@ -157,7 +157,7 @@ describe("CPU.Usage", () => {
       }
     })
 
-    test("falls back to 1 when the OS query throws", () => {
+    test("falls back to 1 when the os query throws", () => {
       const original = os.availableParallelism
       os.availableParallelism = undefined
       try {
@@ -172,48 +172,48 @@ describe("CPU.Usage", () => {
   })
 
   describe("statTicks", () => {
-    test("parses around comm with spaces and parens", () => {
+    test("stat ticks parses around comm with spaces and parens", () => {
       const line =
         "4242 (rails (worker)) S 1 1 1 0 -1 0 0 0 0 0 500 250 0 0 20 0 1 0 100 0 0"
       expect(Usage.statTicks(line)).toBe(750)
     })
 
-    test("null for a line without a comm paren", () => {
+    test("stat ticks returns null for a line without a comm paren", () => {
       expect(Usage.statTicks("123 ruby S 0 1 1 0")).toBeNull()
     })
 
-    test("null for a truncated line", () => {
+    test("stat ticks returns null for a truncated line", () => {
       expect(Usage.statTicks("123 (ruby) S 0 1")).toBeNull()
     })
 
-    test("null for non-numeric utime or stime", () => {
+    test("stat ticks returns null for non numeric fields", () => {
       const line = "1 (ruby) S 0 0 0 0 0 0 0 0 0 0 x y 0 0 0 0 0 0 0 0"
       expect(Usage.statTicks(line)).toBeNull()
     })
   })
 
   describe("availableCpus", () => {
-    test("reads cgroup v2 quota", () => {
+    test("available cpus reads cgroup v2 quota", () => {
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "50000 100000" })
       expect(Usage.availableCpus()).toBeCloseTo(0.5, 4)
     })
 
-    test("ignores unlimited v2 quota", () => {
+    test("available cpus ignores unlimited v2 quota", () => {
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "max 100000" })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
-    test("ignores a non-numeric v2 quota", () => {
+    test("available cpus falls through on malformed quota", () => {
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "garbage 100000" })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
-    test("ignores a non-positive v2 quota", () => {
+    test("available cpus ignores a non positive v2 quota", () => {
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "0 100000" })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
-    test("reads cgroup v1 quota", () => {
+    test("available cpus reads cgroup v1 quota", () => {
       stubReads({
         [Usage.CGROUP_V1_QUOTA]: "150000",
         [Usage.CGROUP_V1_PERIOD]: "100000",
@@ -221,7 +221,7 @@ describe("CPU.Usage", () => {
       expect(Usage.availableCpus()).toBeCloseTo(1.5, 4)
     })
 
-    test("ignores v1 unlimited quota", () => {
+    test("available cpus ignores v1 unlimited quota", () => {
       stubReads({
         [Usage.CGROUP_V1_QUOTA]: "-1",
         [Usage.CGROUP_V1_PERIOD]: "100000",
@@ -229,7 +229,7 @@ describe("CPU.Usage", () => {
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
-    test("ignores a non-positive v1 quota", () => {
+    test("available cpus ignores a non positive v1 quota", () => {
       stubReads({
         [Usage.CGROUP_V1_QUOTA]: "0",
         [Usage.CGROUP_V1_PERIOD]: "100000",
@@ -237,7 +237,7 @@ describe("CPU.Usage", () => {
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
-    test("falls back to the processor count", () => {
+    test("available cpus falls back to processor count", () => {
       stubReads({})
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
@@ -254,7 +254,7 @@ describe("CPU.Usage", () => {
       expect(Usage.availableCpus()).toBe(2.0)
     })
 
-    test("cedar dedicated fingerprint falls through to the processor count", () => {
+    test("cedar dedicated fingerprint falls through to processor count", () => {
       process.env.DYNO = "web.1"
       stubReads({ [Usage.CEDAR_MEMORY_LIMIT]: "2684354560" })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
@@ -280,7 +280,7 @@ describe("CPU.Usage", () => {
       expect(Usage.availableCpus()).toBeCloseTo(0.9, 4)
     })
 
-    test("reads the render entitlement from RENDER_CPU_COUNT", () => {
+    test("render entitlement from render cpu count", () => {
       process.env.RENDER = "true"
       process.env.RENDER_CPU_COUNT = "0.5"
       stubReads({})
@@ -293,13 +293,13 @@ describe("CPU.Usage", () => {
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
-    test("render without a cpu count falls through to the processor count", () => {
+    test("render without a cpu count falls through to processor count", () => {
       process.env.RENDER = "true"
       stubReads({})
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
-    test("render cpu count zero or non-numeric falls through", () => {
+    test("render cpu count zero or non numeric falls through", () => {
       process.env.RENDER = "true"
       stubReads({})
 
@@ -310,7 +310,7 @@ describe("CPU.Usage", () => {
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
     })
 
-    test("cgroup quota wins over the render entitlement", () => {
+    test("cgroup quota wins over render entitlement", () => {
       process.env.RENDER = "true"
       process.env.RENDER_CPU_COUNT = "8"
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "50000 100000" })
@@ -319,13 +319,13 @@ describe("CPU.Usage", () => {
   })
 
   describe("clockTicks", () => {
-    test("is the Linux USER_HZ default", () => {
+    test("clock ticks is the linux user hz default", () => {
       expect(Usage.CLOCK_TICKS).toBe(100)
     })
   })
 
   describe("read", () => {
-    test("returns stripped file contents", () => {
+    test("read returns stripped file contents", () => {
       const file = path.join(os.tmpdir(), `usage-${process.pid}-${Date.now()}`)
       fs.writeFileSync(file, " 42\n")
       try {
@@ -335,11 +335,11 @@ describe("CPU.Usage", () => {
       }
     })
 
-    test("returns null for a missing path", () => {
+    test("read returns null for missing path", () => {
       expect(Usage.read("/nonexistent/cgroup/file")).toBeNull()
     })
 
-    test("returns null when the file disappears between check and read", () => {
+    test("read returns null when the file disappears between check and read", () => {
       jest.spyOn(fs, "readFileSync").mockImplementation(() => {
         const error = new Error("ENOENT")
         error.code = "ENOENT"

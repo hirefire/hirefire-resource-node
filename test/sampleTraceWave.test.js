@@ -37,7 +37,7 @@ describe("SampleTraceWave", () => {
     expect(op.ms).toBe(12.346)
   })
 
-  test("record normalizes missing and wrong-type fields", () => {
+  test("record normalizes missing and wrong type fields", () => {
     const wave = SampleTraceWave.start()
     wave.record(
       {
@@ -57,7 +57,7 @@ describe("SampleTraceWave", () => {
     expect(op.ms).toBe(1)
   })
 
-  test("record null/undefined strategy is empty string", () => {
+  test("record null strategy is empty string", () => {
     const wave = SampleTraceWave.start()
     wave.record({ adapter: "a", strategy: null }, 0.5)
     wave.record({ adapter: "a" }, 0.5)
@@ -65,7 +65,7 @@ describe("SampleTraceWave", () => {
     expect(wave.finish().ops[1].strategy).toBe("")
   })
 
-  test("record non-object entry coerces", () => {
+  test("record non hash entry coerces", () => {
     const wave = SampleTraceWave.start()
     wave.record(null, 2.0)
     wave.record("bad", 3.0)
@@ -84,7 +84,7 @@ describe("SampleTraceWave", () => {
     expect(ops[2].ms).toBe(4)
   })
 
-  test("measure times async work and records", async () => {
+  test("measure times function and records", async () => {
     const wave = SampleTraceWave.start()
     let called = false
     const result = await wave.measure(
@@ -106,7 +106,7 @@ describe("SampleTraceWave", () => {
     expect(op.ms).toBeGreaterThanOrEqual(5)
   })
 
-  test("measure does not record when fn rejects", async () => {
+  test("measure does not record when function raises", async () => {
     const wave = SampleTraceWave.start()
     await expect(
       wave.measure({ strategy: "jql" }, async () => {
@@ -116,7 +116,7 @@ describe("SampleTraceWave", () => {
     expect(wave.finish().ops).toEqual([])
   })
 
-  test("measure keeps prior ops when later rejects", async () => {
+  test("measure keeps prior ops when later raises", async () => {
     const wave = SampleTraceWave.start()
     await wave.measure({ strategy: "jql" }, async () => {})
     await expect(
@@ -130,7 +130,7 @@ describe("SampleTraceWave", () => {
     expect(typeof payload.wave_ms).toBe("number")
   })
 
-  test("finish wave_ms covers all ops", async () => {
+  test("finish wave ms covers all ops", async () => {
     const wave = SampleTraceWave.start()
     await wave.measure({ strategy: "jql" }, async () => {
       await new Promise((r) => setTimeout(r, 15))
@@ -178,7 +178,7 @@ describe("SampleTraceWave", () => {
     expect(second.wave_ms).toBeGreaterThanOrEqual(firstWaveMs)
   })
 
-  test("log writes wave and per-op lines", () => {
+  test("log writes wave and per op lines", () => {
     const lines = []
     const logger = {
       info(msg) {

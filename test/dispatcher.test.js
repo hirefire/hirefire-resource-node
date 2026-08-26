@@ -135,7 +135,7 @@ describe("Dispatcher", () => {
     expect(await dispatcher.stop()).toBe(false)
   })
 
-  test("stop closes keep-alive even when never started", async () => {
+  test("stop closes keep alive even when never started", async () => {
     captureIngestBodies()
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -146,10 +146,9 @@ describe("Dispatcher", () => {
     expect(dispatcher._client._agent).toBeNull()
   })
 
-  test("first start does not clear pre-start rqt", async () => {
+  test("first start does not clear pre start rqt", async () => {
     stubLease()
     captureIngestBodies()
-    process.env.DYNO = "web.1"
     const dispatcher = configureWebOnly()
     config().buffer.sample("web", "rqt", 7)
     expect(dispatcher.start()).toBe(true)
@@ -193,7 +192,7 @@ describe("Dispatcher", () => {
     expect(Array.isArray(wrkLeaf)).toBe(false)
   })
 
-  test("encodes an rqt leaf as mean and count", async () => {
+  test("encodes rqt leaf as mean and count", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -204,7 +203,7 @@ describe("Dispatcher", () => {
     expect(Object.values(bodies[0][0].metrics.rqt)[0]).toEqual([20, 3])
   })
 
-  test("encode clamps n to SAMPLE_COUNT_LIMIT", () => {
+  test("encode clamps rqt sample count to limit", () => {
     const dispatcher = configureWebOnly()
     const leaf = dispatcher._encodeLeaf("rqt", {
       sum: Dispatcher.SAMPLE_COUNT_LIMIT * 2,
@@ -228,7 +227,7 @@ describe("Dispatcher", () => {
     expect(entriesByName.web.rqt[1000]).toEqual({ sum: 8, count: 3 })
   })
 
-  test("oversized payload drops without post", async () => {
+  test("oversized payload is dropped without a request", async () => {
     process.env.DYNO = "web.1"
     config().markHttpActive()
     const bodies = captureIngestBodies()
@@ -296,7 +295,7 @@ describe("Dispatcher", () => {
     dispatcher._client.submitSamples = orig
   })
 
-  test("logs the payload when HIREFIRE_VERBOSE is set", async () => {
+  test("logs the payload when verbose is set", async () => {
     process.env.HIREFIRE_VERBOSE = "1"
     captureIngestBodies()
     const dispatcher = configureWebOnly()
@@ -311,7 +310,6 @@ describe("Dispatcher", () => {
   })
 
   test("first dispatch claims only the current second", async () => {
-    process.env.DYNO = "web.1"
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
 
@@ -321,7 +319,7 @@ describe("Dispatcher", () => {
     expect(bodies[0][0].metrics.rqt).toEqual({ 1000: [] })
   })
 
-  test("unresolved identity does not synthesize heartbeats", async () => {
+  test("unresolved identity does not synthesize liveness", async () => {
     const bodies = captureIngestBodies()
     config().dyno("web")
     const dispatcher = config().dispatcher
@@ -330,7 +328,7 @@ describe("Dispatcher", () => {
     expect(bodies).toEqual([])
   })
 
-  test("always on cpu tick under identity name", async () => {
+  test("always on cpu uses identity name through the tick", async () => {
     process.env.DYNO = "worker.1"
     jest
       .spyOn(Usage, "reading")
@@ -402,7 +400,7 @@ describe("Dispatcher", () => {
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
   })
 
-  test("stop with flush sends final dispatch", async () => {
+  test("stop flushes the buffer", async () => {
     stubLease()
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
@@ -429,7 +427,7 @@ describe("Dispatcher", () => {
     await dispatcher.stop()
   })
 
-  test("stale generation does not post", async () => {
+  test("dispatch with stale generation does not post", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -439,7 +437,7 @@ describe("Dispatcher", () => {
     expect(bodies).toEqual([])
   })
 
-  test("dead gen after successful post skips watermark", async () => {
+  test("dispatch dead gen after successful post skips watermark", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -456,7 +454,7 @@ describe("Dispatcher", () => {
     expect(dispatcher._lastRqtSecond).toBeNull()
   })
 
-  test("error path repopulates when live", async () => {
+  test("web buffer repopulated on dispatch failure", async () => {
     nock(BASE).post("/metrics/ingest").replyWithError({ code: "ECONNREFUSED" })
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -468,7 +466,7 @@ describe("Dispatcher", () => {
     expect(data.web.rqt[1000]).toEqual({ sum: 5, count: 1 })
   })
 
-  test("error path no repopulate when dead without handoff", async () => {
+  test("dispatch dead gen on error does not repopulate without handoff", async () => {
     const dispatcher = configureWebOnly()
     freezeTime(1000)
     config().buffer.sample("web", "rqt", 5)
@@ -483,17 +481,17 @@ describe("Dispatcher", () => {
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
   })
 
-  test("ensure job queue loop noops when not running", () => {
+  test("ensure job queue loop is noop when not running", () => {
     const dispatcher = configureWebAndWorkers()
     dispatcher.ensureJobQueueLoop()
     expect(dispatcher._jobLoopPromise).toBeNull()
   })
 
-  test("ensure job queue loop starts when running and enter race", async () => {
+  test("ensure job queue loop starts when enter race becomes true", async () => {
     stubLease()
     captureIngestBodies()
     jest
-      .spyOn(require("../src/plan"), "anyAllowlistedJobQueueLibraryLoaded")
+      .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
       .mockReturnValue(false)
     const dispatcher = config().dispatcher
     process.env.DYNO = "web.1"
@@ -505,7 +503,7 @@ describe("Dispatcher", () => {
     await dispatcher.stop()
   })
 
-  test("ensureJobQueueLoop leaves a live job loop unchanged", () => {
+  test("ensure job queue loop leaves a live job loop unchanged", () => {
     const dispatcher = configureWebAndWorkers()
     const jobLoop = Promise.resolve()
     jobLoop._hirefireAlive = true
@@ -519,7 +517,7 @@ describe("Dispatcher", () => {
     expect(enterRace).not.toHaveBeenCalled()
   })
 
-  test("ensureJobQueueLoop logs a loop creation failure", () => {
+  test("ensure job queue loop logs when loop spawn fails", () => {
     const dispatcher = configureWebAndWorkers()
     dispatcher._running = true
     jest.spyOn(dispatcher, "_loop").mockImplementation(() => {
@@ -536,25 +534,7 @@ describe("Dispatcher", () => {
     )
   })
 
-  test("plan strategy only local sample", async () => {
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [{ name: "worker", strategy: "jqs" }],
-      }),
-    )
-    const bodies = captureIngestBodies()
-    config().dyno("worker", () => 11)
-    const dispatcher = config().dispatcher
-    freezeTime(1000)
-    await dispatcher._workerTick()
-    await dispatcher._dispatch()
-    const entry = bodies.find((b) => b.some((e) => e.metrics && e.metrics.jqs))
-    expect(entry).toBeDefined()
-  })
-
-  test("SAMPLE_COUNT_LIMIT matches MetricsBuffer", () => {
+  test("sample count limit matches metrics buffer", () => {
     expect(Dispatcher.SAMPLE_COUNT_LIMIT).toBe(MetricsBuffer.SAMPLE_COUNT_LIMIT)
   })
 
@@ -568,7 +548,7 @@ describe("Dispatcher", () => {
     await dispatcher.stop()
   })
 
-  test("dead main start retires live job loop for join", async () => {
+  test("start restarts when main loop is dead", async () => {
     stubLease()
     captureIngestBodies()
     const dispatcher = configureWebAndWorkers()
@@ -614,7 +594,7 @@ describe("Dispatcher", () => {
     }
   })
 
-  test("join warns only when the loop exceeds JOIN_TIMEOUT", async () => {
+  test("join warns only when the loop exceeds join timeout", async () => {
     jest.useFakeTimers()
     try {
       const dispatcher = configureWebOnly()
@@ -670,7 +650,7 @@ describe("Dispatcher", () => {
     expect(bodies.length).toBeGreaterThan(0)
   })
 
-  test("dispatch dead gen after flush does not repopulate without handoff", async () => {
+  test("dispatch dead gen after flush does not repopulate when not final flush", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -730,7 +710,7 @@ describe("Dispatcher", () => {
     expect(data.web.rqt[1000]).toEqual({ sum: 10, count: 1 })
   })
 
-  test("dispatchIfDue does not advance pacing on dead gen", async () => {
+  test("dispatch if due does not advance pacing on dead gen", async () => {
     captureIngestBodies()
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -749,7 +729,7 @@ describe("Dispatcher", () => {
     expect(dispatcher._nextDispatchAt).toBeNull()
   })
 
-  test("ensureJobQueueLoop noops when stopping", async () => {
+  test("ensure job queue loop is noop when stopping", async () => {
     stubLease()
     captureIngestBodies()
     const dispatcher = configureWebAndWorkers()
@@ -764,7 +744,7 @@ describe("Dispatcher", () => {
     await dispatcher.stop()
   })
 
-  test("ensureJobQueueLoop restarts dead job loop", async () => {
+  test("ensure job queue loop restarts dead job queue loop", async () => {
     stubLease()
     captureIngestBodies()
     const dispatcher = configureWebAndWorkers()
@@ -789,7 +769,7 @@ describe("Dispatcher", () => {
     await dispatcher.stop()
   })
 
-  test("a failed start leaves the dispatcher retryable", async () => {
+  test("a failed loop spawn leaves the dispatcher retryable", async () => {
     stubLease()
     captureIngestBodies()
     const dispatcher = configureWebOnly()
@@ -808,7 +788,7 @@ describe("Dispatcher", () => {
     await dispatcher.stop()
   })
 
-  test("concurrent start during stop is rejected then retryable", async () => {
+  test("concurrent start during stop is rejected then retryable even if a starter wins after stopping clears", async () => {
     stubLease()
     captureIngestBodies()
     const dispatcher = configureWebOnly()
@@ -842,7 +822,7 @@ describe("Dispatcher", () => {
     await dispatcher.stop()
   })
 
-  test("hung worker sampler does not stall web dispatch", async () => {
+  test("a hung worker sampler does not stall web dispatch", async () => {
     let releaseGate
     const gate = new Promise((resolve) => {
       releaseGate = resolve
@@ -917,7 +897,7 @@ describe("Dispatcher", () => {
     expect(dispatcher._lease.granted()).toBe(true)
   })
 
-  test("sample_trace attached when grant trace true", async () => {
+  test("sample trace attached when grant trace true", async () => {
     stubLease(
       true,
       JSON.stringify({
@@ -959,7 +939,7 @@ describe("Dispatcher", () => {
     expect(bodies[0].slice(1).every((e) => !e.sample_trace)).toBe(true)
   })
 
-  test("oversized sample_trace is stripped so metrics still ship", async () => {
+  test("oversized sample trace is stripped so metrics still ship", async () => {
     stubLease()
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
@@ -994,7 +974,7 @@ describe("Dispatcher", () => {
     expect(dispatcher._pendingSampleTrace).toBeNull()
   })
 
-  test("sample_trace absent without grant trace", async () => {
+  test("sample trace absent without grant trace", async () => {
     stubLease(
       true,
       JSON.stringify({
@@ -1071,8 +1051,7 @@ describe("Dispatcher", () => {
     expect(Object.values(entry.metrics.jqs)[0]).toBe(11)
   })
 
-  test("unsupported strategy once-log is isolated per name adapter strategy", async () => {
-    const Plan = require("../src/plan")
+  test("unsupported strategy once log is isolated per name adapter strategy", async () => {
     jest.spyOn(Plan, "executable").mockReturnValue(true)
     jest.spyOn(Plan, "supportsStrategy").mockReturnValue(false)
     jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
@@ -1188,7 +1167,7 @@ describe("Dispatcher", () => {
     expect(loop._hirefireAlive).toBe(false)
   })
 
-  test("dead gen after successful post skips frequency apply", async () => {
+  test("dispatch dead gen after successful post skips watermark and frequency", async () => {
     nock(BASE)
       .post("/metrics/ingest")
       .reply(200, "", { "HireFire-Dispatch-Frequency": "10" })
@@ -1210,7 +1189,6 @@ describe("Dispatcher", () => {
   })
 
   test("plan adapter overrides local sampler", async () => {
-    const Plan = require("../src/plan")
     const sample = jest.fn(async () => 9.9)
     jest.spyOn(Plan, "executable").mockReturnValue(true)
     jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
@@ -1251,8 +1229,7 @@ describe("Dispatcher", () => {
     expect(Object.values(entry.metrics.jql)[0]).toBe(9.9)
   })
 
-  test("plan override warns once when local dyno is overridden", async () => {
-    const Plan = require("../src/plan")
+  test("plan override warns once", async () => {
     jest.spyOn(Plan, "executable").mockReturnValue(true)
     jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
     jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
@@ -1284,7 +1261,7 @@ describe("Dispatcher", () => {
     expect(hits[0]).toMatch(/You can remove/)
   })
 
-  test("strategy-only plan reports lease name not local dyno spelling", async () => {
+  test("strategy only plan reports lease name not local dyno spelling", async () => {
     stubLease(
       true,
       JSON.stringify({
@@ -1311,7 +1288,7 @@ describe("Dispatcher", () => {
     expect(names).not.toContain("Worker")
   })
 
-  test("strategy-only plan uses local sampler without override warn", async () => {
+  test("strategy only plan uses local sampler", async () => {
     stubLease(
       true,
       JSON.stringify({
@@ -1373,7 +1350,6 @@ describe("Dispatcher", () => {
   })
 
   test("known unloaded adapter skips without local fallback", async () => {
-    const Plan = require("../src/plan")
     jest.spyOn(Plan, "executable").mockReturnValue(false)
     jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
     stubLease(
@@ -1406,7 +1382,6 @@ describe("Dispatcher", () => {
   })
 
   test("executable plan without local dyno holds lease and samples", async () => {
-    const Plan = require("../src/plan")
     jest
       .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
       .mockReturnValue(true)
@@ -1451,7 +1426,6 @@ describe("Dispatcher", () => {
   })
 
   test("hold lease false when only unsupported strategy entries", async () => {
-    const Plan = require("../src/plan")
     jest
       .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
       .mockReturnValue(true)
@@ -1478,8 +1452,7 @@ describe("Dispatcher", () => {
     expect(dispatcher._lease.granted()).toBe(false)
   })
 
-  test("always lease non-renew when no workers and no executable plan", async () => {
-    const Plan = require("../src/plan")
+  test("always lease non renew when no workers and no executable plan", async () => {
     jest
       .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
       .mockReturnValue(true)
@@ -1505,7 +1478,6 @@ describe("Dispatcher", () => {
   })
 
   test("partial plan holds and samples only executable entries", async () => {
-    const Plan = require("../src/plan")
     jest
       .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
       .mockReturnValue(true)
@@ -1562,7 +1534,6 @@ describe("Dispatcher", () => {
   })
 
   test("partial plan unsupported jql and supported jqs holds and samples size", async () => {
-    const Plan = require("../src/plan")
     jest
       .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
       .mockReturnValue(true)
@@ -1618,7 +1589,6 @@ describe("Dispatcher", () => {
   })
 
   test("unsupported plan strategy logs once and skips macro", async () => {
-    const Plan = require("../src/plan")
     jest.spyOn(Plan, "executable").mockReturnValue(true)
     jest.spyOn(Plan, "supportsStrategy").mockReturnValue(false)
     const latency = jest.fn(async () => 1)
@@ -1659,7 +1629,7 @@ describe("Dispatcher", () => {
     expect(bodies.every((b) => !b.some((e) => e.name === "worker"))).toBe(true)
   })
 
-  test("encode omits non-finite rqt mean", async () => {
+  test("encode omits non finite rqt mean", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -1682,7 +1652,7 @@ describe("Dispatcher", () => {
     ).toBe(true)
   })
 
-  test("encode omits invalid non-rqt values", async () => {
+  test("encode omits invalid non rqt values", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
     config().dyno("worker", () => 1)
@@ -1728,7 +1698,7 @@ describe("Dispatcher", () => {
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
   })
 
-  test("oversized drop advances watermark past the hole", async () => {
+  test("oversized drop advances the watermark past the hole", async () => {
     process.env.DYNO = "web.1"
     config().markHttpActive()
     const dispatcher = config().dispatcher
@@ -1739,8 +1709,7 @@ describe("Dispatcher", () => {
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
   })
 
-  test("sampleJobQueues runs plan samples inside aroundJobQueueSample", async () => {
-    const Plan = require("../src/plan")
+  test("sample job queues runs plan samples inside around job queue sample", async () => {
     const order = []
     const around = jest
       .spyOn(Plan, "aroundJobQueueSample")
@@ -2020,7 +1989,7 @@ describe("Dispatcher", () => {
     expect(data.clock && data.clock.cpu).toBeUndefined()
   })
 
-  test("non-web process does not heartbeat the web name", async () => {
+  test("non web process does not heartbeat the web name", async () => {
     stubLease()
     const bodies = captureIngestBodies()
     process.env.DYNO = "worker.1"
@@ -2031,7 +2000,7 @@ describe("Dispatcher", () => {
     expect(bodies).toEqual([])
   })
 
-  test("non-web process still delivers real web samples", async () => {
+  test("non web process still delivers real web samples", async () => {
     stubLease()
     const bodies = captureIngestBodies()
     process.env.DYNO = "worker.1"
@@ -2135,7 +2104,7 @@ describe("Dispatcher", () => {
     expect(dispatcher._dispatchFrequency).toBe(5)
   })
 
-  test("clamps an over-large dispatch frequency to the maximum", async () => {
+  test("clamps an over large dispatch frequency to the maximum", async () => {
     stubIngestWithDispatchFrequency(Dispatcher.MAX_DISPATCH_FREQUENCY + 100)
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -2145,7 +2114,7 @@ describe("Dispatcher", () => {
     )
   })
 
-  test("ignores a non-positive dispatch frequency", async () => {
+  test("ignores a non positive dispatch frequency", async () => {
     stubIngestWithDispatchFrequency(0)
     const dispatcher = configureWebOnly()
     freezeTime(1000)
@@ -2249,7 +2218,7 @@ describe("Dispatcher", () => {
     ).toBe(true)
   })
 
-  test("samplePlanAdapter skips queues-required empty lists", async () => {
+  test("sample plan adapter skips queues required empty lists", async () => {
     const execute = jest.spyOn(Plan, "execute")
     jest.spyOn(Plan, "executable").mockReturnValue(true)
     jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
@@ -2264,7 +2233,7 @@ describe("Dispatcher", () => {
     expect(loggerErrors()).toMatch(/requires named queues/)
   })
 
-  test("strategy-only unknown strategy skips and logs", async () => {
+  test("strategy only unknown strategy skips and logs", async () => {
     stubGrantedLease(
       JSON.stringify({
         version: 1,
@@ -2289,7 +2258,7 @@ describe("Dispatcher", () => {
     expect(loggerErrors()).toContain("Unknown plan strategy")
   })
 
-  test("wire payload nested multi-strategy shape", async () => {
+  test("wire payload nested multi strategy shape", async () => {
     stubGrantedLease()
     const bodies = captureIngestBodies()
     process.env.DYNO = "web.1"
@@ -2312,7 +2281,7 @@ describe("Dispatcher", () => {
     }
   })
 
-  test("ensure job queue loop noops without enter race", async () => {
+  test("ensure job queue loop is noop without enter race", async () => {
     jest
       .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
       .mockReturnValue(false)

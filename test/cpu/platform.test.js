@@ -63,7 +63,7 @@ function closedWorld({
 }
 
 describe("CPU.Usage platform goldens", () => {
-  test("cedar basic/1x fingerprint not host nproc", () => {
+  test("cedar basic 1x fingerprint not host nproc", () => {
     process.env.DYNO = "web.1"
     closedWorld({
       reads: {
@@ -75,7 +75,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(Usage.availableCpus()).toBeCloseTo(1.0, 4)
   })
 
-  test("cedar standard-2x fingerprint not host nproc", () => {
+  test("cedar standard 2x fingerprint not host nproc", () => {
     process.env.DYNO = "web.1"
     closedWorld({
       reads: {
@@ -104,7 +104,7 @@ describe("CPU.Usage platform goldens", () => {
     }
   })
 
-  test("cedar private-s and shield-s one gib fingerprint no space special case", () => {
+  test("cedar private s and shield s one gib fingerprint no space special case", () => {
     process.env.DYNO = "run.8256"
     closedWorld({
       reads: {
@@ -147,7 +147,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(seconds).toBeCloseTo(52.88, 4)
   })
 
-  test("cedar oneoff zero tick ps-run stays on proc", () => {
+  test("cedar oneoff zero tick ps run stays on proc", () => {
     const stat = fixture("cedar/proc_basic_oneoff_ps_run.txt")
     closedWorld({
       reads: { "/proc/1/stat": stat },
@@ -160,7 +160,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(seconds).toBeCloseTo(0.0, 4)
   })
 
-  test("fir dyno-1c-0.5gb cpu.stat usage", () => {
+  test("fir dyno 1c 0 5gb cpu stat usage", () => {
     closedWorld({
       reads: {
         [Usage.CGROUP_V2_USAGE]: fixture("fir/dyno_1c_0_5gb_cpu_stat.txt"),
@@ -172,7 +172,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(seconds).toBeCloseTo(31663 / 1000000.0, 4)
   })
 
-  test("fir cpu.max beats host nproc", () => {
+  test("fir cpu max beats host nproc", () => {
     process.env.DYNO = "run-nss86zptrv-7fpx8"
     closedWorld({
       reads: {
@@ -197,7 +197,7 @@ describe("CPU.Usage platform goldens", () => {
     }
   })
 
-  test("fir dyno set with cpu.max does not use cedar memory limit", () => {
+  test("fir dyno set with cpu max does not use cedar memory limit", () => {
     process.env.DYNO = "run-nss86zptrv-7fpx8"
     closedWorld({
       reads: {
@@ -210,7 +210,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(Usage.availableCpus()).toBeCloseTo(0.9, 4)
   })
 
-  test("render starter cpu.stat usage", () => {
+  test("render starter cpu stat usage", () => {
     closedWorld({
       reads: {
         [Usage.CGROUP_V2_USAGE]: fixture("render/starter_cpu_stat.txt"),
@@ -222,7 +222,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(seconds).toBeCloseTo(858123 / 1000000.0, 4)
   })
 
-  test("render free cpu.max beats marketing 0.1 env", () => {
+  test("render free cpu max beats marketing 0 1 env", () => {
     process.env.RENDER = "true"
     process.env.RENDER_CPU_COUNT = "0.1"
     closedWorld({
@@ -233,7 +233,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(Usage.availableCpus()).toBeCloseTo(0.15, 4)
   })
 
-  test("render free RENDER_CPU_COUNT without cgroup", () => {
+  test("render free render cpu count without cgroup", () => {
     process.env.RENDER = "true"
     process.env.RENDER_CPU_COUNT = "0.15"
     closedWorld({ nproc: 8 })
@@ -241,7 +241,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(Usage.availableCpus()).toBeCloseTo(0.15, 4)
   })
 
-  test("render full plan matrix cpu.max", () => {
+  test("render full plan matrix cpu max", () => {
     process.env.RENDER = "true"
     for (const [file, expected] of RENDER_PLAN_MATRIX) {
       closedWorld({
@@ -254,7 +254,7 @@ describe("CPU.Usage platform goldens", () => {
     }
   })
 
-  test("render RENDER_CPU_COUNT strings without cgroup", () => {
+  test("render cpu count strings without cgroup", () => {
     process.env.RENDER = "true"
     for (const [raw, expected] of RENDER_CPU_COUNT_STRINGS) {
       process.env.RENDER_CPU_COUNT = raw
@@ -265,7 +265,7 @@ describe("CPU.Usage platform goldens", () => {
     }
   })
 
-  test("render quota beats misleading RENDER_CPU_COUNT low", () => {
+  test("render quota beats misleading render cpu count low", () => {
     process.env.RENDER = "true"
     process.env.RENDER_CPU_COUNT = "0.1"
     closedWorld({
@@ -276,7 +276,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(Usage.availableCpus()).toBeCloseTo(0.5, 4)
   })
 
-  test("render quota beats misleading RENDER_CPU_COUNT high", () => {
+  test("render quota beats misleading render cpu count high", () => {
     process.env.RENDER = "true"
     process.env.RENDER_CPU_COUNT = "8"
     closedWorld({
@@ -287,7 +287,7 @@ describe("CPU.Usage platform goldens", () => {
     expect(Usage.availableCpus()).toBeCloseTo(0.5, 4)
   })
 
-  test("render pro ultra cpu.max beats host nproc 32", () => {
+  test("render pro ultra cpu max beats host nproc 32", () => {
     process.env.RENDER = "true"
     closedWorld({
       reads: {

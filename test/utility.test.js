@@ -2,24 +2,24 @@ const { normalizeQueues, unpack } = require("../src/utility")
 const { MissingQueueError } = require("../src/errors")
 
 describe("utility", () => {
-  test("normalizeQueues trims and de-duplicates", () => {
+  test("strips surrounding whitespace", () => {
     expect(
       normalizeQueues([" default ", "default", "mailer"], { allowEmpty: true }),
     ).toEqual(["default", "mailer"])
   })
 
-  test("normalizeQueues requires allowEmpty", () => {
+  test("normalize queues requires allow empty", () => {
     expect(() => normalizeQueues(["default"])).toThrow()
   })
 
-  test("normalizeQueues drops blank names", () => {
+  test("drops blank entries", () => {
     expect(normalizeQueues(["", "  ", "ready"], { allowEmpty: true })).toEqual([
       "ready",
     ])
     expect(normalizeQueues([], { allowEmpty: true })).toEqual([])
   })
 
-  test('normalizeQueues drops null and undefined (not the string "null")', () => {
+  test("drops null and undefined not the string null", () => {
     expect(
       normalizeQueues([null, undefined, "ready", null], { allowEmpty: true }),
     ).toEqual(["ready"])
@@ -29,7 +29,7 @@ describe("utility", () => {
     ).toThrow(MissingQueueError)
   })
 
-  test("normalizeQueues allowEmpty false raises MissingQueueError", () => {
+  test("empty queues disallowed raises", () => {
     expect(() => normalizeQueues([], { allowEmpty: false })).toThrow(
       MissingQueueError,
     )
@@ -38,7 +38,7 @@ describe("utility", () => {
     )
   })
 
-  test("normalizeQueues only-blank names return empty when allowEmpty is true", () => {
+  test("only blank entries return empty when empty is allowed", () => {
     expect(normalizeQueues(["  ", ""], { allowEmpty: true })).toEqual([])
   })
 
@@ -49,7 +49,7 @@ describe("utility", () => {
     })
   })
 
-  test("unpack flattens a nested queue array", () => {
+  test("flattens nested queue lists", () => {
     expect(
       unpack([["default", "mailer"], { connection: "redis://x" }]),
     ).toEqual({
