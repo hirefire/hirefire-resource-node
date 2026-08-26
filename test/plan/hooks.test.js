@@ -43,6 +43,17 @@ describe("Plan.Hooks", () => {
     expect(Hooks.coercePlanValue("non_negative_integer", -1)).toBeNull()
     expect(Hooks.coercePlanValue("non_negative_integer", 1.5)).toBeNull()
     expect(Hooks.coercePlanValue("non_negative_integer", "5")).toBe(5)
+    expect(Hooks.coercePlanValue("non_negative_integer", "-1")).toBeNull()
     expect(Hooks.coercePlanValue("non_negative_integer", "5.0")).toBeNull()
+  })
+
+  test("extractPlanOptions ignores invalid option containers and types", () => {
+    const schema = { jqs: { limit: "unknown" } }
+
+    expect(Hooks.extractPlanOptions("jqs", null, schema)).toEqual({})
+    expect(Hooks.extractPlanOptions("jqs", [], schema)).toEqual({})
+    expect(Hooks.extractPlanOptions("jql", { limit: 2 }, schema)).toEqual({})
+    expect(Hooks.extractPlanOptions("jqs", { limit: 2 }, schema)).toEqual({})
+    expect(Hooks.coercePlanValue("unknown", 2)).toBeNull()
   })
 })

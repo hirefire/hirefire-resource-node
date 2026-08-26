@@ -175,6 +175,69 @@ describe("Plan", () => {
     )
   })
 
+  test("execute skips an adapter without the selected sampler", async () => {
+    const macro = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => macro,
+      configurable: true,
+    })
+
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      expect(configuration.logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("has no jobQueueSize"),
+      )
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
+  test("execute logs primitive plan option failures", async () => {
+    const macro = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => {
+        throw "plan options boom"
+      },
+      planConnectionOptions: () => ({}),
+      jobQueueSize: async () => 1,
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => macro,
+      configurable: true,
+    })
+
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+        },
+        configuration,
+      )
+      expect(configuration.logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("plan options boom"),
+      )
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
   test("normalize queues null becomes empty", async () => {
     const sample = jest.fn(async () => 1)
     const macro = require("../../src/macro/bullmq")
@@ -278,6 +341,57 @@ describe("Plan", () => {
     } finally {
       macro.jobQueueSize = orig
       macro.jobQueueWorking = origWorking
+    }
+  })
+
+  test("bounds invalid plan sample diagnostics", async () => {
+    const invalidValues = [
+      "x".repeat(200),
+      {
+        toString: () => {
+          throw new Error("inspect boom")
+        },
+      },
+    ]
+    const macro = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+      jobQueueSize: jest
+        .fn()
+        .mockResolvedValueOnce(invalidValues[0])
+        .mockResolvedValueOnce(invalidValues[1]),
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => macro,
+      configurable: true,
+    })
+
+    try {
+      for (let i = 0; i < invalidValues.length; i++) {
+        await Plan.execute(
+          {
+            name: "worker",
+            adapter: "bullmq",
+            strategy: "jqs",
+            queues: ["default"],
+          },
+          configuration,
+        )
+      }
+      const messages = configuration.logger.error.mock.calls.map((call) =>
+        String(call[0]),
+      )
+      expect(messages.some((message) => message.includes("…"))).toBe(true)
+      expect(messages.some((message) => message.includes("inspect boom"))).toBe(
+        false,
+      )
+      expect(
+        messages.some((message) => message.includes("returned object,")),
+      ).toBe(true)
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
     }
   })
 
@@ -686,6 +800,40 @@ describe("Plan", () => {
       ])
       expect(configuration.logger.error).toHaveBeenCalledWith(
         expect.stringMatching(/beforeSampleJobQueues for "a" raised.*before-a/),
+      )
+    } finally {
+      for (const key of Object.keys(Plan.ADAPTERS)) {
+        delete Plan.ADAPTERS[key]
+      }
+      Object.defineProperties(Plan.ADAPTERS, original)
+    }
+  })
+
+  test("aroundJobQueueSample logs primitive before failures", async () => {
+    const mod = {
+      beforeSampleJobQueues: () => {
+        throw "before-a"
+      },
+      afterSampleJobQueues: jest.fn(),
+    }
+
+    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+    for (const key of Object.keys(Plan.ADAPTERS)) {
+      delete Plan.ADAPTERS[key]
+    }
+    Object.defineProperty(Plan.ADAPTERS, "x", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+
+    try {
+      await expect(
+        Plan.aroundJobQueueSample(() => "ok", configuration),
+      ).resolves.toBe("ok")
+      expect(mod.afterSampleJobQueues).not.toHaveBeenCalled()
+      expect(configuration.logger.error).toHaveBeenCalledWith(
+        expect.stringMatching(/beforeSampleJobQueues for "x" raised before-a/),
       )
     } finally {
       for (const key of Object.keys(Plan.ADAPTERS)) {
@@ -1116,6 +1264,33 @@ describe("Plan", () => {
         adapter: "bullmq",
         strategy: "jqs",
         queues: [],
+      }),
+    ).toBe(true)
+  })
+
+  test("sampleableEntry accepts only valid named queues", () => {
+    const required = {
+      supportsPlanStrategy: () => true,
+      queuesRequired: () => true,
+    }
+    jest.spyOn(Plan, "executable").mockReturnValue(true)
+    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
+    jest
+      .spyOn(Plan.ADAPTERS, "bullmq", "get")
+      .mockImplementation(() => required)
+
+    expect(
+      Plan.sampleableEntry({
+        adapter: "bullmq",
+        strategy: "jqs",
+        queues: [null, "  ", "x".repeat(129)],
+      }),
+    ).toBe(false)
+    expect(
+      Plan.sampleableEntry({
+        adapter: "bullmq",
+        strategy: "jqs",
+        queues: ["default"],
       }),
     ).toBe(true)
   })

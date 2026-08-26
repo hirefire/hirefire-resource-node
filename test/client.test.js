@@ -1,5 +1,6 @@
 const http = require("http")
 const net = require("net")
+const { EventEmitter } = require("events")
 const nock = require("nock")
 const { Client, RequestError } = require("../src/client")
 const VERSION = require("../src/version")
@@ -328,6 +329,33 @@ describe("Client (persistent connection)", () => {
     await expect(promise).rejects.toThrow(/Network error/)
 
     await client.close()
+  })
+
+  test("a lease response body error is mapped to a request error", async () => {
+    const client = new Client({ token: "t" })
+    const response = new EventEmitter()
+    response.resume = jest.fn()
+    const request = new EventEmitter()
+    request.reusedSocket = false
+    request.write = jest.fn()
+    request.end = jest.fn(() => {
+      queueMicrotask(() =>
+        response.emit("error", new Error("body stream failed")),
+      )
+    })
+    const transport = {
+      request: jest.fn((_options, callback) => {
+        queueMicrotask(() => callback(response))
+        return request
+      }),
+    }
+
+    await expect(
+      client._attempt(transport, { method: "POST" }, undefined, {
+        readBody: true,
+        maxBodyBytes: 10,
+      }),
+    ).rejects.toBeInstanceOf(RequestError)
   })
 
   test("retries once when a reused socket reads back a garbled response", async () => {

@@ -214,6 +214,20 @@ describe("Dispatcher", () => {
     expect(Number.isInteger(leaf[1])).toBe(true)
   })
 
+  test("merges duplicate rqt fragments before encoding", () => {
+    const dispatcher = configureWebOnly()
+    const entriesByName = Object.create(null)
+
+    dispatcher._mergeMetrics(entriesByName, "web", "rqt", {
+      1000: { sum: 2, count: 1 },
+    })
+    dispatcher._mergeMetrics(entriesByName, "web", "rqt", {
+      1000: { sum: 6, count: 2 },
+    })
+
+    expect(entriesByName.web.rqt[1000]).toEqual({ sum: 8, count: 3 })
+  })
+
   test("oversized payload drops without post", async () => {
     process.env.DYNO = "web.1"
     config().markHttpActive()
@@ -229,6 +243,27 @@ describe("Dispatcher", () => {
         String(c[0]).includes("Dropped metrics payload"),
       ),
     ).toBe(true)
+  })
+
+  test("dead generation does not drop an oversized payload", async () => {
+    const bodies = captureIngestBodies()
+    const dispatcher = configureWebOnly()
+    freezeTime(1000)
+    injectOversizedSeries()
+    dispatcher._generation = 1
+    dispatcher._running = true
+    const buildPayload = dispatcher._buildPayload.bind(dispatcher)
+    dispatcher._buildPayload = (...args) => {
+      const result = buildPayload(...args)
+      dispatcher._running = false
+      return result
+    }
+
+    await dispatcher._dispatch(1)
+
+    expect(bodies).toEqual([])
+    expect(dispatcher._lastRqtSecond).toBeNull()
+    expect(Object.keys(config().buffer.flush())).toHaveLength(0)
   })
 
   test("payload equality at 32768 posts", async () => {
@@ -326,6 +361,36 @@ describe("Dispatcher", () => {
     await dispatcher._dispatchTick()
     expect(bodies[0][0].name).toBe("web")
     expect(Object.values(bodies[0][0].metrics.rqt)[0]).toEqual([5, 1])
+  })
+
+  test("flushes buffered rqt when liveness is disabled", () => {
+    const dispatcher = configureWebOnly()
+    Object.defineProperties(config(), {
+      httpName: { configurable: true, value: "web" },
+      rqtEnabled: { configurable: true, value: true },
+      rqtLiveness: { configurable: true, value: false },
+    })
+
+    const result = dispatcher._buildPayload({
+      web: { rqt: { 1000: { sum: 7, count: 1 } } },
+    })
+
+    expect(result.entries).toEqual([
+      { name: "web", metrics: { rqt: { 1000: [7, 1] } } },
+    ])
+    expect(result.watermark).toBeUndefined()
+  })
+
+  test("omits rqt means outside the wire range", () => {
+    const dispatcher = configureWebOnly()
+
+    expect(dispatcher._encodeLeaf("rqt", { sum: -1, count: 1 })).toBeUndefined()
+    expect(
+      dispatcher._encodeLeaf("rqt", {
+        sum: Dispatcher.METRIC_VALUE_LIMIT + 1,
+        count: 1,
+      }),
+    ).toBeUndefined()
   })
 
   test("stop without flush discards buffer", async () => {
@@ -438,6 +503,37 @@ describe("Dispatcher", () => {
     dispatcher.ensureJobQueueLoop()
     expect(dispatcher._jobLoopPromise).not.toBeNull()
     await dispatcher.stop()
+  })
+
+  test("ensureJobQueueLoop leaves a live job loop unchanged", () => {
+    const dispatcher = configureWebAndWorkers()
+    const jobLoop = Promise.resolve()
+    jobLoop._hirefireAlive = true
+    dispatcher._running = true
+    dispatcher._jobLoopPromise = jobLoop
+    const enterRace = jest.spyOn(dispatcher, "_enterRace")
+
+    dispatcher.ensureJobQueueLoop()
+
+    expect(dispatcher._jobLoopPromise).toBe(jobLoop)
+    expect(enterRace).not.toHaveBeenCalled()
+  })
+
+  test("ensureJobQueueLoop logs a loop creation failure", () => {
+    const dispatcher = configureWebAndWorkers()
+    dispatcher._running = true
+    jest.spyOn(dispatcher, "_loop").mockImplementation(() => {
+      throw new Error("cannot create job loop")
+    })
+
+    dispatcher.ensureJobQueueLoop()
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Could not start job-queue loop"),
+    )
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("cannot create job loop"),
+    )
   })
 
   test("plan strategy only local sample", async () => {
@@ -882,10 +978,14 @@ describe("Dispatcher", () => {
     }
     freezeTime(1000)
     config().buffer.sample("web", "rqt", 7)
+    config().buffer.sample("worker", "jqs", 3)
     await dispatcher._dispatch()
     expect(bodies).toHaveLength(1)
     expect(bodies[0][0].sample_trace).toBeUndefined()
     expect(bodies[0][0].metrics.rqt).toBeTruthy()
+    expect(
+      bodies[0].find((entry) => entry.name === "worker").metrics.jqs,
+    ).toEqual({ 1000: 3 })
     expect(
       logger.error.mock.calls.some((args) =>
         String(args[0]).includes("Dropped metrics payload"),
@@ -1051,6 +1151,41 @@ describe("Dispatcher", () => {
     expect(leaseDemote).toHaveBeenCalled()
     expect(leaseClose).toHaveBeenCalled()
     expect(dispatcher._stopping).toBe(false)
+  })
+
+  test("stop logs transport close failures", async () => {
+    const dispatcher = configureWebOnly()
+    dispatcher._client.close = jest
+      .fn()
+      .mockRejectedValue(new Error("client close failed"))
+    dispatcher._lease.close = jest
+      .fn()
+      .mockRejectedValue(new Error("lease close failed"))
+
+    await expect(dispatcher.stop()).resolves.toBe(false)
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Client close error: client close failed"),
+    )
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Lease close error: lease close failed"),
+    )
+  })
+
+  test("logs an unexpected dispatcher loop failure", async () => {
+    const dispatcher = configureWebOnly()
+    dispatcher._runLoop = jest.fn().mockRejectedValue(new Error("loop failure"))
+
+    const loop = dispatcher._loop(1, jest.fn())
+    await loop
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Dispatcher loop stopped unexpectedly"),
+    )
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("loop failure"),
+    )
+    expect(loop._hirefireAlive).toBe(false)
   })
 
   test("dead gen after successful post skips frequency apply", async () => {

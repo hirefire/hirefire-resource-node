@@ -148,6 +148,25 @@ describe("Lease", () => {
     expect(lease.jobQueues).toEqual([])
   })
 
+  test("ignores a transport error from a demoted request", async () => {
+    let rejectRequest
+    lease._client.requestLease = jest.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRequest = reject
+        }),
+    )
+
+    const pending = lease.requestIfDue({ hold: holdTrue })
+    await Promise.resolve()
+    lease.demote()
+    rejectRequest(new RequestError("late transport failure"))
+
+    await expect(pending).resolves.toBeUndefined()
+    expect(lease.granted()).toBe(false)
+    expect(lease.jobQueues).toEqual([])
+  })
+
   test("hold false rotates process id and clears queues", async () => {
     const body = JSON.stringify({
       version: 1,
@@ -222,6 +241,42 @@ describe("Lease", () => {
     await pending
     expect(lease.granted()).toBe(false)
     expect(lease.jobQueues).toEqual([])
+  })
+
+  test("demote during parsing or hold discards the grant", async () => {
+    lease._client.requestLease = jest.fn().mockResolvedValue({
+      statusCode: 200,
+      headers: { "hirefire-lease-granted": "true" },
+      body: "",
+    })
+    jest.spyOn(lease, "_parseGrantBody").mockImplementation(() => {
+      lease.demote()
+      return { job_queues: [{ name: "q", strategy: "jqs" }], trace: true }
+    })
+
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.granted()).toBe(false)
+    expect(lease.jobQueues).toEqual([])
+
+    const heldLease = new Lease(CONFIG)
+    heldLease._client.requestLease = jest.fn().mockResolvedValue({
+      statusCode: 200,
+      headers: { "hirefire-lease-granted": "true" },
+      body: "",
+    })
+    jest.spyOn(heldLease, "_parseGrantBody").mockReturnValue({
+      job_queues: [{ name: "q", strategy: "jqs" }],
+      trace: false,
+    })
+
+    await heldLease.requestIfDue({
+      hold: () => {
+        heldLease.demote()
+        return true
+      },
+    })
+    expect(heldLease.granted()).toBe(false)
+    expect(heldLease.jobQueues).toEqual([])
   })
 
   test("regrant rearms sample", async () => {
@@ -468,6 +523,27 @@ describe("Lease", () => {
     expect(lease.jobQueues[0].name).toBe("worker")
   })
 
+  test("logs singular invalid plan entry", async () => {
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+    lease = new Lease({ ...CONFIG, logger })
+    grant(
+      {
+        "HireFire-Lease-Granted": "true",
+        "HireFire-Sample-Frequency": "15",
+      },
+      JSON.stringify({
+        version: 1,
+        job_queues: [{ name: "", strategy: "jqs" }],
+      }),
+    )
+
+    await lease.requestIfDue({ hold: holdTrue })
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("1 invalid job queue entry"),
+    )
+  })
+
   test("json null adapter is strategy-only", async () => {
     grant(
       {
@@ -520,6 +596,15 @@ describe("Lease", () => {
     grant({
       "HireFire-Lease-Granted": "true",
       "HireFire-Sample-Frequency": "0",
+    })
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[0])
+  })
+
+  test("clamps a non-numeric sample frequency to a sane floor", async () => {
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "not-a-number",
     })
     await lease.requestIfDue({ hold: holdTrue })
     expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[0])

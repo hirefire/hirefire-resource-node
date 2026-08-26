@@ -96,6 +96,15 @@ describe("Configuration", () => {
     expect(() => config.dyno(tooLong, () => 1)).toThrow(/128/)
   })
 
+  test("dyno measures the name limit in UTF-8 bytes", () => {
+    const accepted = "é".repeat(64)
+    const tooLong = "é".repeat(65)
+
+    config.dyno(accepted, () => 1)
+    expect([...config.jobQueues][0].name).toBe(accepted)
+    expect(() => config.dyno(tooLong, () => 1)).toThrow(/128/)
+  })
+
   test("duplicate job queue raises", () => {
     config.dyno("worker", () => 1)
     expect(() => config.dyno("worker", () => 2)).toThrow(
@@ -327,6 +336,22 @@ describe("Configuration", () => {
     expect(config.rqtEnabled).toBe(true)
     expect(config.rqtLiveness).toBe(false)
     expect(config.httpSource).toBeNull()
+  })
+
+  test("unresolved armed rqt identity warns once", () => {
+    process.env.HIREFIRE_TOKEN = "t"
+    const warn = jest.fn()
+    config.logger = { info() {}, warn, error() {} }
+    config.markHttpActive()
+
+    expect(config.httpSource).toBeNull()
+    expect(config.httpSource).toBeNull()
+
+    expect(
+      warn.mock.calls.filter((c) =>
+        String(c[0]).includes("Request queue time samples dropped"),
+      ),
+    ).toHaveLength(1)
   })
 
   test("rqt enabled for Render web service type", () => {

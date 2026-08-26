@@ -132,6 +132,14 @@ describe("BullMQ", () => {
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
   })
 
+  test("all-queues discovery includes active-only and prioritized-only queues", async () => {
+    await redis.lpush("bull:active-only:active", "job-active-1")
+    await redis.zadd("bull:prioritized-only:prioritized", 1, "job-priority-1")
+
+    expect(await jobQueueWorking({ connection: redisURL })).toBe(1)
+    expect(await jobQueueSize({ connection: redisURL })).toBe(1)
+  })
+
   test("jobQueueSize counts waiting only when mixed with active", async () => {
     await defaultQueue.add("liveJob", {})
     await defaultQueue.add("dueDelayedJob", {}, { delay: 1 })

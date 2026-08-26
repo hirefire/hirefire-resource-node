@@ -13,6 +13,14 @@ function strategyValue(data, name, strategy) {
 }
 
 describe("JobQueues", () => {
+  test("ignores a missing job queue", async () => {
+    const configuration = configure()
+
+    await configuration.jobQueues.sampleJobQueue(null, "jql")
+
+    expect(configuration.logger.error).not.toHaveBeenCalled()
+  })
+
   test("samples each job queue into the buffer under plan strategy", async () => {
     const configuration = configure()
     configuration.dyno("worker", () => 42)
@@ -87,6 +95,22 @@ describe("JobQueues", () => {
     )
   })
 
+  test("a non-Error sampler failure is logged without escaping", async () => {
+    const configuration = configure()
+    configuration.dyno("worker", () => {
+      throw "Redis down"
+    })
+
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jql",
+    )
+
+    expect(configuration.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Redis down"),
+    )
+  })
+
   test("invalid sample logs are bounded and typed", async () => {
     const logger = { error: jest.fn() }
     const configuration = configure()
@@ -101,6 +125,25 @@ describe("JobQueues", () => {
     expect(message).toMatch(/string\(/)
     expect(message).not.toContain("x".repeat(200))
     expect(message).toContain("…")
+  })
+
+  test("invalid sample with a throwing toString logs its type", async () => {
+    const configuration = configure()
+    const value = {
+      toString() {
+        throw new Error("toString boom")
+      },
+    }
+    configuration.dyno("worker", () => value)
+
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jql",
+    )
+
+    expect(configuration.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("object"),
+    )
   })
 
   test("invalid sample values are dropped and logged", async () => {

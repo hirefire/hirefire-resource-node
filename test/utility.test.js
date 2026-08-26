@@ -57,4 +57,11 @@ describe("utility", () => {
       options: { connection: "redis://x" },
     })
   })
+
+  test("unpack keeps all arguments when options are omitted", () => {
+    expect(unpack(["default", ["mailer"]])).toEqual({
+      queues: ["default", "mailer"],
+      options: {},
+    })
+  })
 })
