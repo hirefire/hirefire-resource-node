@@ -47,7 +47,7 @@ Learn more at the [home page][HireFire].
 
 ## Development
 
-Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Redis (BullMQ / classic Bull) and Postgres (pg-boss) for the macro tests run in containers, and mise installs the pinned Node versions from `.tool-versions`. `bin/services up` starts them on Docker-assigned free host ports recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops them and removes `.env`. Because the ports are assigned fresh at startup, multiple worktrees can run side by side without conflicting with each other or with any system-wide Redis/Postgres.
+Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Redis (BullMQ / classic Bull) and PostgreSQL (pg-boss) for the macro tests run in containers, and mise installs the pinned Node versions from `.tool-versions`. `bin/services up` starts them on Docker-assigned free host ports recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops them and removes `.env`. Because the ports are assigned fresh at startup, multiple worktrees can run side by side without conflicting with each other or with any system-wide databases.
 
 - Run `bin/setup` to prepare the environment.
 - Run `bin/services up` / `bin/services down` to start / stop Redis and Postgres.
@@ -57,10 +57,11 @@ Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Re
 
 1. Update the version in `package.json` using
    `npm version <patch|minor|major> --no-git-tag-version`.
-2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (today's date) and add a fresh empty `## [Unreleased]` above it.
-3. Commit changes with `git commit`.
-4. Create a `git tag` matching the new version (e.g., `v2.0.0`).
-5. Push the new git tag. Continuous Integration will handle the distribution process.
+2. If `package.json` dependencies changed, refresh `package-lock.json` with `npm install`.
+3. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (today's date) and add a fresh empty `## [Unreleased]` above it.
+4. Commit changes with `git commit`.
+5. Create a `git tag` matching the new version (e.g., `v2.0.0`).
+6. Push the new git tag. Continuous Integration will handle the distribution process.
 
 ## License
 

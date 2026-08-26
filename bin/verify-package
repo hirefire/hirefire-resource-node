@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 "use strict"
 
+// Assert the packed tarball ships LICENSE, README, CHANGELOG, and generated types.
+//
+// Used by GitHub Actions `check` and `publish`. Re-emits declarations if needed,
+// then checks npm pack --dry-run.
+
 const { execSync } = require("child_process")
 const fs = require("fs")
 const path = require("path")

@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- A globally paused BullMQ 4 queue no longer counts the pause marker as a waiting job.
+- A globally paused BullMQ 4 queue no longer counts the pause marker as a queued job.
 - BullMQ and classic Bull sampling now require `ioredis`. Without it, those job metrics are not collected.
 
 ## [1.2.0] - 2026-02-03
