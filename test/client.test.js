@@ -14,6 +14,10 @@ describe("Client", () => {
     client = new Client({ token: "test-token-value" })
   })
 
+  afterEach(async () => {
+    if (client) await client.close()
+  })
+
   test("submitSamples sends the payload with the agent header", async () => {
     const scope = nock(BASE, {
       reqheaders: {
@@ -73,7 +77,11 @@ describe("Client", () => {
       { timeout: 0.1 },
     )
     nock(BASE).post("/metrics/ingest").delayConnection(500).reply(200)
-    await expect(slowClient.submitSamples(BODY)).rejects.toThrow("timed out")
+    try {
+      await expect(slowClient.submitSamples(BODY)).rejects.toThrow("timed out")
+    } finally {
+      await slowClient.close()
+    }
   })
 
   test("submitSamples raises on transport errors", async () => {
@@ -121,7 +129,13 @@ describe("Client", () => {
       { timeout: 0.1 },
     )
     nock(BASE).post("/metrics/lease").delayConnection(500).reply(200)
-    await expect(slowClient.requestLease("abc123")).rejects.toThrow("timed out")
+    try {
+      await expect(slowClient.requestLease("abc123")).rejects.toThrow(
+        "timed out",
+      )
+    } finally {
+      await slowClient.close()
+    }
   })
 
   test("requestLease sends the agent header", async () => {

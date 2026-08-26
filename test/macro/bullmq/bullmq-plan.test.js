@@ -4,7 +4,7 @@ describe("BullMQ plan hooks", () => {
   beforeEach(() => {
     delete process.env.HIREFIRE_BULLMQ_URL
     jest.resetModules()
-    bullmq = require("../../src/macro/bullmq")
+    bullmq = require("../../../src/macro/bullmq")
   })
 
   test("planOptions empty", () => {
@@ -29,7 +29,7 @@ describe("BullMQ plan hooks", () => {
   })
 
   test("sample-wave hooks open and close the SCAN memo", () => {
-    const Hooks = require("../../src/plan/hooks")
+    const Hooks = require("../../../src/plan/hooks")
     expect(bullmq.beforeSampleJobQueues).not.toBe(Hooks.beforeSampleJobQueues)
     expect(bullmq.beforeSampleJobQueues()).toBe(true)
     expect(bullmq.afterSampleJobQueues()).toBeUndefined()

@@ -87,6 +87,22 @@ describe("JobQueues", () => {
     )
   })
 
+  test("invalid sample logs are bounded and typed", async () => {
+    const logger = { error: jest.fn() }
+    const configuration = configure()
+    configuration.logger = logger
+    const long = "x".repeat(200)
+    configuration.dyno("worker", () => long)
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jql",
+    )
+    const message = logger.error.mock.calls[0][0]
+    expect(message).toMatch(/string\(/)
+    expect(message).not.toContain("x".repeat(200))
+    expect(message).toContain("…")
+  })
+
   test("invalid sample values are dropped and logged", async () => {
     const configuration = configure()
     const values = ["10", null, -1, Infinity, NaN, 7]
@@ -113,23 +129,20 @@ describe("JobQueues", () => {
     expect(strategyValue(configuration.buffer.flush(), "worker", "jql")).toBe(0)
   })
 
-  test("is iterable and exposes map", () => {
+  test("is iterable", () => {
     const jobQueues = new JobQueues({})
     jobQueues.add(new JobQueue("worker", () => 1))
     jobQueues.add(new JobQueue("mailer", () => 2))
 
-    expect(jobQueues.map((q) => q.name)).toEqual(["worker", "mailer"])
     expect([...jobQueues].map((q) => q.name)).toEqual(["worker", "mailer"])
   })
 
-  test("any and count", () => {
+  test("any", () => {
     const jobQueues = new JobQueues({})
     expect(jobQueues.any()).toBe(false)
-    expect(jobQueues.count()).toBe(0)
 
     jobQueues.add(new JobQueue("worker", () => 1))
     expect(jobQueues.any()).toBe(true)
-    expect(jobQueues.count()).toBe(1)
   })
 
   test("unknown strategy is dropped and logged", async () => {

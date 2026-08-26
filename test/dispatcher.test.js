@@ -135,6 +135,29 @@ describe("Dispatcher", () => {
     expect(await dispatcher.stop()).toBe(false)
   })
 
+  test("stop closes keep-alive even when never started", async () => {
+    captureIngestBodies()
+    const dispatcher = configureWebOnly()
+    freezeTime(1000)
+    config().buffer.sample("web", "rqt", 5)
+    await dispatcher._dispatchTick()
+    expect(dispatcher._client._agent).not.toBeNull()
+    expect(await dispatcher.stop()).toBe(false)
+    expect(dispatcher._client._agent).toBeNull()
+  })
+
+  test("first start does not clear pre-start rqt", async () => {
+    stubLease()
+    captureIngestBodies()
+    process.env.DYNO = "web.1"
+    const dispatcher = configureWebOnly()
+    config().buffer.sample("web", "rqt", 7)
+    expect(dispatcher.start()).toBe(true)
+    const flushed = config().buffer.flush()
+    expect(flushed.web.rqt).toBeDefined()
+    await dispatcher.stop()
+  })
+
   test("dispatches web metrics", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()
@@ -2091,6 +2114,21 @@ describe("Dispatcher", () => {
     ).toBe(true)
   })
 
+  test("samplePlanAdapter skips queues-required empty lists", async () => {
+    const execute = jest.spyOn(Plan, "execute")
+    jest.spyOn(Plan, "executable").mockReturnValue(true)
+    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
+    jest.spyOn(Plan, "queuesRequired").mockReturnValue(true)
+    jest.spyOn(Plan, "namedPlanQueues").mockReturnValue(false)
+    const dispatcher = config().dispatcher
+    await dispatcher._samplePlanAdapter(
+      { name: "mail", adapter: "bunny", strategy: "jqs", queues: [] },
+      config().jobQueues,
+    )
+    expect(execute).not.toHaveBeenCalled()
+    expect(loggerErrors()).toMatch(/requires named queues/)
+  })
+
   test("strategy-only unknown strategy skips and logs", async () => {
     stubGrantedLease(
       JSON.stringify({
@@ -2162,6 +2200,7 @@ function withTimeout(promise, ms, message) {
     }),
     new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error(message)), ms)
+      if (timer.unref) timer.unref()
     }),
   ])
 }

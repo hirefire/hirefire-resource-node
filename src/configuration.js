@@ -33,7 +33,7 @@ class MissingSamplerError extends Error {
 
 /**
  * Thrown when a dyno name was already declared for the same source kind (names are compared
- * case-insensitively), or a second http process is declared in the same app process.
+ * case-insensitively).
  */
 class DuplicateDynoError extends Error {
   /**
@@ -225,6 +225,9 @@ class Configuration {
     return this._dispatcher
   }
 
+  /**
+   * @returns {string|null}
+   */
   get httpName() {
     return this._softIdentity()
   }
@@ -237,6 +240,9 @@ class Configuration {
     return Boolean(this._httpActive || Identity.platformHttpRole())
   }
 
+  /**
+   * @returns {import("./source/http")|null}
+   */
   get httpSource() {
     const name = this.httpName
     if (name == null) {
@@ -293,24 +299,15 @@ class Configuration {
     }
 
     if (source === "job_queue") {
-      this.jobQueues.add(new JobQueue(this._canonicalName(name), sampler))
+      this.jobQueues.add(new JobQueue(name, sampler))
     }
 
     this._sourcesByName.set(key, kinds.concat(source))
   }
 
-  _canonicalName(name) {
-    for (const key of this._sourcesByName.keys()) {
-      if (key.toLowerCase() === name.toLowerCase()) {
-        const existing = [...this.jobQueues]
-          .map((w) => w.name)
-          .find((n) => n.toLowerCase() === name.toLowerCase())
-        return existing || name
-      }
-    }
-    return name
-  }
-
+  /**
+   * @returns {string|null}
+   */
   _softIdentity() {
     this._warnHerokuConflictOnce()
     const name = Identity.resolve()

@@ -34,8 +34,8 @@ fi
 # Install the matrix package in the same npm invocation as any extra peers.
 # A second `npm install --no-save` prunes packages that are not in package.json,
 # which would drop the matrix package just installed above.
-if [ "$package" = "bullmq" ]; then
-  # BullMQ 6 lists ioredis as an optional peer. The macro and live tests still require it.
+if [ "$package" = "bullmq" ] || [ "$package" = "bull" ]; then
+  # BullMQ 6 lists ioredis as an optional peer. The macros still require it.
   npm install "${package}@${major}" ioredis --no-save --no-audit --no-fund --silent
 else
   npm install "${package}@${major}" --no-save --no-audit --no-fund --silent

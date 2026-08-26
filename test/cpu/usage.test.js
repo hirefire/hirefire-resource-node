@@ -10,19 +10,7 @@ function stubReads(map) {
 }
 
 describe("CPU.Usage", () => {
-  describe("totalSeconds", () => {
-    test("prefers cgroup v2", () => {
-      stubReads({
-        [Usage.CGROUP_V2_USAGE]: "usage_usec 2500000\nuser_usec 1000000",
-      })
-      expect(Usage.totalSeconds()).toBeCloseTo(2.5, 4)
-    })
-
-    test("falls back to cgroup v1", () => {
-      stubReads({ [Usage.CGROUP_V1_USAGE]: "3000000000" })
-      expect(Usage.totalSeconds()).toBeCloseTo(3.0, 4)
-    })
-
+  describe("reading fallbacks", () => {
     test("falls back to the proc namespace sum", () => {
       stubReads({
         "/proc/1/stat":
@@ -34,7 +22,7 @@ describe("CPU.Usage", () => {
         .spyOn(Usage, "procStatPaths")
         .mockReturnValue(["/proc/1/stat", "/proc/2/stat"])
 
-      expect(Usage.totalSeconds()).toBeCloseTo(10.0, 4)
+      expect(Usage.reading()).toEqual({ seconds: 10.0, source: "proc" })
     })
 
     test("cgroup v2 without a usage_usec line falls through to v1", () => {
@@ -42,7 +30,7 @@ describe("CPU.Usage", () => {
         [Usage.CGROUP_V2_USAGE]: "user_usec 1000000\nsystem_usec 500000",
         [Usage.CGROUP_V1_USAGE]: "3000000000",
       })
-      expect(Usage.totalSeconds()).toBeCloseTo(3.0, 4)
+      expect(Usage.reading()).toEqual({ seconds: 3.0, source: "cgroupV1" })
     })
 
     test("a malformed usage value falls through instead of returning NaN", () => {
@@ -50,20 +38,22 @@ describe("CPU.Usage", () => {
         [Usage.CGROUP_V2_USAGE]: "usage_usec notanumber",
         [Usage.CGROUP_V1_USAGE]: "3000000000",
       })
-      expect(Usage.totalSeconds()).toBeCloseTo(3.0, 4)
+      expect(Usage.reading()).toEqual({ seconds: 3.0, source: "cgroupV1" })
     })
 
     test("tolerates trailing whitespace in the usage line", () => {
       stubReads({
         [Usage.CGROUP_V2_USAGE]: "usage_usec 2500000 \nuser_usec 1",
       })
-      expect(Usage.totalSeconds()).toBeCloseTo(2.5, 4)
+      expect(Usage.reading()).toEqual({ seconds: 2.5, source: "cgroupV2" })
     })
 
     test("falls back to the process clock", () => {
       stubReads({})
       jest.spyOn(Usage, "procStatPaths").mockReturnValue([])
-      expect(typeof Usage.totalSeconds()).toBe("number")
+      const { seconds, source } = Usage.reading()
+      expect(typeof seconds).toBe("number")
+      expect(source).toBe("process")
     })
   })
 

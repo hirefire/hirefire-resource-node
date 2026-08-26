@@ -38,6 +38,16 @@ const Hooks = {
   },
 
   /**
+   * Whether an empty plan queue list is invalid (named queues required).
+   * Enumerating adapters leave this false (empty = all queues).
+   *
+   * @returns {boolean}
+   */
+  queuesRequired() {
+    return false
+  },
+
+  /**
    * Open process-local state for one Dispatcher job-queue sample wave.
    * Default is a no-op. Adapters with sample-scoped caches override and may
    * return an opaque token for {@link Hooks.afterSampleJobQueues}.

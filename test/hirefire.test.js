@@ -3,8 +3,25 @@ const Configuration = require("../src/configuration")
 const Dispatcher = require("../src/dispatcher")
 
 describe("HireFire", () => {
-  test("configure yields the configuration", () => {
+  const instances = []
+
+  function createHireFire() {
     const hirefire = new HireFire()
+    instances.push(hirefire)
+    return hirefire
+  }
+
+  afterEach(async () => {
+    for (const hirefire of instances) {
+      try {
+        await hirefire.reset()
+      } catch {}
+    }
+    instances.length = 0
+  })
+
+  test("configure yields the configuration", () => {
+    const hirefire = createHireFire()
     let received
     hirefire.configure((config) => {
       received = config
@@ -22,7 +39,7 @@ describe("HireFire", () => {
       .spyOn(Dispatcher.prototype, "ensureJobQueueLoop")
       .mockImplementation(() => {})
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     const config = hirefire.boot()
 
     expect(config).toBe(hirefire.configuration)
@@ -39,7 +56,7 @@ describe("HireFire", () => {
       .spyOn(Dispatcher.prototype, "ensureJobQueueLoop")
       .mockImplementation(() => {})
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     process.env.DYNO = "web.1"
     hirefire.configure(() => {})
 
@@ -52,7 +69,7 @@ describe("HireFire", () => {
       .spyOn(Dispatcher.prototype, "start")
       .mockReturnValue(true)
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     process.env.DYNO = "web.1"
     hirefire.configure(() => {})
 
@@ -65,7 +82,7 @@ describe("HireFire", () => {
       .spyOn(Dispatcher.prototype, "start")
       .mockReturnValue(true)
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     process.env.DYNO = "web.1"
     hirefire.configure(() => {})
 
@@ -78,7 +95,7 @@ describe("HireFire", () => {
       .spyOn(Dispatcher.prototype, "start")
       .mockReturnValue(true)
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     process.env.DYNO = "web.1"
     hirefire.configure(() => {})
 
@@ -91,7 +108,7 @@ describe("HireFire", () => {
       .spyOn(Dispatcher.prototype, "start")
       .mockReturnValue(true)
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     hirefire.configure((config) => {
       config.token = ""
       process.env.DYNO = "web.1"
@@ -109,7 +126,7 @@ describe("HireFire", () => {
       .spyOn(Dispatcher.prototype, "ensureJobQueueLoop")
       .mockImplementation(() => {})
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     hirefire.boot()
     hirefire.configure((config) => {
       config.dyno("worker", () => 1)
@@ -154,7 +171,7 @@ describe("HireFire", () => {
         return [200]
       })
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }
     hirefire.boot()
     expect(hirefire.configuration.dispatcher.running()).toBe(true)
@@ -178,7 +195,7 @@ describe("HireFire", () => {
   })
 
   test("reset stops the dispatcher and replaces the configuration", async () => {
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }
     process.env.DYNO = "web.1"
     const stop = jest.spyOn(hirefire.configuration.dispatcher, "stop")
@@ -209,7 +226,7 @@ describe("HireFire", () => {
         return [200]
       })
 
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }
     hirefire.configure((config) => {
       process.env.DYNO = "web.1"
@@ -230,7 +247,7 @@ describe("HireFire", () => {
   })
 
   test("reset is swap then stop", async () => {
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }
     const previous = hirefire.configuration
     const stop = jest.fn(async () => true)
@@ -248,7 +265,7 @@ describe("HireFire", () => {
 
   test("boot without token does not start dispatcher", () => {
     const start = jest.spyOn(Dispatcher.prototype, "start")
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     hirefire.boot()
     expect(start).not.toHaveBeenCalled()
   })
@@ -260,7 +277,7 @@ describe("HireFire", () => {
     const ensure = jest
       .spyOn(Dispatcher.prototype, "ensureJobQueueLoop")
       .mockImplementation(() => {})
-    const hirefire = new HireFire()
+    const hirefire = createHireFire()
     hirefire.configure((config) => {
       config.token = "inline-token"
       config.dyno("worker", () => 1)

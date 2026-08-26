@@ -100,6 +100,25 @@ describe("middleware", () => {
       expect(ensure).toHaveBeenCalled()
     })
 
+    test("swallows throwing header extraction", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      process.env.DYNO = "web.1"
+      const throwing = {
+        toString() {
+          throw new Error("header boom")
+        },
+      }
+      expect(() => processRequestQueueTime(throwing)).not.toThrow()
+      expect(() =>
+        processRequestQueueTime(
+          () => {
+            throw new Error("getter boom")
+          },
+          () => "1700000000000",
+        ),
+      ).not.toThrow()
+    })
+
     test("does not start the dispatcher without a token", () => {
       process.env.DYNO = "web.1"
       freezeTime(1700000001)
@@ -249,6 +268,11 @@ describe("middleware", () => {
       freezeTime(1700000000)
       expect(calculateRequestQueueTime("1699999940000")).toBe(60000)
       expect(calculateRequestQueueTime("1699999939999")).toBeNull()
+    })
+
+    test("rounds exact half up", () => {
+      freezeTime(1700000001)
+      expect(calculateRequestQueueTime("1700000000000.5")).toBe(999)
     })
 
     test("rounds a fractional millisecond remainder", () => {

@@ -2,8 +2,8 @@ const { processRequestQueueTime } = require("../middleware")
 
 function readRequestStart(nextRequest) {
   return processRequestQueueTime(
-    nextRequest.headers.get("X-Request-Start"),
-    nextRequest.headers.get("X-Queue-Start"),
+    () => nextRequest.headers.get("X-Request-Start"),
+    () => nextRequest.headers.get("X-Queue-Start"),
   )
 }
 

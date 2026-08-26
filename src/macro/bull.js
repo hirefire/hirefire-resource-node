@@ -7,6 +7,8 @@ function loadIORedis() {
   return require("ioredis")
 }
 
+let waveEnumCache = null
+
 /**
  * Job queue latency is not supported for classic Bull. The returned promise always rejects with
  * {@link JobQueueLatencyUnsupportedError} (it does not throw synchronously).
@@ -24,13 +26,71 @@ async function jobQueueLatency(...args) {
 /**
  * @typedef {object} BullOptions
  * @property {string | object} [connection] - IORedis connection: a URL string or an IORedis
- *   options object. When omitted, the `REDIS_TLS_URL`, `REDIS_URL`, `REDISTOGO_URL`,
- *   `REDISCLOUD_URL`, `OPENREDIS_URL` environment variables are tried in order, then
- *   `redis://localhost:6379/0`. Plan path may inject `HIREFIRE_BULL_URL` via
- *   {@link planConnectionOptions}.
+ *   options object. Sampling requires the `ioredis` package. When omitted, the
+ *   `REDIS_TLS_URL`, `REDIS_URL`, `REDISTOGO_URL`, `REDISCLOUD_URL`, `OPENREDIS_URL`
+ *   environment variables are tried in order, then `redis://localhost:6379/0`.
+ *   Plan path may inject `HIREFIRE_BULL_URL` via {@link planConnectionOptions}.
  * @property {object} [connectionOptions] - Passed as the second argument to the IORedis
  *   constructor, for further customization (e.g. TLS options, retry strategies).
  */
+
+/**
+ * Open a process-local all-queues SCAN memo for one Dispatcher sample wave
+ * so size and working share one walk.
+ *
+ * @returns {true}
+ */
+function beforeSampleJobQueues() {
+  waveEnumCache = new Map()
+  return true
+}
+
+/**
+ * Close the all-queues SCAN memo from {@link beforeSampleJobQueues}.
+ *
+ * @param {*} [_token]
+ * @returns {void}
+ */
+function afterSampleJobQueues(_token) {
+  waveEnumCache = null
+}
+
+/**
+ * Drop an inherited all-queues SCAN memo.
+ *
+ * @returns {void}
+ */
+function reinitAfterFork() {
+  waveEnumCache = null
+}
+
+function connectionEnumKey(connection, userConnectionOptions) {
+  try {
+    return JSON.stringify({ connection, userConnectionOptions })
+  } catch {
+    return "object"
+  }
+}
+
+async function resolveQueueNames(redis, queues, cacheKey) {
+  if (queues.length > 0) return queues
+  if (waveEnumCache && waveEnumCache.has(cacheKey)) {
+    return waveEnumCache.get(cacheKey)
+  }
+  const names = await enumerateQueues(redis)
+  if (waveEnumCache) waveEnumCache.set(cacheKey, names)
+  return names
+}
+
+const SAMPLE_REDIS_OPTIONS = {
+  maxRetriesPerRequest: 1,
+  connectTimeout: 5000,
+  commandTimeout: 5000,
+  retryStrategy(times) {
+    if (times > 2) return null
+    return Math.min(times * 50, 200)
+  },
+}
 
 /**
  * Calculates waiting job queue size (JQS) across the specified queues. Counts live wait and
@@ -64,72 +124,6 @@ async function jobQueueLatency(...args) {
  * // Calculate size using the options.connectionOptions property
  * await jobQueueSize("default", { connectionOptions: { tls: { rejectUnauthorized: false } } })
  */
-/**
- * @async
- * @param {...any} args
- * @returns {Promise<number>}
- */
-let waveEnumCache = null
-
-/**
- * Open a process-local all-queues SCAN memo for one Dispatcher sample wave
- * so size and working share one walk.
- *
- * @returns {true}
- */
-function beforeSampleJobQueues() {
-  waveEnumCache = new Map()
-  return true
-}
-
-/**
- * Close the all-queues SCAN memo from {@link beforeSampleJobQueues}.
- *
- * @param {*} [_token]
- * @returns {void}
- */
-function afterSampleJobQueues(_token) {
-  waveEnumCache = null
-}
-
-/**
- * Drop an inherited all-queues SCAN memo.
- *
- * @returns {void}
- */
-function reinitAfterFork() {
-  waveEnumCache = null
-}
-
-function connectionEnumKey(connection, userConnectionOptions) {
-  if (typeof connection === "string") return connection
-  try {
-    return JSON.stringify({ connection, userConnectionOptions })
-  } catch {
-    return "object"
-  }
-}
-
-async function resolveQueueNames(redis, queues, cacheKey) {
-  if (queues.length > 0) return queues
-  if (waveEnumCache && waveEnumCache.has(cacheKey)) {
-    return waveEnumCache.get(cacheKey)
-  }
-  const names = await enumerateQueues(redis)
-  if (waveEnumCache) waveEnumCache.set(cacheKey, names)
-  return names
-}
-
-const SAMPLE_REDIS_OPTIONS = {
-  maxRetriesPerRequest: 1,
-  connectTimeout: 5000,
-  commandTimeout: 5000,
-  retryStrategy(times) {
-    if (times > 2) return null
-    return Math.min(times * 50, 200)
-  },
-}
-
 async function jobQueueSize(...args) {
   const IORedis = loadIORedis()
   let { queues, options } = unpack(args)
@@ -203,13 +197,14 @@ async function jobQueueSize(...args) {
  * queue list measures every discovered queue. Never folded into JQS. Plan
  * records under nested strategy `wrk`.
  *
- * @async
- * @param {...any} args - Queue names, optionally followed by a {@link BullOptions} object.
- * @returns {Promise<number>} Cumulative active job count.
- * @example
- * await jobQueueWorking()
- * @example
- * await jobQueueWorking("default", "mailer")
+ * @overload
+ * @param {...string} queues
+ * @returns {Promise<number>}
+ */
+/**
+ * @overload
+ * @param {...(string | BullOptions)} queuesAndOptions
+ * @returns {Promise<number>}
  */
 async function jobQueueWorking(...args) {
   const IORedis = loadIORedis()
@@ -300,7 +295,7 @@ async function enumerateQueues(redis) {
 function pipelineValue(tuple) {
   if (!tuple) return null
   const [err, value] = tuple
-  if (err) return null
+  if (err) throw err
   return value
 }
 

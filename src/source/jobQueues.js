@@ -17,10 +17,6 @@ class JobQueues {
     return this._jobQueues.length > 0
   }
 
-  count() {
-    return this._jobQueues.length
-  }
-
   findByName(name) {
     const needle = String(name)
     return (
@@ -28,10 +24,6 @@ class JobQueues {
         (jobQueue) => jobQueue.name.toLowerCase() === needle.toLowerCase(),
       ) || null
     )
-  }
-
-  map(fn) {
-    return this._jobQueues.map(fn)
   }
 
   [Symbol.iterator]() {
@@ -96,7 +88,16 @@ function validSample(value) {
 }
 
 function inspect(value) {
-  return typeof value === "string" ? JSON.stringify(value) : String(value)
+  try {
+    const text = value === null ? "null" : typeof value
+    let preview = String(value)
+    if (Buffer.byteLength(preview) > 64) {
+      preview = preview.slice(0, 64) + "…"
+    }
+    return `${text}(${JSON.stringify(preview)})`
+  } catch {
+    return typeof value
+  }
 }
 
 module.exports = JobQueues

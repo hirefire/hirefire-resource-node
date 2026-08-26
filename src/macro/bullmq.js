@@ -7,6 +7,8 @@ function loadIORedis() {
   return require("ioredis")
 }
 
+let waveEnumCache = null
+
 /**
  * Job queue latency is not supported for BullMQ. The returned promise always rejects with
  * {@link JobQueueLatencyUnsupportedError} (it does not throw synchronously).
@@ -24,49 +26,12 @@ async function jobQueueLatency(...args) {
 /**
  * @typedef {object} BullMQOptions
  * @property {string | object} [connection] - IORedis connection: a URL string or an IORedis
- *   options object. When omitted, the `REDIS_TLS_URL`, `REDIS_URL`, `REDISTOGO_URL`,
- *   `REDISCLOUD_URL`, `OPENREDIS_URL` environment variables are tried in order, then
- *   `redis://localhost:6379/0`.
+ *   options object. Sampling requires the `ioredis` package. When omitted, the
+ *   `REDIS_TLS_URL`, `REDIS_URL`, `REDISTOGO_URL`, `REDISCLOUD_URL`, `OPENREDIS_URL`
+ *   environment variables are tried in order, then `redis://localhost:6379/0`.
  * @property {object} [connectionOptions] - Passed as the second argument to the IORedis
  *   constructor, for further customization (e.g. TLS options, retry strategies).
  */
-
-/**
- * Calculates waiting job queue size (JQS) across the specified queues. Counts live wait,
- * paused, and prioritized lists plus due delayed jobs (score ≤ now). Active (working) jobs
- * are excluded. If no queues are specified, measures across all discovered queues.
- *
- * @overload
- * @param {...string} queues - Queue names. Omit to measure across all queues.
- * @returns {Promise<number>} Cumulative waiting job count across the specified queues.
- * @example
- * // Calculate size across all queues
- * await jobQueueSize()
- * @example
- * // Calculate size for the "default" queue
- * await jobQueueSize("default")
- * @example
- * // Calculate size across "default" and "mailer" queues
- * await jobQueueSize("default", "mailer")
- */
-/**
- * @overload
- * @param {...(string | BullMQOptions)} queuesAndOptions - Queue names, optionally followed by a
- *   {@link BullMQOptions} object.
- * @returns {Promise<number>} Cumulative waiting job count across the specified queues.
- * @example
- * // Calculate size using the options.connection property
- * await jobQueueSize("default", { connection: "redis://localhost:6379/0" })
- * @example
- * // Calculate size using the options.connectionOptions property
- * await jobQueueSize("default", { connectionOptions: { tls: { rejectUnauthorized: false } } })
- */
-/**
- * @async
- * @param {...any} args
- * @returns {Promise<number>}
- */
-let waveEnumCache = null
 
 /**
  * Open a process-local all-queues SCAN memo for one Dispatcher sample wave
@@ -99,7 +64,6 @@ function reinitAfterFork() {
 }
 
 function connectionEnumKey(connection, userConnectionOptions) {
-  if (typeof connection === "string") return connection
   try {
     return JSON.stringify({ connection, userConnectionOptions })
   } catch {
@@ -127,6 +91,36 @@ const SAMPLE_REDIS_OPTIONS = {
   },
 }
 
+/**
+ * Calculates waiting job queue size (JQS) across the specified queues. Counts live wait,
+ * paused, and prioritized lists plus due delayed jobs (score ≤ now). Active (working) jobs
+ * are excluded. If no queues are specified, measures across all discovered queues.
+ *
+ * @overload
+ * @param {...string} queues - Queue names. Omit to measure across all queues.
+ * @returns {Promise<number>} Cumulative waiting job count across the specified queues.
+ * @example
+ * // Calculate size across all queues
+ * await jobQueueSize()
+ * @example
+ * // Calculate size for the "default" queue
+ * await jobQueueSize("default")
+ * @example
+ * // Calculate size across "default" and "mailer" queues
+ * await jobQueueSize("default", "mailer")
+ */
+/**
+ * @overload
+ * @param {...(string | BullMQOptions)} queuesAndOptions - Queue names, optionally followed by a
+ *   {@link BullMQOptions} object.
+ * @returns {Promise<number>} Cumulative waiting job count across the specified queues.
+ * @example
+ * // Calculate size using the options.connection property
+ * await jobQueueSize("default", { connection: "redis://localhost:6379/0" })
+ * @example
+ * // Calculate size using the options.connectionOptions property
+ * await jobQueueSize("default", { connectionOptions: { tls: { rejectUnauthorized: false } } })
+ */
 async function jobQueueSize(...args) {
   const IORedis = loadIORedis()
   let { queues, options } = unpack(args)
@@ -166,12 +160,13 @@ async function jobQueueSize(...args) {
     let totalCount = 0
     const pipeline = redis.pipeline()
     const delayedUpper = (Date.now() + 1) * 0x1000 - 1
-    const cmdsPerQueue = 5
+    const cmdsPerQueue = 6
 
     for (const queue of queues) {
       pipeline.lindex(`bull:${queue}:wait`, -1)
       pipeline.llen(`bull:${queue}:wait`)
       pipeline.llen(`bull:${queue}:paused`)
+      pipeline.lindex(`bull:${queue}:paused`, -1)
       pipeline.zcount(`bull:${queue}:delayed`, "-inf", delayedUpper)
       pipeline.zcard(`bull:${queue}:prioritized`)
     }
@@ -183,12 +178,17 @@ async function jobQueueSize(...args) {
       const lastWaitJob = pipelineValue(results[i])
       const waitCount = toCount(pipelineValue(results[i + 1]))
       const pausedCount = toCount(pipelineValue(results[i + 2]))
-      const delayedCount = toCount(pipelineValue(results[i + 3]))
-      const prioritizedCount = toCount(pipelineValue(results[i + 4]))
+      const lastPausedJob = pipelineValue(results[i + 3])
+      const delayedCount = toCount(pipelineValue(results[i + 4]))
+      const prioritizedCount = toCount(pipelineValue(results[i + 5]))
 
       totalCount += waitCount + pausedCount + delayedCount + prioritizedCount
 
-      if (typeof lastWaitJob === "string" && lastWaitJob.startsWith("0:")) {
+      const waitMarker =
+        typeof lastWaitJob === "string" && lastWaitJob.startsWith("0:")
+      const pausedMarker =
+        typeof lastPausedJob === "string" && lastPausedJob.startsWith("0:")
+      if (waitMarker || pausedMarker) {
         totalCount -= 1
       }
     }
@@ -208,13 +208,14 @@ async function jobQueueSize(...args) {
  * queue list measures every discovered queue. Never folded into JQS. Plan
  * records under nested strategy `wrk`.
  *
- * @async
- * @param {...any} args - Queue names, optionally followed by a {@link BullMQOptions} object.
- * @returns {Promise<number>} Cumulative active job count.
- * @example
- * await jobQueueWorking()
- * @example
- * await jobQueueWorking("default", "mailer")
+ * @overload
+ * @param {...string} queues
+ * @returns {Promise<number>}
+ */
+/**
+ * @overload
+ * @param {...(string | BullMQOptions)} queuesAndOptions
+ * @returns {Promise<number>}
  */
 async function jobQueueWorking(...args) {
   const IORedis = loadIORedis()
@@ -305,7 +306,7 @@ async function enumerateQueues(redis) {
 function pipelineValue(tuple) {
   if (!tuple) return null
   const [err, value] = tuple
-  if (err) return null
+  if (err) throw err
   return value
 }
 

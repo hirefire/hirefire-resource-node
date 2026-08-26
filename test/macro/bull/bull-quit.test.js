@@ -25,7 +25,7 @@ function loadBullWithMockedIORedis(clientFactory) {
     jobQueueWorking,
     beforeSampleJobQueues,
     afterSampleJobQueues,
-  } = require("../../src/macro/bull")
+  } = require("../../../src/macro/bull")
   return {
     IORedis,
     jobQueueSize,
@@ -223,16 +223,16 @@ describe("Bull connection lifecycle", () => {
     }
   })
 
-  test("jobQueueSize treats pipeline field errors as zero", async () => {
+  test("jobQueueSize raises pipeline command errors", async () => {
     exec.mockResolvedValueOnce([
       [null, 1],
-      [new Error("nope"), null],
+      [new Error("WRONGTYPE"), null],
       [null, 2],
     ])
 
     await expect(
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
-    ).resolves.toBe(3)
+    ).rejects.toThrow("WRONGTYPE")
   })
 
   test("jobQueueSize disconnects when quit rejects after a pipeline failure", async () => {

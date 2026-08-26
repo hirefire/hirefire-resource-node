@@ -35,7 +35,7 @@ const Plan = {
   },
 
   knownAdapter(adapter) {
-    return String(adapter) in this.ADAPTERS
+    return Object.prototype.hasOwnProperty.call(this.ADAPTERS, String(adapter))
   },
 
   libraryLoaded(adapter) {
@@ -56,6 +56,34 @@ const Plan = {
     const macro = this.ADAPTERS[String(adapter)]
     if (!macro || typeof macro.supportsPlanStrategy !== "function") return false
     return macro.supportsPlanStrategy(strategy)
+  },
+
+  queuesRequired(adapter) {
+    if (!this.knownAdapter(adapter)) return false
+    const macro = this.ADAPTERS[String(adapter)]
+    if (!macro || typeof macro.queuesRequired !== "function") return false
+    return Boolean(macro.queuesRequired())
+  },
+
+  namedPlanQueues(queues) {
+    if (!Array.isArray(queues)) return false
+    return queues.some((queue) => {
+      const name = queue == null ? "" : String(queue).trim()
+      return name.length > 0 && Buffer.byteLength(name) <= MAX_QUEUE_NAME_BYTES
+    })
+  },
+
+  sampleableEntry(entry) {
+    const adapter = entry.adapter ?? entry["adapter"]
+    const strategy = entry.strategy ?? entry["strategy"]
+    if (
+      !this.executable(adapter) ||
+      !this.supportsStrategy(adapter, strategy)
+    ) {
+      return false
+    }
+    if (!this.queuesRequired(adapter)) return true
+    return this.namedPlanQueues(entry.queues ?? entry["queues"])
   },
 
   async aroundJobQueueSample(fn, configuration) {
@@ -172,6 +200,16 @@ const Plan = {
       logger,
     )
     if (queues === null) return
+
+    if (this.queuesRequired(adapter) && queues.length === 0) {
+      safeLog(
+        logger,
+        "error",
+        `[HireFire] Plan adapter ${JSON.stringify(adapter)} for ` +
+          `${JSON.stringify(name)} requires named queues. Entry skipped.`,
+      )
+      return
+    }
 
     try {
       const planOpts =
@@ -324,6 +362,7 @@ function libraryLoaded(adapter) {
   if (name !== "bullmq" && name !== "bull") return false
   try {
     require.resolve(name)
+    require.resolve("ioredis")
     return true
   } catch {
     return false

@@ -48,12 +48,14 @@ class Dispatcher {
     this._unknownAdapterWarned = Object.create(null)
     this._unsupportedStrategyWarned = Object.create(null)
     this._unknownStrategyWarned = Object.create(null)
+    this._emptyQueuesWarned = Object.create(null)
   }
 
   /**
    * Starts the dispatcher loops.
    *
-   * @returns {boolean} `true` when started, `false` if already healthy or stopping.
+   * @returns {boolean} `true` when started. `false` if already running in this
+   *   process, or if starting the loops failed (the failure is logged).
    */
   start() {
     if (this._stopping) return false
@@ -135,12 +137,23 @@ class Dispatcher {
   /**
    * Stops the dispatcher loops and closes transport resources.
    *
-   * @param {{flush?: boolean}} [options]
-   * @returns {Promise<boolean>}
+   * Joins local loops for up to {@link Dispatcher.JOIN_TIMEOUT} seconds each. A
+   * hung sampler is abandoned rather than killed. A later {@link Dispatcher#start}
+   * increments the loop generation so an abandoned loop cannot resume work.
+   * Concurrent {@link Dispatcher#start} is rejected until close finishes.
+   *
+   * @param {{flush?: boolean}} [options] when `flush` is `true` (default),
+   *   best-effort final metric flush before close.
+   * @returns {Promise<boolean>} `true` once the dispatcher has stopped, `false`
+   *   when it was not running.
    */
-  async stop({ flush = true } = {}) {
-    if (!this._running) return false
+  async stop(options = {}) {
+    const { flush = true } = options
     if (this._stopping) return false
+    if (!this._running) {
+      await this._closeTransports()
+      return false
+    }
 
     this._stopping = true
     this._stoppingFlush = flush
@@ -170,27 +183,33 @@ class Dispatcher {
       this._logger().info("[HireFire] Dispatcher stopped.")
       return true
     } finally {
-      try {
-        await this._client.close()
-      } catch (error) {
-        this._logger().error(
-          `[HireFire] Client close error: ${error?.message ?? error}`,
-        )
-      }
-      try {
-        this._lease.demote()
-        await this._lease.close()
-      } catch (error) {
-        this._logger().error(
-          `[HireFire] Lease close error: ${error?.message ?? error}`,
-        )
-      }
+      await this._closeTransports()
       this._stopping = false
       this._stoppingFlush = false
     }
   }
 
+  async _closeTransports() {
+    try {
+      await this._client.close()
+    } catch (error) {
+      this._logger().error(
+        `[HireFire] Client close error: ${error?.message ?? error}`,
+      )
+    }
+    try {
+      this._lease.demote()
+      await this._lease.close()
+    } catch (error) {
+      this._logger().error(
+        `[HireFire] Lease close error: ${error?.message ?? error}`,
+      )
+    }
+  }
+
   /**
+   * Whether the dispatcher is currently running in this process.
+   *
    * @returns {boolean}
    */
   running() {
@@ -329,6 +348,7 @@ class Dispatcher {
     this._unknownAdapterWarned = Object.create(null)
     this._unsupportedStrategyWarned = Object.create(null)
     this._unknownStrategyWarned = Object.create(null)
+    this._emptyQueuesWarned = Object.create(null)
   }
 
   _enterRace() {
@@ -342,11 +362,7 @@ class Dispatcher {
     if (this._configuration.jobQueues.any()) return true
 
     return planJobQueues.some((entry) => {
-      return (
-        this._adapterPresent(entry) &&
-        Plan.executable(entry.adapter) &&
-        Plan.supportsStrategy(entry.adapter, entry.strategy)
-      )
+      return this._adapterPresent(entry) && Plan.sampleableEntry(entry)
     })
   }
 
@@ -386,6 +402,14 @@ class Dispatcher {
     if (Plan.executable(adapter)) {
       if (!Plan.supportsStrategy(adapter, strategy)) {
         this._warnUnsupportedStrategyOnce(name, adapter, strategy)
+        return
+      }
+
+      if (
+        Plan.queuesRequired(adapter) &&
+        !Plan.namedPlanQueues(entry.queues ?? entry["queues"])
+      ) {
+        this._warnEmptyQueuesOnce(name, adapter)
         return
       }
 
@@ -474,6 +498,15 @@ class Dispatcher {
     this._logger().error(
       `[HireFire] Unknown plan strategy ${JSON.stringify(strategy)} for ` +
         `${JSON.stringify(name)}. Entry skipped.`,
+    )
+  }
+
+  _warnEmptyQueuesOnce(name, adapter) {
+    const key = `${name}\0${adapter}`
+    if (this._rememberWarn(this._emptyQueuesWarned, key)) return
+    this._logger().error(
+      `[HireFire] Plan adapter ${JSON.stringify(adapter)} for ` +
+        `${JSON.stringify(name)} requires named queues. Entry skipped.`,
     )
   }
 

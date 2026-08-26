@@ -15,19 +15,19 @@ Job Queue Latency, and Job Queue Size. Set `HIREFIRE_TOKEN` for the library to r
 - Koa 2+
 - Connect 3+
 - Fastify 4+
-- Next.js 14+
+- Next.js 14+ (Node runtime, not Edge)
 - Sails 1+
 - Nest 10+
 
 **Supported worker libraries:**
 
-- BullMQ 4+ (size only, no job queue latency)
-- Bull 4+ (classic OptimalBits/bull, size only, no job queue latency)
-- pg-boss 10-12 (job queue size and latency via read-only SQL). Versions 11 and 12 require Node 22+.
+- BullMQ 4+ (size only, no job queue latency). Sampling needs the `ioredis` package.
+- Bull 4+ (classic OptimalBits/bull, size only, no job queue latency). Sampling needs the `ioredis` package.
+- pg-boss 10 to 12 (job queue size and latency via read-only SQL). Versions 11 and 12 require Node 22+.
 
 The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
 
-**TypeScript:**
+**Types:**
 
 The package ships `.d.ts` declarations generated from its JSDoc. No separate `@types` package is needed.
 
@@ -59,7 +59,7 @@ Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Re
    `npm version <patch|minor|major> --no-git-tag-version`.
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (today's date) and add a fresh empty `## [Unreleased]` above it.
 3. Commit changes with `git commit`.
-4. Create a `git tag` matching the new version (e.g., `v1.0.0`).
+4. Create a `git tag` matching the new version (e.g., `v2.0.0`).
 5. Push the new git tag. Continuous Integration will handle the distribution process.
 
 ## License

@@ -468,6 +468,54 @@ describe("Lease", () => {
     expect(lease.jobQueues[0].name).toBe("worker")
   })
 
+  test("json null adapter is strategy-only", async () => {
+    grant(
+      {
+        "HireFire-Lease-Granted": "true",
+        "HireFire-Sample-Frequency": "15",
+      },
+      JSON.stringify({
+        version: 1,
+        job_queues: [
+          {
+            name: "worker",
+            strategy: "jql",
+            adapter: null,
+            queues: ["default"],
+          },
+        ],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.jobQueues.length).toBe(1)
+    expect(lease.jobQueues[0].adapter).toBe("")
+  })
+
+  test("json null name or strategy is skipped", async () => {
+    grant(
+      {
+        "HireFire-Lease-Granted": "true",
+        "HireFire-Sample-Frequency": "15",
+      },
+      JSON.stringify({
+        version: 1,
+        job_queues: [
+          { name: null, strategy: "jql", adapter: "bullmq" },
+          { name: "mailer", strategy: null, adapter: "bullmq" },
+          {
+            name: "worker",
+            strategy: "jqs",
+            adapter: "bullmq",
+            queues: ["default"],
+          },
+        ],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.jobQueues.length).toBe(1)
+    expect(lease.jobQueues[0].name).toBe("worker")
+  })
+
   test("clamps a garbled sample frequency to a sane floor", async () => {
     grant({
       "HireFire-Lease-Granted": "true",

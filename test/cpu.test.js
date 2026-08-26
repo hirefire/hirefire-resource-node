@@ -86,6 +86,19 @@ describe("CPU", () => {
     expect(configuration.buffer.flush().clock.cpu).toEqual({ 1001: 33.33 })
   })
 
+  test("sample rounds exact half up to two decimal places", () => {
+    mockReadings(0.0, 0.01125)
+    jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
+
+    const collector = cpu()
+    freezeTime(1000)
+    collector.sample()
+    freezeTime(1001)
+    collector.sample()
+
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1001: 1.13 })
+  })
+
   test("clamps to 100 percent", () => {
     mockReadings(0.0, 5.0)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
@@ -209,5 +222,42 @@ describe("CPU", () => {
     collector.sample()
 
     expect(configuration.buffer.flush().clock.cpu).toEqual({ 1002: 50.0 })
+  })
+
+  test("cgroup v2 nan usage falls through", () => {
+    jest.spyOn(Usage, "read").mockImplementation((path) => {
+      if (path === Usage.CGROUP_V2_USAGE) return "usage_usec NaN"
+      if (path === Usage.CGROUP_V1_USAGE) return "3000000000"
+      return null
+    })
+    const { seconds, source } = Usage.reading()
+    expect(seconds).toBeCloseTo(3.0)
+    expect(source).toBe("cgroupV1")
+  })
+
+  test("cgroup v2 infinity usage falls through", () => {
+    jest.spyOn(Usage, "read").mockImplementation((path) => {
+      if (path === Usage.CGROUP_V2_USAGE) return "usage_usec Infinity"
+      if (path === Usage.CGROUP_V1_USAGE) return "3000000000"
+      return null
+    })
+    const { seconds, source } = Usage.reading()
+    expect(seconds).toBeCloseTo(3.0)
+    expect(source).toBe("cgroupV1")
+  })
+
+  test("available cpus ignores nan and infinity v2 quota", () => {
+    jest.spyOn(Usage, "processorCount").mockReturnValue(4)
+    jest.spyOn(Usage, "read").mockImplementation((path) => {
+      if (path === Usage.CGROUP_V2_QUOTA) return "NaN 100000"
+      return null
+    })
+    expect(Usage.availableCpus()).toBe(4)
+
+    Usage.read.mockImplementation((path) => {
+      if (path === Usage.CGROUP_V2_QUOTA) return "Infinity 100000"
+      return null
+    })
+    expect(Usage.availableCpus()).toBe(4)
   })
 })

@@ -22,6 +22,32 @@ if (!fs.existsSync(indexDts) || fs.statSync(indexDts).size === 0) {
   fail("types/index.d.ts missing or empty after build:types")
 }
 
+const srcDir = path.join(root, "src")
+const typesDir = path.join(root, "types")
+
+function walkDts(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+  const files = []
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) files.push(...walkDts(full))
+    else if (entry.name.endsWith(".d.ts")) files.push(full)
+  }
+  return files
+}
+
+const stale = walkDts(typesDir).filter((dts) => {
+  const rel = path.relative(typesDir, dts).replace(/\.d\.ts$/, ".js")
+  return !fs.existsSync(path.join(srcDir, rel))
+})
+if (stale.length) {
+  fail(
+    `stale declaration files without matching source:\n${stale
+      .map((file) => path.relative(root, file))
+      .join("\n")}`,
+  )
+}
+
 const requiredDocs = ["LICENSE", "README.md", "CHANGELOG.md"]
 const required = new Set(["types/index.d.ts", ...requiredDocs])
 for (const entry of Object.values(pkg.exports)) {

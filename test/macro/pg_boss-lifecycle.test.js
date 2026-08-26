@@ -50,7 +50,6 @@ describeIfPg("pg-boss connection lifecycle", () => {
       .mockResolvedValueOnce({ rows: [] })
   }
 
-  /** Waiting SQL must match HireFire predicate and never claim work. */
   function expectWaitingSql(sql) {
     expect(sql).toMatch(/state\s*<\s*'active'/)
     expect(sql).toMatch(/start_after\s*<=\s*now\(\)/)

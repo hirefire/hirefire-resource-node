@@ -42,7 +42,6 @@ function installedPgBossVersion() {
   }
 }
 
-/** True when the installed package is expected to ship schema with `blocked` (≥ 12.19). */
 function expectsBlockedColumn(version) {
   if (!version) return false
   const [maj, min] = String(version)

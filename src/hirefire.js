@@ -57,10 +57,7 @@ class HireFire {
 
   /**
    * Stops any running dispatcher and replaces the configuration with a fresh, empty one. Mainly
-   * for tests and reconfiguration between runs.
-   *
-   * Order is swap-then-stop so the old dispatcher can final-flush against its injected
-   * configuration instance. Consumers must `await` this method.
+   * for tests and reconfiguration between runs. Consumers must `await` this method.
    *
    * @returns {Promise<boolean>} Resolves once any running dispatcher has stopped. Resolves to
    *   `true` when a running dispatcher was stopped, or `false` when no dispatcher was running.

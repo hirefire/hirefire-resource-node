@@ -39,17 +39,27 @@ const skipGlobalReset =
   /[\\/]test[\\/]macro[\\/]/.test(testPath) &&
   !/-plan\.test\.js$/.test(testPath)
 
+async function closeOpenHandles() {
+  const dispatcher = HireFire.configuration._dispatcher
+  if (dispatcher) {
+    try {
+      await dispatcher.stop({ flush: false })
+    } catch {}
+  }
+  jest.restoreAllMocks()
+  nock.cleanAll()
+  nock.abortPendingRequests()
+}
+
 if (!skipGlobalReset) {
   beforeEach(async () => {
     await resetState()
   })
-
-  afterEach(async () => {
-    jest.restoreAllMocks()
-    nock.cleanAll()
-    nock.abortPendingRequests()
-    await resetState()
-  })
 }
+
+afterEach(async () => {
+  await closeOpenHandles()
+  await resetState()
+})
 
 module.exports = { silentLogger, freezeTime }

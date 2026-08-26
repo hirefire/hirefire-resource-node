@@ -3,5 +3,5 @@
 dump.rdb
 .env
 node_modules
-types
+/types
 AGENTS.md

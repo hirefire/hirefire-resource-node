@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - The library now pushes metrics to `https://data.hirefire.io`. HireFire no longer polls the app.
-- Request queue time is sampled automatically from HTTP traffic. You do not need a web `dyno` line.
+- Request queue time is sampled from HTTP traffic through the middleware. A web `dyno` line is not required.
 - CPU activity is sampled automatically.
 - Optional token-only setup with `HireFire.boot()`. Existing `config.dyno` job queue blocks still work.
 - Count of jobs still being processed (`jobQueueWorking`) for BullMQ, classic Bull, and pg-boss.
@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Metrics are sent only when `HIREFIRE_TOKEN` is set.
+- Job queue metrics are sampled by one process at a time.
 - Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
 - BullMQ job queue size no longer counts active jobs.
 - Required Node.js is 20+. Official Express support is 4+.
@@ -33,7 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 - Serving `GET /hirefire/:token/info`.
+- `POST` of request queue time JSON to `logdrain.hirefire.io`.
 - Official support for Node.js 16 and 18.
+
+### Fixed
+
+- A globally paused BullMQ 4 queue no longer counts the pause marker as a waiting job.
+- BullMQ and classic Bull sampling now require `ioredis`. Without it, those job metrics are not collected.
 
 ## [1.2.0] - 2026-02-03
 

@@ -354,7 +354,6 @@ async function detectHasBlockedColumn(client, schema, cacheKey) {
   return has
 }
 
-/** @internal Test-only: clear blocked-column caches between unit cases. */
 function _resetBlockedColumnCacheForTests() {
   blockedColumnPresentCache.clear()
   blockedColumnAbsentUntil.clear()

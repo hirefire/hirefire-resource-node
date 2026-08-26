@@ -3,10 +3,12 @@ const {
   jobQueueLatency,
   jobQueueSize,
   jobQueueWorking,
-} = require("../../src/macro/bullmq")
-const { JobQueueLatencyUnsupportedError } = require("../../src/errors")
-const Plan = require("../../src/plan")
-const Configuration = require("../../src/configuration")
+  beforeSampleJobQueues,
+  afterSampleJobQueues,
+} = require("../../../src/macro/bullmq")
+const { JobQueueLatencyUnsupportedError } = require("../../../src/errors")
+const Plan = require("../../../src/plan")
+const Configuration = require("../../../src/configuration")
 const IORedis = require("ioredis")
 
 const redisURL = `redis://127.0.0.1:${process.env.REDIS_PORT || "6379"}/0`
@@ -68,6 +70,12 @@ describe("BullMQ", () => {
   test("jobQueueSize includes paused jobs", async () => {
     await defaultQueue.add("liveJob", {})
     await defaultQueue.pause()
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
+  })
+
+  test("jobQueueSize does not count a paused-list marker as a job", async () => {
+    await defaultQueue.add("plainJob", {})
+    await redis.rpush("bull:default:paused", "0:0")
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
   })
 
@@ -239,6 +247,30 @@ describe("BullMQ", () => {
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
     await redis.del("bull:default:wait")
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
+  })
+
+  test("all-queues wave cache does not reuse names across connectionOptions", async () => {
+    await defaultQueue.add("liveJob", {})
+    const alt = new IORedis(redisURL, { db: 1 })
+    try {
+      await alt.flushdb()
+      await alt.rpush("bull:altq:wait", "1")
+      beforeSampleJobQueues()
+      try {
+        expect(await jobQueueSize({ connection: redisURL })).toBe(1)
+        expect(
+          await jobQueueSize({
+            connection: redisURL,
+            connectionOptions: { db: 1 },
+          }),
+        ).toBe(1)
+      } finally {
+        afterSampleJobQueues()
+      }
+    } finally {
+      await alt.flushdb()
+      await alt.quit()
+    }
   })
 
   test("jobQueueSize counts priority jobs once after global pause", async () => {

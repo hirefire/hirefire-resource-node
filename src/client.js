@@ -12,17 +12,7 @@ function isStaleConnectionCode(code) {
   )
 }
 
-/**
- * Raised when a HireFire API request cannot complete successfully.
- *
- * Covers a missing token, transport/timeout failures, 5xx or other unexpected statuses.
- * A 401 is treated as "no grant" and returns null (does not raise). A 413 returns
- * "payload_too_large" (does not raise). Failed lease responses raise.
- */
 class RequestError extends Error {
-  /**
-   * @param {string} message
-   */
   constructor(message) {
     super(message)
     this.name = "RequestError"
@@ -82,12 +72,6 @@ class Client {
     )
   }
 
-  /**
-   * Wait for in-flight requests (bounded), then destroy the keep-alive agent.
-   * Mid-request-safe close: do not tear down sockets while a POST may still complete.
-   *
-   * @returns {Promise<void>}
-   */
   async close() {
     const pending = [...this._pending]
     if (pending.length > 0) {

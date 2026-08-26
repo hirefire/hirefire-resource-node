@@ -14,6 +14,10 @@ describe("Plan", () => {
     expect(Plan.knownAdapter("bull")).toBe(true)
     expect(Plan.knownAdapter("pg_boss")).toBe(true)
     expect(Plan.knownAdapter("sidekiq")).toBe(false)
+    expect(Plan.knownAdapter("constructor")).toBe(false)
+    expect(Plan.knownAdapter("toString")).toBe(false)
+    expect(Plan.knownAdapter("valueOf")).toBe(false)
+    expect(Plan.knownAdapter("__proto__")).toBe(false)
     expect(Plan.knownStrategy("jqs")).toBe(true)
     expect(Plan.knownStrategy("jql")).toBe(true)
   })
@@ -78,7 +82,7 @@ describe("Plan", () => {
     const present = new Set()
 
     const mockResolve = function resolve(request, options) {
-      if (request === "bull" || request === "bullmq") {
+      if (request === "bull" || request === "bullmq" || request === "ioredis") {
         if (!present.has(request)) {
           const err = new Error(`Cannot find module '${request}'`)
           err.code = "MODULE_NOT_FOUND"
@@ -96,12 +100,21 @@ describe("Plan", () => {
       expect(Plan.libraryLoaded("bullmq")).toBe(false)
 
       present.add("bullmq")
+      expect(Plan.libraryLoaded("bullmq")).toBe(false)
+      expect(Plan.executable("bullmq")).toBe(false)
+
+      present.add("ioredis")
       expect(Plan.libraryLoaded("bullmq")).toBe(true)
       expect(Plan.libraryLoaded("bull")).toBe(false)
       expect(Plan.executable("bull")).toBe(false)
 
       present.delete("bullmq")
+      present.delete("ioredis")
       present.add("bull")
+      expect(Plan.libraryLoaded("bull")).toBe(false)
+      expect(Plan.executable("bull")).toBe(false)
+
+      present.add("ioredis")
       expect(Plan.libraryLoaded("bull")).toBe(true)
       expect(Plan.libraryLoaded("bullmq")).toBe(false)
       expect(Plan.executable("bullmq")).toBe(false)
@@ -166,7 +179,11 @@ describe("Plan", () => {
     const sample = jest.fn(async () => 1)
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
+    const origWorking = macro.jobQueueWorking
     macro.jobQueueSize = sample
+    macro.jobQueueWorking = async () => {
+      throw new Error("isolated from live redis")
+    }
     try {
       jest.spyOn(Plan, "executable").mockReturnValue(true)
       jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
@@ -186,6 +203,7 @@ describe("Plan", () => {
       expect(sample).toHaveBeenCalledWith({})
     } finally {
       macro.jobQueueSize = orig
+      macro.jobQueueWorking = origWorking
     }
   })
 
@@ -193,7 +211,11 @@ describe("Plan", () => {
     const sample = jest.fn(async () => 1)
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
+    const origWorking = macro.jobQueueWorking
     macro.jobQueueSize = sample
+    macro.jobQueueWorking = async () => {
+      throw new Error("isolated from live redis")
+    }
     try {
       jest.spyOn(Plan, "executable").mockReturnValue(true)
       jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
@@ -230,13 +252,18 @@ describe("Plan", () => {
       )
     } finally {
       macro.jobQueueSize = orig
+      macro.jobQueueWorking = origWorking
     }
   })
 
   test("invalid sample dropped", async () => {
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
+    const origWorking = macro.jobQueueWorking
     macro.jobQueueSize = async () => -1
+    macro.jobQueueWorking = async () => {
+      throw new Error("isolated from live redis")
+    }
     try {
       await Plan.execute(
         {
@@ -250,6 +277,7 @@ describe("Plan", () => {
       expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
     } finally {
       macro.jobQueueSize = orig
+      macro.jobQueueWorking = origWorking
     }
   })
 
@@ -281,7 +309,11 @@ describe("Plan", () => {
     const sample = jest.fn(async () => 1.5)
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
+    const origWorking = macro.jobQueueWorking
     macro.jobQueueSize = sample
+    macro.jobQueueWorking = async () => {
+      throw new Error("isolated from live redis")
+    }
     try {
       jest.spyOn(Plan, "executable").mockReturnValue(true)
       jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
@@ -302,14 +334,19 @@ describe("Plan", () => {
       expect(Object.values(data.worker.jqs)[0]).toBe(1.5)
     } finally {
       macro.jobQueueSize = orig
+      macro.jobQueueWorking = origWorking
     }
   })
 
   test("execute rescues macro errors and logs without throwing", async () => {
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
+    const origWorking = macro.jobQueueWorking
     macro.jobQueueSize = async () => {
       throw new Error("broker down")
+    }
+    macro.jobQueueWorking = async () => {
+      throw new Error("isolated from live redis")
     }
     try {
       jest.spyOn(Plan, "executable").mockReturnValue(true)
@@ -321,6 +358,7 @@ describe("Plan", () => {
           planOptions: () => ({}),
           planConnectionOptions: () => ({}),
           jobQueueSize: macro.jobQueueSize,
+          jobQueueWorking: macro.jobQueueWorking,
         }),
         configurable: true,
       })
@@ -341,6 +379,7 @@ describe("Plan", () => {
       )
     } finally {
       macro.jobQueueSize = orig
+      macro.jobQueueWorking = origWorking
     }
   })
 
@@ -1042,6 +1081,73 @@ describe("Plan", () => {
         String(c[0]),
       )
       expect(messages.some((m) => m.includes("wrk sample dropped"))).toBe(true)
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
+  test("sampleableEntry is false for queues-required empty lists", () => {
+    const required = {
+      supportsPlanStrategy: () => true,
+      queuesRequired: () => true,
+    }
+    const enumerating = {
+      supportsPlanStrategy: () => true,
+      queuesRequired: () => false,
+    }
+    jest.spyOn(Plan, "executable").mockReturnValue(true)
+    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
+    jest
+      .spyOn(Plan.ADAPTERS, "bullmq", "get")
+      .mockImplementation(() => required)
+    expect(
+      Plan.sampleableEntry({
+        adapter: "bullmq",
+        strategy: "jqs",
+        queues: [],
+      }),
+    ).toBe(false)
+
+    jest
+      .spyOn(Plan.ADAPTERS, "bullmq", "get")
+      .mockImplementation(() => enumerating)
+    expect(
+      Plan.sampleableEntry({
+        adapter: "bullmq",
+        strategy: "jqs",
+        queues: [],
+      }),
+    ).toBe(true)
+  })
+
+  test("execute skips queues-required entries with no named queues", async () => {
+    const sample = jest.fn(async () => 4)
+    const macro = {
+      supportsPlanStrategy: () => true,
+      queuesRequired: () => true,
+      jobQueueSize: sample,
+      planOptions: () => ({}),
+      planConnectionOptions: () => ({}),
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => macro,
+      configurable: true,
+    })
+    try {
+      await Plan.execute(
+        {
+          name: "mail",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: [],
+        },
+        configuration,
+      )
+      expect(sample).not.toHaveBeenCalled()
+      expect(configuration.logger.error.mock.calls.join(" ")).toMatch(
+        /requires named queues/,
+      )
     } finally {
       Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
     }

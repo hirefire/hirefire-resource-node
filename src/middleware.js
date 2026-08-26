@@ -3,42 +3,28 @@ const safeLog = require("./log")
 
 const REQUEST_QUEUE_TIME_LIMIT = 60000
 
-/**
- * Strip header values. Blank / whitespace-only values are absent so an empty
- * Request-Start does not block Queue-Start fallback.
- *
- * @param {string|null|undefined} value
- * @returns {string|null}
- */
 function presentHeader(value) {
   if (value == null) return null
   const stripped = String(value).trim()
   return stripped.length > 0 ? stripped : null
 }
 
-/**
- * Prefer X-Request-Start, then X-Queue-Start.
- *
- * @param {string|null|undefined} requestStart
- * @param {string|null|undefined} queueStart
- * @returns {string|null}
- */
 function resolveRequestStart(requestStart, queueStart) {
   return presentHeader(requestStart) || presentHeader(queueStart)
 }
 
-/**
- * @param {string|null|undefined} requestStart
- * @param {string|null|undefined} [queueStart]
- */
 function processRequestQueueTime(requestStart, queueStart) {
-  const header =
-    arguments.length >= 2
-      ? resolveRequestStart(requestStart, queueStart)
-      : presentHeader(requestStart)
-  if (!header) return
-
   try {
+    const rawStart =
+      typeof requestStart === "function" ? requestStart() : requestStart
+    const rawQueue =
+      typeof queueStart === "function" ? queueStart() : queueStart
+    const header =
+      arguments.length >= 2
+        ? resolveRequestStart(rawStart, rawQueue)
+        : presentHeader(rawStart)
+    if (!header) return
+
     const requestQueueTime = calculateRequestQueueTime(header)
     if (requestQueueTime === null) return
 

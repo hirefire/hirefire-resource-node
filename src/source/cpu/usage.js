@@ -17,10 +17,6 @@ const Usage = {
     1073741824: 2.0,
   },
 
-  totalSeconds() {
-    return this.reading().seconds
-  },
-
   reading() {
     const sources = [
       ["cgroupV2", () => this.cgroupV2Seconds()],
@@ -124,14 +120,14 @@ const Usage = {
     const [quota, period] = value.split(/\s+/)
     if (quota === undefined || quota === "max") return null
 
-    const quotaValue = parseFloat(quota)
-    const periodValue = parseFloat(period)
+    const quotaValue = this.number(quota)
+    const periodValue = this.number(period)
     return quotaValue > 0 && periodValue > 0 ? quotaValue / periodValue : null
   },
 
   cgroupV1Quota() {
-    const quota = parseInt(this.read(this.CGROUP_V1_QUOTA))
-    const period = parseFloat(this.read(this.CGROUP_V1_PERIOD))
+    const quota = this.number(this.read(this.CGROUP_V1_QUOTA))
+    const period = this.number(this.read(this.CGROUP_V1_PERIOD))
     return quota > 0 && period > 0 ? quota / period : null
   },
 
@@ -147,7 +143,7 @@ const Usage = {
   renderEntitlement() {
     if (!process.env.RENDER) return null
 
-    const count = parseFloat(process.env.RENDER_CPU_COUNT)
+    const count = this.number(process.env.RENDER_CPU_COUNT)
     return count > 0 ? count : null
   },
 
@@ -161,6 +157,12 @@ const Usage = {
     } catch {
       return 1
     }
+  },
+
+  number(value) {
+    if (value == null || value === "") return null
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : null
   },
 
   read(path) {

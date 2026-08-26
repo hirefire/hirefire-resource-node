@@ -7,6 +7,7 @@ describe("Plan.Hooks", () => {
     expect(Hooks.supportsPlanStrategy("jql")).toBe(true)
     expect(Hooks.supportsPlanStrategy("jqs")).toBe(true)
     expect(Hooks.supportsPlanStrategy("nope")).toBe(false)
+    expect(Hooks.queuesRequired()).toBe(false)
     expect(Hooks.beforeSampleJobQueues()).toBeNull()
     expect(Hooks.afterSampleJobQueues("anything")).toBeUndefined()
     expect(Hooks.reinitAfterFork()).toBeUndefined()

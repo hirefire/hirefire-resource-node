@@ -60,6 +60,11 @@ jobs:
         image: redis:7
         ports:
           - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       postgres:
         image: postgres:16
         env:
@@ -115,6 +120,15 @@ jobs:
           package-manager-cache: false
       - name: Install dependencies
         run: npm ci
+      - name: Verify tag is on master
+        run: |
+          git fetch --depth=1 origin master
+          tagged="$(git rev-parse HEAD)"
+          master="$(git rev-parse origin/master)"
+          if [ "$tagged" != "$master" ]; then
+            echo "Tag must point at origin/master ($master), got $tagged"
+            exit 1
+          fi
       - name: Verify tag matches package version
         env:
           TAG: ${{ github.ref_name }}
