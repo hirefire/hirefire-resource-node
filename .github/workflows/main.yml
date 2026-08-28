@@ -150,4 +150,10 @@ jobs:
       - name: Verify package artifacts
         run: bin/verify-package
       - name: Publish package
-        run: npm publish --access public
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$version" == *-* ]]; then
+            npm publish --access public --tag rc
+          else
+            npm publish --access public
+          fi

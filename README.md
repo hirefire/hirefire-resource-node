@@ -56,12 +56,14 @@ Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Re
 ## Release
 
 1. Update the version in `package.json` using
-   `npm version <patch|minor|major> --no-git-tag-version`.
+   `npm version <patch|minor|major> --no-git-tag-version` (prerelease:
+   `npm version prerelease --preid=rc --no-git-tag-version`, e.g. `2.0.0-rc.1`).
 2. If `package.json` dependencies changed, refresh `package-lock.json` with `npm install`.
 3. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (today's date) and add a fresh empty `## [Unreleased]` above it.
 4. Commit changes with `git commit`.
-5. Create a `git tag` matching the new version (e.g., `v2.0.0`).
+5. Create a `git tag` matching the new version (e.g., `v2.0.0` or `v2.0.0-rc.1`).
 6. Push the new git tag. Continuous Integration will handle the distribution process.
+   Prerelease versions publish to the `rc` dist-tag, not `latest`.
 
 ## License
 
