@@ -71,6 +71,7 @@ test("test/macro/bull without a trailing slash would overlap bullmq", () => {
 })
 
 const SIZE_ONLY = new Set(["bullmq", "bull"])
+const NODE_RUNTIME_ONLY = new Set(["next"])
 
 function readmeSection(heading) {
   const readme = fs.readFileSync(path.join(root, "README.md"), "utf8")
@@ -150,9 +151,10 @@ test("every matrix integration is in the README and the README has no extras", (
       ].sort((a, b) => a - b)
       expect(line).toMatch(
         new RegExp(
-          `Versions ${majorsNeedingNewerNode.join(
+          `versions ${majorsNeedingNewerNode.join(
             " and ",
-          )} require Node ${requiredNode}\\+`,
+          )} require Node\\.js ${requiredNode}\\+`,
+          "i",
         ),
       )
     } else {
@@ -163,6 +165,9 @@ test("every matrix integration is in the README and the README has no extras", (
       expect(line).toMatch(/ioredis/)
     } else {
       expect(line).not.toMatch(/size only/)
+    }
+    if (NODE_RUNTIME_ONLY.has(entry.package)) {
+      expect(line).toMatch(/not Edge/)
     }
   }
   expect([...used].sort()).toEqual([...bullets].sort())
