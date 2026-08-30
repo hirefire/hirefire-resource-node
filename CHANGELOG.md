@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Classic Bull: job queue size only. Job queue latency is unsupported.
 - pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them.
 - Support Node.js 22, 24, and 26.
-- Support Express 5, Fastify 5, Koa 3, Nest 11, Next.js 15 and 16, and BullMQ 5 and 6.
+- Support Express 5, Fastify 5, Koa 3, Nest 11 and 12, Next.js 15 and 16, and BullMQ 5 and 6.
 - The package now ships TypeScript declarations.
 
 ### Changed

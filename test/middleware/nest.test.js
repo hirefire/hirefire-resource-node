@@ -14,6 +14,10 @@ describe("Nest", () => {
   let start
 
   beforeEach(async () => {
+    jest.restoreAllMocks()
+    delete process.env.HIREFIRE_TOKEN
+    delete process.env.DYNO
+    await HireFire.reset()
     app = await NestFactory.create(AppModule, { logger: false })
     app.use(HireFireMiddlewareExpress)
     await app.init()
@@ -22,6 +26,7 @@ describe("Nest", () => {
 
   afterEach(async () => {
     await app.close()
+    jest.restoreAllMocks()
   })
 
   test("samples the web request and starts the dispatcher", async () => {

@@ -37,6 +37,15 @@ fi
 if [ "$package" = "bullmq" ] || [ "$package" = "bull" ]; then
   # BullMQ 6 lists ioredis as an optional peer. The macros still require it.
   npm install "${package}@${major}" ioredis --no-save --no-audit --no-fund --silent
+elif [ "$package" = "@nestjs/platform-express" ]; then
+  # Nest 12 ships ESM. Jest 29 cannot parse those files. jest-light-runner uses
+  # Node's require, which loads them via require(esm). Peers are explicit so the
+  # test can `require("@nestjs/core")` / `common` after a --no-save install.
+  nest_pkgs=("${package}@${major}" "@nestjs/core@${major}" "@nestjs/common@${major}" reflect-metadata)
+  if [ "$major" -ge 12 ]; then
+    nest_pkgs+=(jest-light-runner)
+  fi
+  npm install "${nest_pkgs[@]}" --no-save --no-audit --no-fund --silent
 else
   npm install "${package}@${major}" --no-save --no-audit --no-fund --silent
 fi
@@ -44,5 +53,8 @@ fi
 # runInBand keeps Pool spy lifecycle tests from racing real Pool integration in one worker.
 if [ "$package" = "pg-boss" ]; then
   exec npx --no-install jest --runInBand "$testfile"
+fi
+if [ "$package" = "@nestjs/platform-express" ] && [ "$major" -ge 12 ]; then
+  exec npx --no-install jest --runner=jest-light-runner "$testfile"
 fi
 exec npx --no-install jest "$testfile"
