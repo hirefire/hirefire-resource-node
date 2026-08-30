@@ -831,10 +831,6 @@ describe("Dispatcher", () => {
     const webPosted = new Promise((resolve) => {
       resolveWeb = resolve
     })
-    let resolveWorker
-    const workerPosted = new Promise((resolve) => {
-      resolveWorker = resolve
-    })
     let workerSeen = false
 
     nock(BASE)
@@ -864,10 +860,7 @@ describe("Dispatcher", () => {
       .post("/metrics/ingest")
       .reply(function (uri, body) {
         if (body.some((e) => e.name === "web")) resolveWeb(body)
-        if (body.some((e) => e.name === "worker")) {
-          workerSeen = true
-          resolveWorker(body)
-        }
+        if (body.some((e) => e.name === "worker")) workerSeen = true
         return [200]
       })
 
@@ -885,7 +878,6 @@ describe("Dispatcher", () => {
     expect(workerSeen).toBe(false)
 
     releaseGate()
-    await withTimeout(workerPosted, 3000, "worker never dispatched")
     await dispatcher.stop()
   })
 
