@@ -96,3 +96,7 @@ console.log(
   "declaration paths plus",
   requiredDocs.join(", "),
 )
+
+execSync("npx --no-install attw --pack . --ignore-rules named-exports", {
+  stdio: "inherit",
+})

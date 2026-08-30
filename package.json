@@ -97,10 +97,14 @@
   "publishConfig": {
     "access": "public"
   },
+  "tsd": {
+    "directory": "test/types"
+  },
   "scripts": {
     "test": "bin/matrix",
     "test:core": "bin/run-cell core",
-    "check": "prettier --check --no-semi . && npm run build:types && tsc -p test/types/tsconfig.json",
+    "check": "prettier --check --no-semi . && npm run build:types && tsc -p test/types/tsconfig.json && tsd && attw --pack . --ignore-rules named-exports",
+    "types:test": "tsd",
     "format": "prettier --write --no-semi .",
     "build:types": "node bin/clean-types && tsc",
     "prepack": "npm run build:types"
@@ -117,11 +121,13 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "ioredis": "^5.4.1",
     "jest": "^29.3.1",
     "nock": "^13.3.0",
     "prettier": "^3.1.0",
     "supertest": "^6.3.3",
+    "tsd": "^0.33.0",
     "typescript": "^6.0.3"
   }
 }
