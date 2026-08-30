@@ -29,11 +29,11 @@ The test suite runs against these minimum versions and the current latest releas
 
 **Types:**
 
-The package ships `.d.ts` declarations generated from its JSDoc. No separate `@types` package is needed.
+The package ships `.d.ts` declarations generated from its JSDoc.
 
 **Documentation:**
 
-Public API prose is JSDoc on the consumer-facing surface. Changelog lives in [CHANGELOG.md](CHANGELOG.md).
+The public API is documented with JSDoc. Changelog lives in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
