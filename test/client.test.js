@@ -461,12 +461,12 @@ describe("Client (persistent connection)", () => {
       }
       req.resume()
     })
-    const client = new Client({ token: "t" }, { timeout: 0.1 })
+    const client = new Client({ token: "t" }, { timeout: 0.05 })
 
     await client.submitSamples("[]")
     await expect(client.submitSamples("[]")).rejects.toThrow("timed out")
-    // A retry would fire synchronously with the rejection; 50ms proves none.
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // A retry would fire synchronously with the rejection; 25ms proves none.
+    await new Promise((resolve) => setTimeout(resolve, 25))
     expect(requests).toBe(2)
     await client.close()
   })
@@ -476,8 +476,13 @@ describe("Client (persistent connection)", () => {
     const gate = new Promise((resolve) => {
       release = resolve
     })
+    let arrived
+    const arrival = new Promise((resolve) => {
+      arrived = resolve
+    })
     let completed = false
     await listen((req, res) => {
+      arrived()
       req.resume().on("end", () => {
         gate.then(() => {
           completed = true
@@ -487,10 +492,10 @@ describe("Client (persistent connection)", () => {
     })
     const client = new Client({ token: "t" })
     const inflight = client.submitSamples("[]")
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    await arrival
 
     const closePromise = client.close()
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 25))
     expect(completed).toBe(false)
 
     release()
