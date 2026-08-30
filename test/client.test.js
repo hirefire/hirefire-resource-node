@@ -461,11 +461,12 @@ describe("Client (persistent connection)", () => {
       }
       req.resume()
     })
-    const client = new Client({ token: "t" }, { timeout: 0.15 })
+    const client = new Client({ token: "t" }, { timeout: 0.1 })
 
     await client.submitSamples("[]")
     await expect(client.submitSamples("[]")).rejects.toThrow("timed out")
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    // A retry would fire synchronously with the rejection; 50ms proves none.
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(requests).toBe(2)
     await client.close()
   })
