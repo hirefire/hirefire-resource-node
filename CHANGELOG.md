@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Optional token-only setup with `HireFire.boot()`. Existing `config.dyno` job queue blocks still work.
 - Count of jobs still being processed (`jobQueueWorking`) for BullMQ, classic Bull, and pg-boss.
 - Classic Bull: job queue size only. Job queue latency is unsupported.
-- pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them.
+- pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them. Versions 11 and 12 require Node.js 22+.
 - Support Node.js 22, 24, and 26.
 - Support Express 5, Fastify 5, Koa 3, Nest 11 and 12, Next.js 15 and 16, and BullMQ 5 and 6.
 - The package now ships TypeScript declarations.
