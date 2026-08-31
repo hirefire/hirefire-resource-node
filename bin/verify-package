@@ -1,11 +1,6 @@
 #!/usr/bin/env node
 "use strict"
 
-// Assert the packed tarball ships LICENSE, README, CHANGELOG, and generated types.
-//
-// Used by GitHub Actions `check` and `publish`. Re-emits declarations if needed,
-// then checks npm pack --dry-run.
-
 const { execSync } = require("child_process")
 const fs = require("fs")
 const path = require("path")
@@ -20,37 +15,9 @@ function fail(message) {
   process.exit(1)
 }
 
-execSync("npm run build:types", { stdio: "inherit" })
-
 const indexDts = path.join(root, "types", "index.d.ts")
 if (!fs.existsSync(indexDts) || fs.statSync(indexDts).size === 0) {
-  fail("types/index.d.ts missing or empty after build:types")
-}
-
-const srcDir = path.join(root, "src")
-const typesDir = path.join(root, "types")
-
-function walkDts(dir) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true })
-  const files = []
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) files.push(...walkDts(full))
-    else if (entry.name.endsWith(".d.ts")) files.push(full)
-  }
-  return files
-}
-
-const stale = walkDts(typesDir).filter((dts) => {
-  const rel = path.relative(typesDir, dts).replace(/\.d\.ts$/, ".js")
-  return !fs.existsSync(path.join(srcDir, rel))
-})
-if (stale.length) {
-  fail(
-    `stale declaration files without matching source:\n${stale
-      .map((file) => path.relative(root, file))
-      .join("\n")}`,
-  )
+  fail("types/index.d.ts missing or empty")
 }
 
 const requiredDocs = ["LICENSE", "README.md", "CHANGELOG.md"]
@@ -58,6 +25,14 @@ const required = new Set(["types/index.d.ts", ...requiredDocs])
 for (const entry of Object.values(pkg.exports)) {
   if (entry && typeof entry === "object" && typeof entry.types === "string") {
     required.add(entry.types.replace(/^\.\//, ""))
+  }
+}
+
+for (const rel of required) {
+  if (requiredDocs.includes(rel)) continue
+  const full = path.join(root, rel)
+  if (!fs.existsSync(full) || fs.statSync(full).size === 0) {
+    fail(`${rel} missing or empty`)
   }
 }
 

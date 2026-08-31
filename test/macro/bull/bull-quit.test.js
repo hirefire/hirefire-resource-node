@@ -6,12 +6,6 @@ function emptyQueueResults(count = 1) {
   return rows
 }
 
-/**
- * Load jobQueueSize against a fresh virtual ioredis mock.
- * Core cell has no ioredis package (virtual required). Combined runs with
- * bull.test.js may have already resolved real ioredis: resetModules + doMock
- * so the sampler always hits this mock, not the real client.
- */
 function loadBullWithMockedIORedis(clientFactory) {
   jest.resetModules()
   const IORedis = jest.fn().mockImplementation(clientFactory)

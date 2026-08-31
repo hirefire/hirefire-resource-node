@@ -3,6 +3,5 @@
 dump.rdb
 .env
 node_modules
-/types
 /coverage
 AGENTS.md

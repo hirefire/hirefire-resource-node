@@ -40,7 +40,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
 
   function mockEmptySize() {
     query
-      .mockResolvedValueOnce({ rows: [] }) // blocked column probe
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
   }
 
@@ -174,7 +174,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
 
   test("schema is lowercased for SQL and catalog probe", async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] }) // blocked present
+      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
     await jobQueueSize({
       connection: "postgres://localhost/jobs",

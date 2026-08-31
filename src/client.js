@@ -25,7 +25,7 @@ class Client {
     this._timeout = timeout
     this._agent = null
     this._agentTransport = null
-    /** @type {Set<Promise<unknown>>} */
+
     this._pending = new Set()
   }
 

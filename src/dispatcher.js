@@ -7,9 +7,6 @@ const safeLog = require("./log")
 const { rqtParts } = MetricsBuffer
 const { RQT, rqt } = require("./strategy")
 
-/**
- * Periodic reporter that samples job queues and CPU and flushes buffered metrics to the API.
- */
 class Dispatcher {
   static RQT_BACKFILL_LIMIT = 60
 
@@ -22,9 +19,6 @@ class Dispatcher {
   static MAX_DISPATCH_FREQUENCY = 30
   static JOIN_TIMEOUT = 5
 
-  /**
-   * @param {import("./configuration")} configuration
-   */
   constructor(configuration) {
     this._configuration = configuration
     this._client = new Client(configuration)
@@ -40,7 +34,7 @@ class Dispatcher {
     this._sleepers = new Set()
     this._dispatchLoopPromise = null
     this._jobLoopPromise = null
-    /** @type {Set<Promise<unknown>>} */
+
     this._retiredLoops = new Set()
     this._stopJoinTimeoutMs = Dispatcher.JOIN_TIMEOUT * 1000
     this._unloadedAdapterWarned = Object.create(null)
@@ -51,12 +45,6 @@ class Dispatcher {
     this._emptyQueuesWarned = Object.create(null)
   }
 
-  /**
-   * Starts the dispatcher loops.
-   *
-   * @returns {boolean} `true` when started. `false` if already running in this
-   *   process, or if starting the loops failed (the failure is logged).
-   */
   start() {
     if (this._stopping) return false
     if (this._healthyRunning()) return false
@@ -107,11 +95,6 @@ class Dispatcher {
     }
   }
 
-  /**
-   * Ensures the job-queue loop is running when lease race entry becomes true after a late configure.
-   *
-   * @returns {void}
-   */
   ensureJobQueueLoop() {
     try {
       if (this._jobLoopAlive() && this._running && !this._stopping) {
@@ -134,19 +117,6 @@ class Dispatcher {
     }
   }
 
-  /**
-   * Stops the dispatcher loops and closes transport resources.
-   *
-   * Joins local loops for up to {@link Dispatcher.JOIN_TIMEOUT} seconds each. A
-   * hung sampler is abandoned rather than killed. A later {@link Dispatcher#start}
-   * increments the loop generation so an abandoned loop cannot resume work.
-   * Concurrent {@link Dispatcher#start} is rejected until close finishes.
-   *
-   * @param {{flush?: boolean}} [options] when `flush` is `true` (default),
-   *   best-effort final metric flush before close.
-   * @returns {Promise<boolean>} `true` once the dispatcher has stopped, `false`
-   *   when it was not running.
-   */
   async stop(options = {}) {
     const { flush = true } = options
     if (this._stopping) return false
@@ -207,11 +177,6 @@ class Dispatcher {
     }
   }
 
-  /**
-   * Whether the dispatcher is currently running in this process.
-   *
-   * @returns {boolean}
-   */
   running() {
     return this._healthyRunning()
   }

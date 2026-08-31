@@ -39,7 +39,7 @@ describe("Buffer", () => {
     freezeTime(100)
     buffer.sample("web", "rqt", NaN)
     buffer.sample("web", "rqt", Infinity)
-    buffer.sample("web", "cpu", /** @type {any} */ ("nope"))
+    buffer.sample("web", "cpu", "nope")
     buffer.sample("web", "rqt", 5)
     const data = buffer.flush()
     expect(data.web.rqt[100]).toEqual({ sum: 5, count: 1 })

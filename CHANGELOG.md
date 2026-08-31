@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- TypeScript declarations are handwritten `.d.ts` files shipped with the package, not generated from JSDoc.
 - Metrics are sent only when `HIREFIRE_TOKEN` is set.
 - Job queue metrics are sampled by one process at a time.
 - Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.

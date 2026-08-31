@@ -20,7 +20,6 @@ package="${1:-}"
 [ -n "$package" ] || usage
 
 if [ "$package" = "core" ]; then
-  # Ignore every integration test claimed by the matrix. Core runs the rest.
   ignore="$(jq -r '[.integrations[] | select(.package != "core") | .test] | join("|")' test/matrix.json)"
   exec npx --no-install jest --testPathIgnorePatterns "$ignore"
 fi
@@ -31,16 +30,9 @@ if [ -z "$major" ] || [ -z "$testfile" ]; then
   usage
 fi
 
-# Install the matrix package in the same npm invocation as any extra peers.
-# A second `npm install --no-save` prunes packages that are not in package.json,
-# which would drop the matrix package just installed above.
 if [ "$package" = "bullmq" ] || [ "$package" = "bull" ]; then
-  # BullMQ 6 lists ioredis as an optional peer. The macros still require it.
   npm install "${package}@${major}" ioredis --no-save --no-audit --no-fund --silent
 elif [ "$package" = "@nestjs/platform-express" ]; then
-  # Nest 12 ships ESM. Jest 29 cannot parse those files. jest-light-runner uses
-  # Node's require, which loads them via require(esm). Peers are explicit so the
-  # test can `require("@nestjs/core")` / `common` after a --no-save install.
   nest_pkgs=("${package}@${major}" "@nestjs/core@${major}" "@nestjs/common@${major}" reflect-metadata)
   if [ "$major" -ge 12 ]; then
     nest_pkgs+=(jest-light-runner)
@@ -49,8 +41,6 @@ elif [ "$package" = "@nestjs/platform-express" ]; then
 else
   npm install "${package}@${major}" --no-save --no-audit --no-fund --silent
 fi
-# pg-boss matrix path is a prefix matching integration + lifecycle + plan suites.
-# runInBand keeps Pool spy lifecycle tests from racing real Pool integration in one worker.
 if [ "$package" = "pg-boss" ]; then
   exec npx --no-install jest --runInBand "$testfile"
 fi

@@ -24,56 +24,6 @@ function loadPg() {
   return require("pg")
 }
 
-/**
- * @typedef {object} PgBossOptions
- * @property {string | object} [connection] - Postgres URL string, or a `pg.Pool` /
- *   client-like object with `.query`. When omitted, `HIREFIRE_PG_BOSS_URL`, then
- *   `DATABASE_URL`, then `postgres://127.0.0.1:5432/postgres`. Plan path may inject
- *   `HIREFIRE_PG_BOSS_URL` via {@link planConnectionOptions}.
- * @property {object} [connectionOptions] - Extra options for `new pg.Pool({
- *   connectionString, ...connectionOptions })` when the macro opens a pool.
- * @property {string} [schema] - pg-boss schema name. Default `pgboss`, or
- *   `HIREFIRE_PG_BOSS_SCHEMA` when set. Folded to lowercase (unquoted identifier).
- * @property {object} [pool] - Alias for providing a borrowed `pg.Pool` (do not end).
- */
-
-/**
- * Calculates waiting job queue size (JQS) across the specified queues. Counts rows
- * on the parent `${schema}.job` table with `state < 'active'`, `start_after <= now()`,
- * and `NOT blocked` when that column exists (schema ≥ 31 / pg-boss ≥ 12.19). Active,
- * future deferred, dependency-blocked, and terminal states are excluded. Empty queue
- * list measures all queues.
- *
- * @overload
- * @param {...string} queues - Queue names. Omit to measure across all queues.
- * @returns {Promise<number>} Cumulative waiting job count across the specified queues.
- * @example
- * // Calculate size across all queues
- * await jobQueueSize()
- * @example
- * // Calculate size for the "email" queue
- * await jobQueueSize("email")
- * @example
- * // Calculate size across "email" and "sms" queues
- * await jobQueueSize("email", "sms")
- */
-/**
- * @overload
- * @param {...(string | PgBossOptions)} queuesAndOptions - Queue names, optionally followed by a
- *   {@link PgBossOptions} object.
- * @returns {Promise<number>} Cumulative waiting job count across the specified queues.
- * @example
- * // Calculate size using the options.connection property
- * await jobQueueSize("email", { connection: process.env.DATABASE_URL })
- * @example
- * // Calculate size with a custom schema
- * await jobQueueSize("email", { schema: "pgboss" })
- */
-/**
- * @async
- * @param {...any} args
- * @returns {Promise<number>}
- */
 async function jobQueueSize(...args) {
   return withConnection(args, async (client, queues, schema, flags) => {
     const sql = `
@@ -87,35 +37,6 @@ async function jobQueueSize(...args) {
   })
 }
 
-/**
- * Calculates waiting job queue latency (JQL) across the specified queues. Age is
- * `EXTRACT(EPOCH FROM (now() - start_after))` for the oldest due waiting job (same
- * waiting predicate as {@link jobQueueSize}). Empty waiting set returns `0`.
- *
- * @overload
- * @param {...string} queues - Queue names. Omit to measure across all queues.
- * @returns {Promise<number>} Maximum waiting latency in seconds across the specified queues.
- * @example
- * // Calculate latency across all queues
- * await jobQueueLatency()
- * @example
- * // Calculate latency for the "email" queue
- * await jobQueueLatency("email")
- */
-/**
- * @overload
- * @param {...(string | PgBossOptions)} queuesAndOptions - Queue names, optionally followed by a
- *   {@link PgBossOptions} object.
- * @returns {Promise<number>} Maximum waiting latency in seconds across the specified queues.
- * @example
- * // Calculate latency using the options.connection property
- * await jobQueueLatency("email", { connection: process.env.DATABASE_URL })
- */
-/**
- * @async
- * @param {...any} args
- * @returns {Promise<number>}
- */
 async function jobQueueLatency(...args) {
   return withConnection(args, async (client, queues, schema, flags) => {
     const sql = `
@@ -134,18 +55,6 @@ async function jobQueueLatency(...args) {
   })
 }
 
-/**
- * Counts in-flight (working) jobs: rows with `state = 'active'`. Empty queue
- * list measures all names. Never folded into JQL/JQS. Plan records under `wrk`.
- *
- * @async
- * @param {...any} args - Queue names, optionally followed by a {@link PgBossOptions} object.
- * @returns {Promise<number>} Cumulative active job count.
- * @example
- * await jobQueueWorking()
- * @example
- * await jobQueueWorking("email", "sms")
- */
 async function jobQueueWorking(...args) {
   return withConnection(
     args,
@@ -165,18 +74,10 @@ async function jobQueueWorking(...args) {
   )
 }
 
-/**
- * @param {string} _strategy
- * @param {*} _options
- * @returns {object}
- */
 function planOptions(_strategy, _options) {
   return {}
 }
 
-/**
- * @returns {object}
- */
 function planConnectionOptions() {
   const out = {}
   const urlRaw = process.env.HIREFIRE_PG_BOSS_URL
@@ -192,12 +93,6 @@ function planConnectionOptions() {
   return out
 }
 
-/**
- * pg-boss plans support size and latency.
- *
- * @param {string|symbol} strategy
- * @returns {boolean}
- */
 function supportsPlanStrategy(strategy) {
   const s = String(strategy)
   return s === "jql" || s === "jqs"

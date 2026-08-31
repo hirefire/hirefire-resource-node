@@ -3,9 +3,7 @@ const safeLog = require("../log")
 class JobQueues {
   constructor(configuration) {
     this._configuration = configuration
-    /**
-     * @type {import("./jobQueue")[]}
-     */
+
     this._jobQueues = []
   }
 

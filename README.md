@@ -26,11 +26,11 @@ The test suite runs against these minimum versions and the current latest releas
 
 **Types:**
 
-The package ships `.d.ts` declarations generated from its JSDoc.
+The package ships `.d.ts` declarations for TypeScript consumers.
 
 **Documentation:**
 
-The public API is documented with JSDoc. Changelog lives in [CHANGELOG.md](CHANGELOG.md).
+Changelog lives in [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 

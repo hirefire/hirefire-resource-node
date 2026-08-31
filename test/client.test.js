@@ -465,7 +465,6 @@ describe("Client (persistent connection)", () => {
 
     await client.submitSamples("[]")
     await expect(client.submitSamples("[]")).rejects.toThrow("timed out")
-    // A retry would fire synchronously with the rejection; 25ms proves none.
     await new Promise((resolve) => setTimeout(resolve, 25))
     expect(requests).toBe(2)
     await client.close()
