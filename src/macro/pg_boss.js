@@ -5,7 +5,6 @@ const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://127.0.0.1:5432/postgres"
 const SCHEMA_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 const SAMPLE_QUERY_TIMEOUT_MS = 5000
-
 const SAMPLE_POOL_OPTIONS = {
   max: 1,
   connectionTimeoutMillis: 5000,

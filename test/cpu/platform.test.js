@@ -3,9 +3,7 @@ const path = require("path")
 const Usage = require("../../src/source/cpu/usage")
 
 const FIXTURE_ROOT = path.join(__dirname, "../fixtures/cpu")
-
 const NPROC_SENTINEL = 97
-
 const CEDAR_DEDICATED = [
   "performance_m",
   "performance_l",

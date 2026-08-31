@@ -25,7 +25,6 @@ class Client {
     this._timeout = timeout
     this._agent = null
     this._agentTransport = null
-
     this._pending = new Set()
   }
 

@@ -3,7 +3,6 @@ const safeLog = require("../log")
 class JobQueues {
   constructor(configuration) {
     this._configuration = configuration
-
     this._jobQueues = []
   }
 

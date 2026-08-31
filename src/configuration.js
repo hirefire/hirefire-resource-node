@@ -26,21 +26,13 @@ const MAX_NAME_BYTES = 128
 class Configuration {
   constructor() {
     this.http = null
-
     this.jobQueues = new JobQueues(this)
-
     this.logger = console
-
     this._sourcesByName = new Map()
-
     this._token = null
-
     this._buffer = null
-
     this._dispatcher = null
-
     this._alwaysOnCpu = null
-
     this._alwaysOnHttp = null
     this._httpActive = false
     this._herokuConflictWarned = false

@@ -9,12 +9,10 @@ const { RQT, rqt } = require("./strategy")
 
 class Dispatcher {
   static RQT_BACKFILL_LIMIT = 60
-
   static PAYLOAD_SIZE_LIMIT = 32768
   static WARN_MAP_LIMIT = 128
   static SAMPLE_COUNT_LIMIT = MetricsBuffer.SAMPLE_COUNT_LIMIT
   static METRIC_VALUE_LIMIT = 1e15
-
   static DEFAULT_DISPATCH_FREQUENCY = 1
   static MAX_DISPATCH_FREQUENCY = 30
   static JOIN_TIMEOUT = 5
@@ -34,7 +32,6 @@ class Dispatcher {
     this._sleepers = new Set()
     this._dispatchLoopPromise = null
     this._jobLoopPromise = null
-
     this._retiredLoops = new Set()
     this._stopJoinTimeoutMs = Dispatcher.JOIN_TIMEOUT * 1000
     this._unloadedAdapterWarned = Object.create(null)
