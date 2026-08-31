@@ -1,3 +1,5 @@
+const { rqt } = require("./strategy")
+
 class Buffer {
   static SAMPLE_COUNT_LIMIT = 1_000_000
 
@@ -13,7 +15,7 @@ class Buffer {
     strategy = String(strategy)
     const series = this._seriesFor(name, strategy)
     prune(series, timestamp, this._ttl)
-    if (strategy === "rqt") {
+    if (rqt(strategy)) {
       let bucket = series[timestamp]
       if (!bucket) {
         bucket = { sum: 0, count: 0 }
@@ -39,7 +41,7 @@ class Buffer {
 
   repopulate(name, strategy, data) {
     strategy = String(strategy)
-    if (strategy !== "rqt") return
+    if (!rqt(strategy)) return
 
     const now = Math.floor(Date.now() / 1000)
     let series = null

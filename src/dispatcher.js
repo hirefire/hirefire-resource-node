@@ -5,6 +5,7 @@ const Plan = require("./plan")
 const SampleTraceWave = require("./sampleTraceWave")
 const safeLog = require("./log")
 const { rqtParts } = MetricsBuffer
+const { RQT, rqt } = require("./strategy")
 
 /**
  * Periodic reporter that samples job queues and CPU and flushes buffered metrics to the API.
@@ -615,9 +616,9 @@ class Dispatcher {
 
   _repopulateRqt(data) {
     for (const [name, strategies] of Object.entries(data)) {
-      const series = strategies && strategies.rqt
+      const series = strategies && strategies[RQT]
       if (series && Object.keys(series).length > 0) {
-        this._buffer().repopulate(name, "rqt", series)
+        this._buffer().repopulate(name, RQT, series)
       }
     }
   }
@@ -655,7 +656,7 @@ class Dispatcher {
     for (const [name, strategies] of Object.entries(data)) {
       for (const [strategy, series] of Object.entries(strategies || {})) {
         if (!series || Object.keys(series).length === 0) continue
-        if (strategy === "rqt" && name === httpName) continue
+        if (rqt(strategy) && name === httpName) continue
         this._mergeMetrics(entriesByName, name, strategy, series)
       }
     }
@@ -719,16 +720,16 @@ class Dispatcher {
   _appendHttpRqt(entriesByName, data, httpName) {
     if (!httpName) return undefined
 
-    const rqtBuckets = (data[httpName] && data[httpName].rqt) || {}
+    const rqtBuckets = (data[httpName] && data[httpName][RQT]) || {}
     if (this._configuration.rqtEnabled && this._configuration.rqtLiveness) {
       const payloadRqt = this._backfillRqtSeconds(rqtBuckets)
-      this._mergeMetrics(entriesByName, httpName, "rqt", payloadRqt)
+      this._mergeMetrics(entriesByName, httpName, RQT, payloadRqt)
       const keys = Object.keys(payloadRqt).map(Number)
       if (keys.length > 0) return Math.max(...keys)
       return undefined
     }
     if (Object.keys(rqtBuckets).length > 0) {
-      this._mergeMetrics(entriesByName, httpName, "rqt", rqtBuckets)
+      this._mergeMetrics(entriesByName, httpName, RQT, rqtBuckets)
     }
     return undefined
   }
@@ -741,7 +742,7 @@ class Dispatcher {
 
     for (const [secondKey, bucket] of Object.entries(seriesBuckets)) {
       const second = parseInt(secondKey, 10)
-      if (strategy === "rqt") {
+      if (rqt(strategy)) {
         const { sum, count } = rqtParts(bucket)
         const existing = dest[second]
         if (!existing) {
@@ -759,7 +760,7 @@ class Dispatcher {
   }
 
   _encodeLeaf(strategy, bucket) {
-    if (strategy === "rqt") {
+    if (rqt(strategy)) {
       const { sum, count } = rqtParts(bucket)
       if (count === 0) return []
       const mean = sum / count
