@@ -5,6 +5,7 @@ const Dispatcher = require("../src/dispatcher")
 const MetricsBuffer = require("../src/buffer")
 const Usage = require("../src/source/cpu/usage")
 const Plan = require("../src/plan")
+const SampleTraceWave = require("../src/sampleTraceWave")
 
 const BASE = "https://data.hirefire.io"
 
@@ -610,7 +611,7 @@ describe("Dispatcher", () => {
       await jest.advanceTimersByTimeAsync(1)
       await join
       expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining("Abandoning thread"),
+        expect.stringContaining("Abandoning loop"),
       )
     } finally {
       jest.useRealTimers()
@@ -929,6 +930,63 @@ describe("Dispatcher", () => {
       entry.sample_trace.ops.every((op) => op.strategy === "jql" && "ms" in op),
     ).toBe(true)
     expect(bodies[0].slice(1).every((e) => !e.sample_trace)).toBe(true)
+  })
+
+  test("dead live omits remaining plan entries from sample_trace", async () => {
+    stubLease(
+      true,
+      JSON.stringify({
+        version: 1,
+        trace: true,
+        job_queues: [
+          {
+            name: "worker",
+            strategy: "jql",
+            adapter: null,
+            queues: [],
+            options: {},
+          },
+          {
+            name: "mailer",
+            strategy: "jql",
+            adapter: null,
+            queues: [],
+            options: {},
+          },
+        ],
+      }),
+    )
+    const bodies = captureIngestBodies()
+    config().dyno("worker", () => 42)
+    config().dyno("mailer", () => 18)
+    const dispatcher = config().dispatcher
+    let measured = 0
+    const origMeasure = SampleTraceWave.prototype.measure
+    jest
+      .spyOn(SampleTraceWave.prototype, "measure")
+      .mockImplementation(async function measure(entry, fn) {
+        const result = await origMeasure.call(this, entry, fn)
+        measured += 1
+        return result
+      })
+    jest.spyOn(dispatcher, "_loopLive").mockReturnValue(() => measured < 1)
+
+    freezeTime(1000)
+    await dispatcher._jobQueueTick()
+    await dispatcher._dispatch()
+
+    expect(bodies).toHaveLength(1)
+    const entry = bodies[0][0]
+    expect(entry.sample_trace).toBeTruthy()
+    expect(entry.sample_trace.ops).toHaveLength(1)
+    expect(entry.sample_trace.ops[0]).toEqual(
+      expect.objectContaining({
+        strategy: "jql",
+      }),
+    )
+    expect(
+      bodies[0].some((row) => row.name === "mailer" && row.metrics?.jql),
+    ).toBe(false)
   })
 
   test("oversized sample trace is stripped so metrics still ship", async () => {

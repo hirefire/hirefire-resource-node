@@ -225,7 +225,7 @@ class Dispatcher {
       new Promise((resolve) => {
         timer = setTimeout(() => {
           this._logger().warn(
-            `[HireFire] Dispatcher loop did not stop within ${Dispatcher.JOIN_TIMEOUT}s. Abandoning thread.`,
+            `[HireFire] Dispatcher loop did not stop within ${Dispatcher.JOIN_TIMEOUT}s. Abandoning loop.`,
           )
           resolve()
         }, this._stopJoinTimeoutMs)
@@ -336,6 +336,7 @@ class Dispatcher {
       const localJobQueues = this._configuration.jobQueues
 
       for (const entry of this._lease.jobQueues) {
+        if (live && !live()) break
         await wave.measure(entry, async () => {
           if (live && !live()) return
           if (this._adapterPresent(entry)) {
