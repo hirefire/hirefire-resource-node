@@ -9,8 +9,10 @@ const {
   jobQueueSize,
   jobQueueLatency,
   jobQueueWorking,
-  _resetBlockedColumnCacheForTests,
 } = require("../../src/macro/pg_boss")
+const {
+  reset: resetBlockedColumnCacheForTests,
+} = require("../../src/macro/pg_boss_blocked_column")
 
 const describeIfPg = pg ? describe : describe.skip
 
@@ -21,7 +23,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
   let poolSpy
 
   beforeEach(() => {
-    _resetBlockedColumnCacheForTests()
+    resetBlockedColumnCacheForTests()
     end = jest.fn().mockResolvedValue(undefined)
     query = jest.fn()
     on = jest.fn()
@@ -33,7 +35,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
   })
 
   afterEach(() => {
-    _resetBlockedColumnCacheForTests()
+    resetBlockedColumnCacheForTests()
     poolSpy.mockRestore()
     jest.clearAllMocks()
   })

@@ -1,5 +1,6 @@
 const { unpack, normalizeQueues } = require("../utility")
 const Hooks = require("../plan/hooks")
+const blockedColumn = require("./pg_boss_blocked_column")
 
 const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://127.0.0.1:5432/postgres"
@@ -13,9 +14,6 @@ const SAMPLE_POOL_OPTIONS = {
   statement_timeout: SAMPLE_QUERY_TIMEOUT_MS,
 }
 
-const BLOCKED_ABSENT_TTL_MS = 60_000
-const blockedColumnPresentCache = new Set()
-const blockedColumnAbsentUntil = new Map()
 const connectionIdMap = new WeakMap()
 let connectionIdSeq = 0
 
@@ -222,10 +220,10 @@ function connectionIdentity(connection) {
 }
 
 async function detectHasBlockedColumn(client, schema, cacheKey) {
-  if (blockedColumnPresentCache.has(cacheKey)) {
+  if (blockedColumn.present.has(cacheKey)) {
     return true
   }
-  const absentUntil = blockedColumnAbsentUntil.get(cacheKey)
+  const absentUntil = blockedColumn.absentUntil.get(cacheKey)
   if (absentUntil != null && Date.now() < absentUntil) {
     return false
   }
@@ -240,17 +238,15 @@ async function detectHasBlockedColumn(client, schema, cacheKey) {
   )
   const has = rows.length > 0
   if (has) {
-    blockedColumnPresentCache.add(cacheKey)
-    blockedColumnAbsentUntil.delete(cacheKey)
+    blockedColumn.present.add(cacheKey)
+    blockedColumn.absentUntil.delete(cacheKey)
   } else {
-    blockedColumnAbsentUntil.set(cacheKey, Date.now() + BLOCKED_ABSENT_TTL_MS)
+    blockedColumn.absentUntil.set(
+      cacheKey,
+      Date.now() + blockedColumn.BLOCKED_ABSENT_TTL_MS,
+    )
   }
   return has
-}
-
-function _resetBlockedColumnCacheForTests() {
-  blockedColumnPresentCache.clear()
-  blockedColumnAbsentUntil.clear()
 }
 
 module.exports = {
@@ -260,8 +256,8 @@ module.exports = {
   planOptions,
   planConnectionOptions,
   supportsPlanStrategy,
+  queuesRequired: Hooks.queuesRequired,
   beforeSampleJobQueues: Hooks.beforeSampleJobQueues,
   afterSampleJobQueues: Hooks.afterSampleJobQueues,
   reinitAfterFork: Hooks.reinitAfterFork,
-  _resetBlockedColumnCacheForTests,
 }

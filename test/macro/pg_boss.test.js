@@ -5,8 +5,10 @@ const {
   jobQueueLatency,
   jobQueueSize,
   jobQueueWorking,
-  _resetBlockedColumnCacheForTests,
 } = require("../../src/macro/pg_boss")
+const {
+  reset: resetBlockedColumnCacheForTests,
+} = require("../../src/macro/pg_boss_blocked_column")
 const Plan = require("../../src/plan")
 const Configuration = require("../../src/configuration")
 
@@ -166,12 +168,12 @@ describe("pg-boss", () => {
   })
 
   beforeEach(async () => {
-    _resetBlockedColumnCacheForTests()
+    resetBlockedColumnCacheForTests()
     await pool.query(`DELETE FROM ${SCHEMA}.job`)
   })
 
   afterEach(() => {
-    _resetBlockedColumnCacheForTests()
+    resetBlockedColumnCacheForTests()
   })
 
   test("libraryLoaded is true when the pg-boss package is imported", () => {

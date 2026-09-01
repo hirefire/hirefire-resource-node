@@ -66,6 +66,7 @@ expectType<Promise<number>>(
 expectType<Promise<number>>(bullmq.jobQueueWorking())
 expectType<Promise<number>>(bullmq.jobQueueWorking("default"))
 expectType<Promise<never>>(bullmq.jobQueueLatency())
+expectType<boolean>(bullmq.queuesRequired())
 expectType<typeof bullmq.JobQueueLatencyUnsupportedError>(
   bullmq.JobQueueLatencyUnsupportedError,
 )
@@ -73,10 +74,15 @@ expectType<typeof bullmq.JobQueueLatencyUnsupportedError>(
 expectType<Promise<number>>(bull.jobQueueSize("default"))
 expectType<Promise<number>>(bull.jobQueueWorking("default"))
 expectType<Promise<never>>(bull.jobQueueLatency())
+expectType<boolean>(bull.queuesRequired())
 
 expectType<Promise<number>>(pgBoss.jobQueueSize("default"))
 expectType<Promise<number>>(pgBoss.jobQueueLatency("default"))
 expectType<Promise<number>>(pgBoss.jobQueueWorking("default"))
+expectType<Promise<number>>(
+  pgBoss.jobQueueWorking("default", { connection: "postgres://localhost/db" }),
+)
+expectType<boolean>(pgBoss.queuesRequired())
 
 expectError(bullmq.jobQueueSize(1))
 expectError(bull.jobQueueSize({ not: "a-queue" }))
