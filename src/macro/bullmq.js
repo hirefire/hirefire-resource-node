@@ -3,6 +3,7 @@ const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
+const SizeOnly = require("../plan/size_only")
 
 function loadIORedis() {
   return require("ioredis")
@@ -247,10 +248,6 @@ function planConnectionOptions() {
   return { connection: url }
 }
 
-function supportsPlanStrategy(strategy) {
-  return String(strategy) === "jqs"
-}
-
 module.exports = {
   jobQueueLatency,
   jobQueueSize,
@@ -258,7 +255,7 @@ module.exports = {
   JobQueueLatencyUnsupportedError,
   planOptions,
   planConnectionOptions,
-  supportsPlanStrategy,
+  supportsPlanStrategy: SizeOnly.supportsPlanStrategy,
   beforeSampleJobQueues,
   afterSampleJobQueues,
   reinitAfterFork,
