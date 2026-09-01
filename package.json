@@ -1,7 +1,7 @@
 {
   "name": "hirefire-resource",
   "version": "2.0.0",
-  "description": "Integrates Node.js applications with HireFire autoscalers by pushing app metrics.",
+  "description": "Application metric collection for HireFire autoscalers",
   "keywords": [
     "hirefire",
     "heroku",
