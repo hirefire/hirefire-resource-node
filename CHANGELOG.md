@@ -47,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A globally paused BullMQ 4 queue no longer counts the pause marker as a queued job.
 - BullMQ, classic Bull, and pg-boss samples fail within five seconds when Redis or Postgres does not respond.
+- TypeScript declarations now match the published JavaScript exports, including the error helper, configuration constants, and nested job-queue, HTTP, CPU, dispatcher, and buffer shapes.
 
 ## [1.2.0] - 2026-02-03
 

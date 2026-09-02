@@ -1,8 +1,9 @@
 export = Configuration
 declare class Configuration {
+  static MAX_NAME_BYTES: number
   logger: Logger | null
-  http: object | null
-  jobQueues: object
+  http: HTTP | null
+  jobQueues: JobQueues
   set token(value: string | null | undefined)
   get token(): string | null
   dyno(name: string): void
@@ -10,11 +11,11 @@ declare class Configuration {
   get buffer(): Buffer
   get dispatcher(): Dispatcher
   get httpName(): string | null
-  get httpSource(): object | null
+  get httpSource(): HTTP | null
   markHttpActive(): void
   get rqtEnabled(): boolean
   get rqtLiveness(): boolean
-  activeCpuSources(): object[]
+  activeCpuSources(): CPU[]
 }
 declare namespace Configuration {
   export { MissingSamplerError, DuplicateDynoError, Logger }
@@ -32,3 +33,6 @@ type Logger = {
 }
 import Buffer = require("./buffer")
 import Dispatcher = require("./dispatcher")
+import HTTP = require("./source/http")
+import CPU = require("./source/cpu")
+import JobQueues = require("./source/jobQueues")
