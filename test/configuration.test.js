@@ -92,6 +92,15 @@ describe("Configuration", () => {
     expect(() => config.dyno("   ")).toThrow(TypeError)
   })
 
+  test("dyno accepts hyphenated name", () => {
+    config.dyno("worker-latency", () => 1.5)
+    config.dyno("worker-size", () => 2)
+    expect(config.jobQueues.findByName("worker-latency").name).toBe(
+      "worker-latency",
+    )
+    expect(config.jobQueues.findByName("worker-size").name).toBe("worker-size")
+  })
+
   test("dyno strips name whitespace", () => {
     config.dyno("  worker  ", () => 1)
     expect(config.jobQueues.findByName("worker").name).toBe("worker")

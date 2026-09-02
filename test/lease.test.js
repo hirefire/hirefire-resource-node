@@ -236,6 +236,20 @@ describe("Lease", () => {
     expect(lease._nextSampleAt).toBe(performance.now())
   })
 
+  test("parses hyphenated job queue name", async () => {
+    grant(
+      { "HireFire-Lease-Granted": "true" },
+      JSON.stringify({
+        version: 1,
+        job_queues: [{ name: "worker-latency", strategy: "jql" }],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.granted()).toBe(true)
+    expect(lease.jobQueues).toHaveLength(1)
+    expect(lease.jobQueues[0].name).toBe("worker-latency")
+  })
+
   test("parses grant trace true", async () => {
     grant(
       { "HireFire-Lease-Granted": "true" },

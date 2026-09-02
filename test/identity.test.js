@@ -37,6 +37,16 @@ describe("Identity", () => {
     expect(Identity.resolve()).toBe("my-worker")
   })
 
+  test("resolves fir worker-latency hyphen name", () => {
+    process.env.DYNO = "worker-latency-6d7f788ddb-cdct6"
+    expect(Identity.resolve()).toBe("worker-latency")
+  })
+
+  test("cedar worker_latency dot suffix keeps underscore", () => {
+    process.env.DYNO = "worker_latency.1"
+    expect(Identity.resolve()).toBe("worker_latency")
+  })
+
   test("falls back to render service name", () => {
     process.env.RENDER_SERVICE_NAME = "background-worker"
     expect(Identity.resolve()).toBe("background-worker")
@@ -181,6 +191,13 @@ describe("Identity", () => {
       expect(Identity.herokuWebProcess()).toBe(false)
       expect(Identity.platformHttpRole()).toBe(false)
     }
+  })
+
+  test("heroku web process rejects fir web-worker hyphen name", () => {
+    process.env.DYNO = "web-worker-5fb9c979-lft2l"
+    expect(Identity.resolve()).toBe("web-worker")
+    expect(Identity.herokuWebProcess()).toBe(false)
+    expect(Identity.platformHttpRole()).toBe(false)
   })
 
   test("heroku web process rejects fir worker", () => {

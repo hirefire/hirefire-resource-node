@@ -1973,6 +1973,36 @@ describe("Dispatcher", () => {
     ).toBe(true)
   })
 
+  test("hyphen dyno samples and dispatches name as is", async () => {
+    stubGrantedLease(
+      JSON.stringify({
+        version: 1,
+        job_queues: [
+          {
+            name: "worker-latency",
+            strategy: "jql",
+            adapter: null,
+            queues: [],
+            options: {},
+          },
+        ],
+      }),
+    )
+    const bodies = captureIngestBodies()
+    process.env.DYNO = "worker-latency-6d7f788ddb-cdct6"
+    config().dyno("worker-latency", () => 7)
+    const dispatcher = config().dispatcher
+    freezeTime(1000)
+    await dispatcher._jobQueueTick()
+    await dispatcher._dispatchTick()
+    const names = bodies[0].map((e) => e.name)
+    expect(names).toContain("worker-latency")
+    expect(names).not.toContain("worker")
+    const entry = bodies[0].find((e) => e.name === "worker-latency")
+    expect(entry.metrics.jql["1000"]).toBe(7)
+    expect(loggerErrors()).not.toMatch(/local sampler is ignored/)
+  })
+
   test("combined web and worker dispatch", async () => {
     stubGrantedLease()
     const bodies = captureIngestBodies()
