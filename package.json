@@ -13,6 +13,8 @@
     "dyno"
   ],
   "homepage": "https://hirefire.io",
+  "documentation": "https://github.com/hirefire/hirefire-resource-node/blob/master/README.md",
+  "changelog": "https://github.com/hirefire/hirefire-resource-node/blob/master/CHANGELOG.md",
   "author": "Michael van Rooijen <support@hirefire.io>",
   "license": "MIT",
   "files": [
@@ -99,8 +101,7 @@
     "url": "git+https://github.com/hirefire/hirefire-resource-node.git"
   },
   "bugs": {
-    "url": "https://github.com/hirefire/hirefire-resource-node/issues",
-    "email": "support@hirefire.io"
+    "url": "https://github.com/hirefire/hirefire-resource-node/issues"
   },
   "publishConfig": {
     "access": "public"
