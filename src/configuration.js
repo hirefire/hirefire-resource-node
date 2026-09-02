@@ -133,13 +133,7 @@ class Configuration {
   }
 
   get rqtLiveness() {
-    if (!this.rqtEnabled) return false
-
-    const identity = this._softIdentity()
-    const httpName = this.httpName
-    if (identity == null || httpName == null) return false
-
-    return identity.toLowerCase() === httpName.toLowerCase()
+    return this.rqtEnabled && this._softIdentity() != null
   }
 
   activeCpuSources() {
@@ -217,8 +211,7 @@ class Configuration {
       this.logger,
       "warn",
       "[HireFire] Request queue time samples dropped: process identity " +
-        "is unresolved. Set HIREFIRE_SERVICE_NAME, or rely on DYNO / RENDER_SERVICE_NAME where " +
-        "available.",
+        "is unresolved. Set HIREFIRE_SERVICE_NAME or DYNO.",
     )
   }
 
@@ -243,7 +236,7 @@ class Configuration {
       this.logger,
       "warn",
       "[HireFire] CPU metrics disabled: process identity is unresolved. " +
-        "Set HIREFIRE_SERVICE_NAME, or rely on DYNO / RENDER_SERVICE_NAME where available.",
+        "Set HIREFIRE_SERVICE_NAME or DYNO.",
     )
   }
 }

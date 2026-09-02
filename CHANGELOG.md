@@ -8,9 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- The library now pushes metrics to `https://data.hirefire.io`. HireFire no longer polls the app.
+- The library now pushes metrics to `https://data.hirefire.io`.
 - Request queue time is sampled from HTTP traffic through the middleware. A web `dyno` line is not required.
 - CPU activity is sampled automatically.
+- Automatic request queue time and CPU sampling need a process identity (`HIREFIRE_SERVICE_NAME` or `DYNO`).
+- Set `HIREFIRE_VERBOSE` to print HireFire diagnostic messages to stdout.
 - Optional token-only setup with `HireFire.boot()`. Existing `config.dyno` job queue blocks still work.
 - Count of jobs still being processed (`jobQueueWorking`) for BullMQ, classic Bull, and pg-boss.
 - Classic Bull: job queue size only. Job queue latency is unsupported.
@@ -25,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Job queue metrics are sampled by one process at a time.
 - Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
 - BullMQ job queue size no longer counts active jobs.
+- BullMQ and classic Bull sampling now require the app's `ioredis` package. 1.x depended on `ioredis` from this package. Without it, those job metrics are not collected.
 - Required Node.js is 20+. Official Express support is 4+.
 
 ### Deprecated
@@ -35,12 +38,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Serving `GET /hirefire/:token/info`.
 - `POST` of request queue time JSON to `logdrain.hirefire.io`.
+- `HIREFIRE_DISPATCH_URL` no longer overrides ingest. The internal override is `HIREFIRE_DATA_URL`.
 - Official support for Node.js 16 and 18.
 
 ### Fixed
 
 - A globally paused BullMQ 4 queue no longer counts the pause marker as a queued job.
-- BullMQ and classic Bull sampling now require `ioredis`. Without it, those job metrics are not collected.
 
 ## [1.2.0] - 2026-02-03
 

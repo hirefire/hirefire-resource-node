@@ -41,7 +41,7 @@ elif [ "$package" = "@nestjs/platform-express" ]; then
 else
   npm install "${package}@${major}" --no-save --no-audit --no-fund --silent
 fi
-if [ "$package" = "pg-boss" ]; then
+if [ "$package" = "pg-boss" ] || [ "$package" = "bullmq" ] || [ "$package" = "bull" ]; then
   exec npx --no-install jest --runInBand "$testfile"
 fi
 if [ "$package" = "@nestjs/platform-express" ] && [ "$major" -ge 12 ]; then

@@ -23,4 +23,12 @@ describe("safeLog", () => {
   test("safe with null logger", () => {
     expect(() => safeLog(null, "error", "boom")).not.toThrow()
   })
+
+  test("formatError strips URL userinfo", () => {
+    const text = safeLog.formatError(
+      new Error("redis://user:secret@127.0.0.1:6379/0 failed"),
+    )
+    expect(text).not.toMatch(/secret/)
+    expect(text).toMatch(/redis:\/\/\*\*\*@127\.0\.0\.1:6379\/0/)
+  })
 })

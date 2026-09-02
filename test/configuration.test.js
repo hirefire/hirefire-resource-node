@@ -207,7 +207,7 @@ describe("Configuration", () => {
     expect(config.token).toBe("abc")
   })
 
-  test("rqt liveness allowed when identity matches", () => {
+  test("rqt liveness when enabled and identity present", () => {
     process.env.DYNO = "web.1"
     expect(config.rqtLiveness).toBe(true)
   })
@@ -220,11 +220,6 @@ describe("Configuration", () => {
   test("rqt liveness when identity and traffic match", () => {
     process.env.DYNO = "worker.1"
     config.markHttpActive()
-    expect(config.rqtLiveness).toBe(true)
-  })
-
-  test("rqt liveness matches case insensitively", () => {
-    process.env.DYNO = "Web.1"
     expect(config.rqtLiveness).toBe(true)
   })
 

@@ -20,13 +20,13 @@ This package integrates Node.js applications running on [Heroku] with [HireFire]
 
 - BullMQ 4+ (size only, no job queue latency, needs the `ioredis` package)
 - Bull 4+ (classic OptimalBits/bull, size only, no job queue latency, needs the `ioredis` package)
-- pg-boss 10 to 12 (job queue size and latency via read-only SQL, versions 11 and 12 require Node.js 22+)
+- pg-boss 10 to 12 (job queue size and latency via read-only SQL, versions 11 and 12 require Node.js 22+, needs the `pg` package)
 
 The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
 
 **Types:**
 
-The package ships `.d.ts` declarations for TypeScript consumers.
+The package ships `.d.ts` declarations for TypeScript consumers. Native ESM named imports of macros (for example `import { queuesRequired } from "hirefire-resource/macro/bull"`) can type-check and fail at runtime. Use the default import under ESM.
 
 **Documentation:**
 
@@ -34,7 +34,7 @@ Changelog lives in [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
-Requires [Docker](https://www.docker.com/) and [mise](https://mise.jdx.dev/). Redis (BullMQ / classic Bull) and PostgreSQL (pg-boss) for the macro tests run in containers, and mise installs the pinned Node.js versions from `.tool-versions`. `bin/services up` starts them on Docker-assigned free host ports recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops them and removes `.env`. Because the ports are assigned fresh at startup, multiple worktrees can run side by side without conflicting with each other or with any system-wide databases.
+Requires [Docker](https://www.docker.com/), [mise](https://mise.jdx.dev/), and `jq` (matrix scripts). Redis (BullMQ / classic Bull) and PostgreSQL (pg-boss) for the macro tests run in containers, and mise installs the pinned Node.js versions from `.tool-versions`. `bin/services up` starts them on Docker-assigned free host ports recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops them and removes `.env`. Because the ports are assigned fresh at startup, multiple worktrees can run side by side without conflicting with each other or with any system-wide databases.
 
 - Run `bin/setup` to prepare the environment.
 - Run `bin/services up` / `bin/services down` to start / stop Redis and PostgreSQL.

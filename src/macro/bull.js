@@ -1,14 +1,10 @@
-const { unpack, normalizeQueues } = require("../utility")
 const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
 const SizeOnly = require("../plan/size_only")
 const Hooks = require("../plan/hooks")
-
-function loadIORedis() {
-  return require("ioredis")
-}
+const { withSampleRedis } = require("./helpers/sample_redis")
 
 let waveEnumCache = null
 
@@ -29,14 +25,6 @@ function reinitAfterFork() {
   waveEnumCache = null
 }
 
-function connectionEnumKey(connection, userConnectionOptions) {
-  try {
-    return JSON.stringify({ connection, userConnectionOptions })
-  } catch {
-    return "object"
-  }
-}
-
 async function resolveQueueNames(redis, queues, cacheKey) {
   if (queues.length > 0) return queues
   if (waveEnumCache && waveEnumCache.has(cacheKey)) {
@@ -47,63 +35,8 @@ async function resolveQueueNames(redis, queues, cacheKey) {
   return names
 }
 
-const SAMPLE_REDIS_OPTIONS = {
-  maxRetriesPerRequest: 1,
-  connectTimeout: 5000,
-  commandTimeout: 5000,
-  retryStrategy(times) {
-    if (times > 2) return null
-    return Math.min(times * 50, 200)
-  },
-}
-
-async function withSampleRedis(args, fn) {
-  const IORedis = loadIORedis()
-  let { queues, options } = unpack(args)
-  queues = normalizeQueues(queues, { allowEmpty: true })
-
-  const connection =
-    options.connection ||
-    process.env.REDIS_TLS_URL ||
-    process.env.REDIS_URL ||
-    process.env.REDISTOGO_URL ||
-    process.env.REDISCLOUD_URL ||
-    process.env.OPENREDIS_URL ||
-    "redis://localhost:6379/0"
-
-  const userConnectionOptions = options.connectionOptions || {}
-  const redis =
-    typeof connection === "object" && connection !== null
-      ? new IORedis({
-          ...SAMPLE_REDIS_OPTIONS,
-          ...connection,
-          ...userConnectionOptions,
-        })
-      : new IORedis(connection, {
-          ...SAMPLE_REDIS_OPTIONS,
-          ...userConnectionOptions,
-        })
-
-  redis.on("error", () => {})
-
-  try {
-    queues = await resolveQueueNames(
-      redis,
-      queues,
-      connectionEnumKey(connection, userConnectionOptions),
-    )
-    return await fn(redis, queues)
-  } finally {
-    try {
-      await redis.quit()
-    } catch {
-      redis.disconnect()
-    }
-  }
-}
-
 async function jobQueueSize(...args) {
-  return withSampleRedis(args, async (redis, queues) => {
+  return withSampleRedis(args, resolveQueueNames, async (redis, queues) => {
     let totalCount = 0
     const pipeline = redis.pipeline()
     const delayedUpper = (Date.now() + 1) * 0x1000 - 1
@@ -126,12 +59,12 @@ async function jobQueueSize(...args) {
       totalCount += waitCount + pausedCount + delayedCount
     }
 
-    return totalCount
+    return Math.max(0, totalCount)
   })
 }
 
 async function jobQueueWorking(...args) {
-  return withSampleRedis(args, async (redis, queues) => {
+  return withSampleRedis(args, resolveQueueNames, async (redis, queues) => {
     let totalCount = 0
     const pipeline = redis.pipeline()
     for (const queue of queues) {

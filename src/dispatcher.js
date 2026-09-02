@@ -4,6 +4,7 @@ const MetricsBuffer = require("./buffer")
 const Plan = require("./plan")
 const SampleTraceWave = require("./sampleTraceWave")
 const safeLog = require("./log")
+const { formatError } = safeLog
 const { rqtParts } = MetricsBuffer
 const { RQT, rqt } = require("./strategy")
 
@@ -85,7 +86,7 @@ class Dispatcher {
       return true
     } catch (error) {
       this._logger().error(
-        `[HireFire] Could not start dispatcher: ${error?.message ?? error}`,
+        `[HireFire] Could not start dispatcher: ${formatError(error)}`,
       )
       this._running = false
       return false
@@ -109,7 +110,7 @@ class Dispatcher {
       )
     } catch (error) {
       this._logger().error(
-        `[HireFire] Could not start job-queue loop: ${error?.message ?? error}`,
+        `[HireFire] Could not start job-queue loop: ${formatError(error)}`,
       )
     }
   }
@@ -161,7 +162,7 @@ class Dispatcher {
       await this._client.close()
     } catch (error) {
       this._logger().error(
-        `[HireFire] Client close error: ${error?.message ?? error}`,
+        `[HireFire] Client close error: ${formatError(error)}`,
       )
     }
     try {
@@ -169,7 +170,7 @@ class Dispatcher {
       await this._lease.close()
     } catch (error) {
       this._logger().error(
-        `[HireFire] Lease close error: ${error?.message ?? error}`,
+        `[HireFire] Lease close error: ${formatError(error)}`,
       )
     }
   }
@@ -203,9 +204,9 @@ class Dispatcher {
     const promise = this._runLoop(generation, tick)
       .catch((error) => {
         this._logger().error(
-          `[HireFire] Dispatcher loop stopped unexpectedly: ${
-            error?.message ?? error
-          }`,
+          `[HireFire] Dispatcher loop stopped unexpectedly: ${formatError(
+            error,
+          )}`,
         )
       })
       .finally(() => {
@@ -500,9 +501,7 @@ class Dispatcher {
     try {
       await fn()
     } catch (error) {
-      this._logger().error(
-        `[HireFire] ${error?.name ?? "Error"}: ${error?.message ?? error}`,
-      )
+      this._logger().error(`[HireFire] ${formatError(error)}`)
     }
   }
 
@@ -565,11 +564,7 @@ class Dispatcher {
       ) {
         this._repopulateRqt(data)
       }
-      this._logger().error(
-        `[HireFire] Dispatch error: ${error?.name ?? "Error"}: ${
-          error?.message ?? error
-        }`,
-      )
+      this._logger().error(`[HireFire] Dispatch error: ${formatError(error)}`)
     }
   }
 

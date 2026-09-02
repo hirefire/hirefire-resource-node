@@ -62,19 +62,23 @@ describe("Plan", () => {
 
     try {
       present.delete("pg")
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("pg_boss")).toBe(false)
       expect(Plan.executable("pg_boss")).toBe(false)
 
       present.add("pg")
       present.delete("pg-boss")
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("pg_boss")).toBe(false)
       expect(Plan.executable("pg_boss")).toBe(false)
 
       present.add("pg-boss")
       present.add("pg")
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("pg_boss")).toBe(true)
       expect(Plan.executable("pg_boss")).toBe(true)
     } finally {
+      Plan.resetLibraryLoadedCache()
       planModule.require.resolve = originalResolve
     }
   })
@@ -99,14 +103,17 @@ describe("Plan", () => {
     planModule.require.resolve = mockResolve
 
     try {
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("bull")).toBe(false)
       expect(Plan.libraryLoaded("bullmq")).toBe(false)
 
       present.add("bullmq")
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("bullmq")).toBe(false)
       expect(Plan.executable("bullmq")).toBe(false)
 
       present.add("ioredis")
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("bullmq")).toBe(true)
       expect(Plan.libraryLoaded("bull")).toBe(false)
       expect(Plan.executable("bull")).toBe(false)
@@ -114,18 +121,22 @@ describe("Plan", () => {
       present.delete("bullmq")
       present.delete("ioredis")
       present.add("bull")
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("bull")).toBe(false)
       expect(Plan.executable("bull")).toBe(false)
 
       present.add("ioredis")
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("bull")).toBe(true)
       expect(Plan.libraryLoaded("bullmq")).toBe(false)
       expect(Plan.executable("bullmq")).toBe(false)
 
       present.add("bullmq")
+      Plan.resetLibraryLoadedCache()
       expect(Plan.libraryLoaded("bull")).toBe(true)
       expect(Plan.libraryLoaded("bullmq")).toBe(true)
     } finally {
+      Plan.resetLibraryLoadedCache()
       planModule.require.resolve = originalResolve
     }
   })

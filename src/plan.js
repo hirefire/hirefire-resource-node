@@ -1,4 +1,5 @@
 const safeLog = require("./log")
+const { formatError } = safeLog
 
 const STRATEGIES = {
   jql: "jobQueueLatency",
@@ -40,6 +41,10 @@ const Plan = {
 
   libraryLoaded(adapter) {
     return libraryLoaded(adapter)
+  },
+
+  resetLibraryLoadedCache() {
+    resetLibraryLoadedCache()
   },
 
   executable(adapter) {
@@ -247,10 +252,7 @@ const Plan = {
         )
       }
     } catch (error) {
-      const reason =
-        error instanceof Error
-          ? `${error.name}: ${error.message}`
-          : String(error)
+      const reason = formatError(error)
       safeLog(
         logger,
         "error",
@@ -289,8 +291,7 @@ async function sampleJobStrategy(
     configuration.buffer.sample(name, strategy, Number(value))
     return true
   } catch (error) {
-    const reason =
-      error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    const reason = formatError(error)
     safeLog(
       logger,
       "error",
@@ -327,8 +328,7 @@ async function sampleWorking(
     }
     configuration.buffer.sample(name, "wrk", Number(wrk))
   } catch (error) {
-    const reason =
-      error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    const reason = formatError(error)
     safeLog(
       logger,
       "error",
@@ -339,8 +339,21 @@ async function sampleWorking(
   }
 }
 
+const libraryLoadedCache = new Map()
+
 function libraryLoaded(adapter) {
   const name = String(adapter)
+  if (libraryLoadedCache.has(name)) return libraryLoadedCache.get(name)
+  const loaded = detectLibrary(name)
+  libraryLoadedCache.set(name, loaded)
+  return loaded
+}
+
+function resetLibraryLoadedCache() {
+  libraryLoadedCache.clear()
+}
+
+function detectLibrary(name) {
   if (name === "pg_boss") {
     try {
       require.resolve("pg-boss")
@@ -422,10 +435,7 @@ function formatSampleValue(value) {
 }
 
 function formatHookError(error) {
-  if (error instanceof Error) {
-    return `${error.name}: ${error.message}`
-  }
-  return String(error)
+  return formatError(error)
 }
 
 module.exports = Plan

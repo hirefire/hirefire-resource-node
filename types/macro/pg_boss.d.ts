@@ -1,8 +1,11 @@
+export type Queryable = {
+  query: (...args: any[]) => any
+}
 export type PgBossOptions = {
-  connection?: string | object
+  connection?: string | Queryable
   connectionOptions?: object
   schema?: string
-  pool?: object
+  pool?: Queryable
 }
 export function jobQueueLatency(...queues: string[]): Promise<number>
 export function jobQueueLatency(

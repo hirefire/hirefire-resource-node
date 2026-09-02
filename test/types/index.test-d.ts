@@ -9,6 +9,7 @@ import nextMiddleware = require("../../types/middleware/next")
 import bullmq = require("../../types/macro/bullmq")
 import bull = require("../../types/macro/bull")
 import pgBoss = require("../../types/macro/pg_boss")
+import errors = require("../../types/errors")
 
 const configuration = HireFire.configuration
 
@@ -17,12 +18,12 @@ expectType<string | null>(configuration.httpName)
 configuration.token = "token"
 configuration.token = null
 
-expectType<typeof configuration>(HireFire.configure((config) => {
-  expectType<void>(config.dyno("web"))
-  expectType<void>(
-    config.dyno("worker", () => 1),
-  )
-}))
+expectType<typeof configuration>(
+  HireFire.configure((config) => {
+    expectType<void>(config.dyno("web"))
+    expectType<void>(config.dyno("worker", () => 1))
+  }),
+)
 expectType<typeof configuration>(HireFire.boot())
 expectType<Promise<boolean>>(HireFire.reset())
 
@@ -33,11 +34,15 @@ expectError(configuration.dyno("worker", 1))
 expectType<boolean>(configuration.dispatcher.start())
 expectType<void>(configuration.dispatcher.ensureJobQueueLoop())
 expectType<boolean>(configuration.dispatcher.running())
-expectType<Promise<boolean>>(configuration.dispatcher.stop())
-expectType<Promise<boolean>>(configuration.dispatcher.stop({ flush: false }))
-expectType<Promise<boolean>>(configuration.dispatcher.stop({ flush: true }))
+expectType<void>(configuration.markHttpActive())
+expectType<boolean>(configuration.rqtEnabled)
+expectType<boolean>(configuration.rqtLiveness)
+expectType<object[]>(configuration.activeCpuSources())
 
-expectError(configuration.dispatcher.stop({ flush: "no" }))
+expectType<typeof errors.MissingQueueError>(errors.MissingQueueError)
+expectType<typeof errors.JobQueueLatencyUnsupportedError>(
+  errors.JobQueueLatencyUnsupportedError,
+)
 
 expectType<typeof Configuration.MissingSamplerError>(
   Configuration.MissingSamplerError,
@@ -54,9 +59,11 @@ expectType<Promise<void>>(
 )
 expectType<Promise<void>>(fastifyMiddleware({}, {}))
 expectType<(nextRequest: any) => any>(nextMiddleware.middleware)
-expectType<(userMiddleware: nextMiddleware.NextMiddleware) => nextMiddleware.NextMiddleware>(
-  nextMiddleware.withHireFire,
-)
+expectType<
+  (
+    userMiddleware: nextMiddleware.NextMiddleware,
+  ) => nextMiddleware.NextMiddleware
+>(nextMiddleware.withHireFire)
 
 expectType<Promise<number>>(bullmq.jobQueueSize())
 expectType<Promise<number>>(bullmq.jobQueueSize("default"))
@@ -82,6 +89,18 @@ expectType<Promise<number>>(pgBoss.jobQueueWorking("default"))
 expectType<Promise<number>>(
   pgBoss.jobQueueWorking("default", { connection: "postgres://localhost/db" }),
 )
+expectType<Promise<number>>(
+  pgBoss.jobQueueSize("default", {
+    connection: { query: () => Promise.resolve() },
+  }),
+)
+expectType<Promise<number>>(
+  pgBoss.jobQueueSize("default", { pool: { query: () => Promise.resolve() } }),
+)
+expectError(
+  pgBoss.jobQueueSize("default", { connection: { host: "127.0.0.1" } }),
+)
+expectError(pgBoss.jobQueueSize("default", { pool: { host: "127.0.0.1" } }))
 expectType<boolean>(pgBoss.queuesRequired())
 
 expectError(bullmq.jobQueueSize(1))

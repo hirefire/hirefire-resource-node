@@ -1194,10 +1194,10 @@ describe("Dispatcher", () => {
     await expect(dispatcher.stop()).resolves.toBe(false)
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Client close error: client close failed"),
+      expect.stringContaining("Client close error: Error: client close failed"),
     )
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Lease close error: lease close failed"),
+      expect.stringContaining("Lease close error: Error: lease close failed"),
     )
   })
 

@@ -8,7 +8,7 @@ const {
 } = require("../../src/macro/pg_boss")
 const {
   reset: resetBlockedColumnCacheForTests,
-} = require("../../src/macro/pg_boss_blocked_column")
+} = require("../../src/macro/pg_boss/blocked_column")
 const Plan = require("../../src/plan")
 const Configuration = require("../../src/configuration")
 
@@ -16,7 +16,7 @@ const SCHEMA = "hf_pg_boss_test"
 const postgresURL =
   process.env.HIREFIRE_PG_BOSS_URL ||
   process.env.DATABASE_URL ||
-  `postgres://postgres@127.0.0.1:${
+  `postgres://postgres:postgres@127.0.0.1:${
     process.env.POSTGRES_PORT || "5432"
   }/postgres`
 

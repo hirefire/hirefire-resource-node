@@ -68,12 +68,20 @@
     "./macro/pg_boss": {
       "types": "./types/macro/pg_boss.d.ts",
       "default": "./src/macro/pg_boss.js"
-    }
+    },
+    "./errors": {
+      "types": "./types/errors.d.ts",
+      "default": "./src/errors.js"
+    },
+    "./package.json": "./package.json"
   },
   "typesVersions": {
     "*": {
       "configuration": [
         "./types/configuration.d.ts"
+      ],
+      "errors": [
+        "./types/errors.d.ts"
       ],
       "middleware/*": [
         "./types/middleware/*.d.ts"
@@ -117,6 +125,18 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "peerDependencies": {
+    "ioredis": ">=4",
+    "pg": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "ioredis": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

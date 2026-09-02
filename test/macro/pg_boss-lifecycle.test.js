@@ -12,7 +12,7 @@ const {
 } = require("../../src/macro/pg_boss")
 const {
   reset: resetBlockedColumnCacheForTests,
-} = require("../../src/macro/pg_boss_blocked_column")
+} = require("../../src/macro/pg_boss/blocked_column")
 
 const describeIfPg = pg ? describe : describe.skip
 
@@ -401,7 +401,8 @@ describeIfPg("pg-boss connection lifecycle", () => {
       await expect(jobQueueSize()).resolves.toBe(0)
       expect(poolSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          connectionString: "postgres://127.0.0.1:5432/postgres",
+          connectionString:
+            "postgres://postgres:postgres@127.0.0.1:5432/postgres",
         }),
       )
     } finally {

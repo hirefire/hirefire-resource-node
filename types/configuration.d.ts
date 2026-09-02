@@ -9,6 +9,10 @@ declare class Configuration {
   get dispatcher(): Dispatcher
   get httpName(): string | null
   get httpSource(): object | null
+  markHttpActive(): void
+  get rqtEnabled(): boolean
+  get rqtLiveness(): boolean
+  activeCpuSources(): object[]
 }
 declare namespace Configuration {
   export { MissingSamplerError, DuplicateDynoError, Logger }
