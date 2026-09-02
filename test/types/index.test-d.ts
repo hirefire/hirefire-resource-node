@@ -15,6 +15,8 @@ const configuration = HireFire.configuration
 
 expectType<string | null>(configuration.token)
 expectType<string | null>(configuration.httpName)
+expectType<object | null>(configuration.http)
+expectType<object>(configuration.jobQueues)
 configuration.token = "token"
 configuration.token = null
 

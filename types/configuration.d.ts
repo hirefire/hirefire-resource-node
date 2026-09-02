@@ -1,6 +1,8 @@
 export = Configuration
 declare class Configuration {
   logger: Logger | null
+  http: object | null
+  jobQueues: object
   set token(value: string | null | undefined)
   get token(): string | null
   dyno(name: string): void

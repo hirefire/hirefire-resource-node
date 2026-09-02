@@ -85,7 +85,7 @@ class Configuration {
     throw new MissingSamplerError(
       `config.dyno("${name}") could not be resolved: it needs a sampler function ` +
         `(job-queue metrics). Request queue time is always-on via platform web role or ` +
-        `middleware traffic; CPU is always-on when process identity resolves. ` +
+        `middleware traffic. CPU is always-on when process identity resolves. ` +
         `Bare config.dyno("web") is a no-op and can be removed.`,
     )
   }

@@ -65,9 +65,15 @@ describe("Configuration", () => {
   })
 
   test("dyno without function raises for a non web name", () => {
-    expect(() => config.dyno("worker")).toThrow(
-      Configuration.MissingSamplerError,
-    )
+    let message
+    try {
+      config.dyno("worker")
+    } catch (error) {
+      expect(error).toBeInstanceOf(Configuration.MissingSamplerError)
+      message = error.message
+    }
+    expect(message).toMatch(/middleware traffic\. CPU is always-on/)
+    expect(message).not.toMatch(/;/)
   })
 
   test("dyno rejects non-function second arg", () => {
