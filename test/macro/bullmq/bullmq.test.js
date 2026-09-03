@@ -11,33 +11,59 @@ const Plan = require("../../../src/plan")
 const Configuration = require("../../../src/configuration")
 const IORedis = require("ioredis")
 
-const redisURL = `redis://127.0.0.1:${process.env.REDIS_PORT || "6379"}/0`
+const redisPort = Number(process.env.REDIS_PORT || "6379")
+const redisURL = `redis://127.0.0.1:${redisPort}/0`
+
+function queueConnection() {
+  return {
+    host: "127.0.0.1",
+    port: redisPort,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+  }
+}
 
 describe("BullMQ", () => {
   let defaultQueue, mailerQueue, redis
 
-  beforeAll(async () => {
-    redis = new IORedis(redisURL)
-  })
-
-  afterAll(async () => {
-    await redis.quit()
-  })
-
   beforeEach(async () => {
+    redis = new IORedis(redisURL, {
+      maxRetriesPerRequest: 1,
+      enableReadyCheck: false,
+    })
+    await redis.ping()
     await redis.flushdb()
-    defaultQueue = new Queue("default", { connection: redis })
-    mailerQueue = new Queue("mailer", { connection: redis })
+    defaultQueue = new Queue("default", { connection: queueConnection() })
+    mailerQueue = new Queue("mailer", { connection: queueConnection() })
     jest.useFakeTimers({
-      doNotFake: ["nextTick", "setImmediate"],
       now: Date.now(),
+      doNotFake: [
+        "nextTick",
+        "setImmediate",
+        "setInterval",
+        "setTimeout",
+        "clearInterval",
+        "clearTimeout",
+        "queueMicrotask",
+        "hrtime",
+        "performance",
+      ],
     })
   })
 
   afterEach(async () => {
     jest.useRealTimers()
-    await defaultQueue.close()
-    await mailerQueue.close()
+    for (const queue of [defaultQueue, mailerQueue]) {
+      if (!queue) continue
+      await queue.close()
+      if (typeof queue.disconnect === "function") {
+        await queue.disconnect()
+      }
+    }
+    if (redis) {
+      redis.disconnect()
+      redis = null
+    }
   })
 
   test("libraryLoaded is true when the bullmq package is imported", () => {
@@ -112,15 +138,15 @@ describe("BullMQ", () => {
     await defaultQueue.add("pastScheduledJob", {}, { delay: 15_000 })
     await defaultQueue.add("pastScheduledJob", {}, { delay: 30_000 })
     await defaultQueue.add("pastScheduledJob")
-    jest.advanceTimersByTime(1)
+    jest.setSystemTime(Date.now() + 1)
     expect(await jobQueueSize({ connection: redisURL })).toBe(1)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
-    jest.advanceTimersByTime(15_000)
+    jest.setSystemTime(Date.now() + 15_000)
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
-    jest.advanceTimersByTime(15_000)
+    jest.setSystemTime(Date.now() + 15_000)
     expect(await jobQueueSize({ connection: redisURL })).toBe(3)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(3)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
@@ -144,7 +170,7 @@ describe("BullMQ", () => {
     await defaultQueue.add("liveJob", {})
     await defaultQueue.add("dueDelayedJob", {}, { delay: 1 })
     await redis.lpush("bull:default:active", "job-active-1")
-    jest.advanceTimersByTime(1)
+    jest.setSystemTime(Date.now() + 1)
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await redis.llen("bull:default:active")).toBe(1)
@@ -153,7 +179,7 @@ describe("BullMQ", () => {
   test("jobQueueSize excludes future delayed until due", async () => {
     await defaultQueue.add("futureDelayedJob", {}, { delay: 60_000 })
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
-    jest.advanceTimersByTime(60_000)
+    jest.setSystemTime(Date.now() + 60_000)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
   })
 
@@ -185,7 +211,7 @@ describe("BullMQ", () => {
     await defaultQueue.add("liveJob", {})
     await mailerQueue.add("liveJob", {})
     await mailerQueue.add("dueDelayedJob", {}, { delay: 1 })
-    jest.advanceTimersByTime(1)
+    jest.setSystemTime(Date.now() + 1)
     expect(
       await jobQueueSize("default", "mailer", { connection: redisURL }),
     ).toBe(4)

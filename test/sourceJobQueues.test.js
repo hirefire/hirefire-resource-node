@@ -89,6 +89,20 @@ describe("JobQueues", () => {
     )
   })
 
+  test("raising sampler redacts url userinfo", async () => {
+    const configuration = configure()
+    configuration.dyno("worker", () => {
+      throw new Error("redis://user:secret@localhost:6379/0 down")
+    })
+    await configuration.jobQueues.sampleJobQueue(
+      configuration.jobQueues.findByName("worker"),
+      "jql",
+    )
+    const message = configuration.logger.error.mock.calls[0][0]
+    expect(message).not.toContain("secret")
+    expect(message).toContain("://***@")
+  })
+
   test("invalid sample values are dropped and logged", async () => {
     const configuration = configure()
     const values = ["10", null, -1, Infinity, NaN, 7]

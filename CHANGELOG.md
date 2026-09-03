@@ -12,12 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Request queue time is sampled from HTTP traffic through the middleware. A web `dyno` line is not required.
 - CPU activity is sampled automatically.
 - Automatic request queue time and CPU sampling need a process identity (`HIREFIRE_SERVICE_NAME` or `DYNO`).
-- Set `HIREFIRE_VERBOSE` to print HireFire diagnostic messages to stdout.
 - Optional token-only setup with `HireFire.boot()`. Existing `config.dyno` job queue blocks still work.
 - `HireFire.reset()` stops the background dispatcher.
 - `HIREFIRE_BULLMQ_URL` and `HIREFIRE_BULL_URL` set the Redis URL for BullMQ and classic Bull samples. `HIREFIRE_PG_BOSS_URL` and `HIREFIRE_PG_BOSS_SCHEMA` set the Postgres URL and schema for pg-boss samples.
 - Count of jobs still being processed (`jobQueueWorking`) for BullMQ, classic Bull, and pg-boss.
-- Classic Bull: job queue size only. Job queue latency is unsupported.
+- Classic Bull job queue size (latency is unsupported).
 - pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them. Versions 11 and 12 require Node.js 22+.
 - Support Node.js 22, 24, and 26.
 - Support Express 5, Fastify 5, Koa 3, Nest 11 and 12, Next.js 15 and 16, and BullMQ 5 and 6.
@@ -29,8 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Job queue metrics are sampled by one process at a time.
 - Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
 - BullMQ job queue size no longer counts active jobs.
-- BullMQ and classic Bull sampling now require the app's `ioredis` package. 1.x depended on `ioredis` from this package. Without it, those job metrics are not collected.
+- BullMQ and classic Bull sampling require the app's `ioredis` package as an optional peer. 1.x never depended on `ioredis` from this package. Without it, those job metrics are not collected.
 - Required Node.js is 20+. Official Express support is 4+.
+- Process names allow any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone.
+- `config.dyno` without a sampler raises `MissingSamplerError` (1.x raised `MissingDynoFnError`).
+- `HIREFIRE_VERBOSE` still prints dispatch diagnostics and now also prints sample-path timings.
 
 ### Deprecated
 
@@ -38,13 +40,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Removed
 
-- Serving `GET /hirefire/:token/info`.
+- Serving `GET /hirefire/:token/info` and `GET /hirefire` when the token matched.
 - `POST` of request queue time JSON to `logdrain.hirefire.io`.
 - `HIREFIRE_DISPATCH_URL` no longer overrides ingest. The internal override is `HIREFIRE_DATA_URL`.
 - Official support for Node.js 16 and 18.
 
 ### Fixed
 
+- HTTP requests to HireFire time out within five seconds even when DNS never completes.
+- `HireFire.configure` rejects an async callback instead of starting the dispatcher before the callback finishes.
+- Sampler error logs redact passwords in `user:pass@` connection URLs.
 - A globally paused BullMQ 4 queue no longer counts the pause marker as a queued job.
 - BullMQ, classic Bull, and pg-boss samples fail within five seconds when Redis or Postgres does not respond.
 - TypeScript declarations now match the published JavaScript exports, including the error helper, configuration constants, and nested job-queue, HTTP, CPU, dispatcher, and buffer shapes.

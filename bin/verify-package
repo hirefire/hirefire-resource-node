@@ -44,7 +44,18 @@ let parsed = JSON.parse(raw)
 if (!Array.isArray(parsed)) {
   parsed = [parsed]
 }
-const files = (parsed[0].files || []).map((file) =>
+const packed = parsed[0] || {}
+if (packed.name && packed.name !== pkg.name) {
+  fail(`packed name ${packed.name} != ${pkg.name}`)
+}
+if (packed.version && packed.version !== pkg.version) {
+  fail(`packed version ${packed.version} != ${pkg.version}`)
+}
+const expectedTarball = `${pkg.name}-${pkg.version}.tgz`
+if (packed.filename && packed.filename !== expectedTarball) {
+  fail(`packed filename ${packed.filename} != ${expectedTarball}`)
+}
+const files = (packed.files || []).map((file) =>
   typeof file === "string" ? file : file.path,
 )
 const fileSet = new Set(files)

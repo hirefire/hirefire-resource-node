@@ -145,7 +145,7 @@ jobs:
         run: |
           version="$(node -p "require('./package.json').version")"
           if [[ "$version" == *-* ]]; then
-            npm publish --access public --tag rc
+            npm publish --access public --tag rc --provenance
           else
-            npm publish --access public
+            npm publish --access public --provenance
           fi

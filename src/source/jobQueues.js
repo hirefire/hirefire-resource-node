@@ -1,4 +1,5 @@
 const safeLog = require("../log")
+const { formatError } = safeLog
 
 class JobQueues {
   constructor(configuration) {
@@ -62,14 +63,10 @@ class JobQueues {
 
       this._configuration.buffer.sample(reportName, strategy, Number(value))
     } catch (error) {
-      const reason =
-        error instanceof Error
-          ? `${error.name}: ${error.message}`
-          : inspect(error)
       this._logger().error(
         `[HireFire] The sampler for ${JSON.stringify(
           reportName,
-        )} raised ${reason}`,
+        )} raised ${formatError(error)}`,
       )
     }
   }

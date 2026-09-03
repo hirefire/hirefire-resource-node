@@ -16,21 +16,28 @@ const redisURL = `redis://127.0.0.1:${process.env.REDIS_PORT || "6379"}/0`
 describe("Bull", () => {
   let defaultQueue, mailerQueue, redis
 
-  beforeAll(async () => {
-    redis = new IORedis(redisURL)
-  })
-
-  afterAll(async () => {
-    await redis.quit()
-  })
-
   beforeEach(async () => {
+    redis = new IORedis(redisURL, {
+      maxRetriesPerRequest: 1,
+      enableReadyCheck: false,
+    })
+    await redis.ping()
     await redis.flushdb()
     defaultQueue = new Queue("default", redisURL)
     mailerQueue = new Queue("mailer", redisURL)
     jest.useFakeTimers({
-      doNotFake: ["nextTick", "setImmediate"],
       now: Date.now(),
+      doNotFake: [
+        "nextTick",
+        "setImmediate",
+        "setInterval",
+        "setTimeout",
+        "clearInterval",
+        "clearTimeout",
+        "queueMicrotask",
+        "hrtime",
+        "performance",
+      ],
     })
   })
 
@@ -40,6 +47,10 @@ describe("Bull", () => {
       if (defaultQueue) await defaultQueue.close()
     } finally {
       if (mailerQueue) await mailerQueue.close()
+    }
+    if (redis) {
+      redis.disconnect()
+      redis = null
     }
   })
 
@@ -105,19 +116,19 @@ describe("Bull", () => {
     await defaultQueue.add({}, { delay: 15_000 })
     await defaultQueue.add({}, { delay: 30_000 })
     await defaultQueue.add({})
-    jest.advanceTimersByTime(1)
+    jest.setSystemTime(Date.now() + 1)
     expect(await redis.llen("bull:default:wait")).toBe(1)
     expect(await redis.zcard("bull:default:delayed")).toBe(2)
     expect(await jobQueueSize({ connection: redisURL })).toBe(1)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
-    jest.advanceTimersByTime(15_000)
+    jest.setSystemTime(Date.now() + 15_000)
     expect(await redis.llen("bull:default:wait")).toBe(1)
     expect(await redis.zcard("bull:default:delayed")).toBe(2)
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
-    jest.advanceTimersByTime(15_000)
+    jest.setSystemTime(Date.now() + 15_000)
     expect(await redis.llen("bull:default:wait")).toBe(1)
     expect(await redis.zcard("bull:default:delayed")).toBe(2)
     expect(await jobQueueSize({ connection: redisURL })).toBe(3)
@@ -135,7 +146,7 @@ describe("Bull", () => {
     await defaultQueue.add({})
     await defaultQueue.add({}, { delay: 1 })
     await redis.lpush("bull:default:active", "job-active-1")
-    jest.advanceTimersByTime(1)
+    jest.setSystemTime(Date.now() + 1)
     expect(await jobQueueSize({ connection: redisURL })).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
     expect(await redis.llen("bull:default:active")).toBe(1)
@@ -146,7 +157,7 @@ describe("Bull", () => {
     expect(await redis.zcard("bull:default:delayed")).toBe(1)
     expect(await redis.llen("bull:default:wait")).toBe(0)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
-    jest.advanceTimersByTime(60_000)
+    jest.setSystemTime(Date.now() + 60_000)
     expect(await redis.zcard("bull:default:delayed")).toBe(1)
     expect(await redis.llen("bull:default:wait")).toBe(0)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
@@ -208,7 +219,7 @@ describe("Bull", () => {
     await defaultQueue.add({})
     await mailerQueue.add({})
     await mailerQueue.add({}, { delay: 1 })
-    jest.advanceTimersByTime(1)
+    jest.setSystemTime(Date.now() + 1)
     expect(await redis.llen("bull:default:wait")).toBe(2)
     expect(await redis.llen("bull:mailer:wait")).toBe(1)
     expect(await redis.zcard("bull:mailer:delayed")).toBe(1)

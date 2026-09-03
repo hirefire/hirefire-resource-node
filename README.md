@@ -12,7 +12,7 @@ This package integrates Node.js applications running on [Heroku] with [HireFire]
 - Koa 2+
 - Connect 3+
 - Fastify 4+
-- Next.js 14+ (Node.js runtime, not Edge)
+- Next.js 14+ (unit-tested). Node.js middleware runtime requires 15.5+ (not Edge). Next.js 16 uses `proxy.ts`.
 - Sails 1+
 - Nest 10+
 
@@ -26,11 +26,20 @@ The test suite runs against these minimum versions and the current latest releas
 
 **Types:**
 
-The package ships `.d.ts` declarations for TypeScript consumers. Native ESM named imports of macros (for example `import { queuesRequired } from "hirefire-resource/macro/bull"`) can type-check and fail at runtime. Use the default import under ESM.
+The package ships `.d.ts` declarations for TypeScript consumers. Native ESM named imports of macros (for example `import { jobQueueSize } from "hirefire-resource/macro/bull"`) can type-check and fail at runtime. Use the default import under ESM.
 
 **Documentation:**
 
-Changelog lives in [CHANGELOG.md](CHANGELOG.md).
+Changelog lives in [CHANGELOG.md](CHANGELOG.md). Setup instructions for supported web frameworks and worker libraries are provided in the HireFire UI during installation.
+
+Next.js middleware (15.5+ Node runtime) should skip static assets:
+
+```js
+export const config = {
+  matcher: "/((?!_next/static|_next/image|favicon.ico).*)",
+  runtime: "nodejs",
+};
+```
 
 ## Development
 
@@ -42,11 +51,11 @@ Requires [Docker](https://www.docker.com/), [mise](https://mise.jdx.dev/), and `
 
 ## Release
 
-1. Update the version in `package.json` using `npm version <patch|minor|major> --no-git-tag-version` (prerelease: `npm version prerelease --preid=rc --no-git-tag-version`, e.g. `2.0.0-rc.1`).
+1. Update the version in `package.json` using `npm version <patch|minor|major> --no-git-tag-version`. For the first release candidate of a version, set it explicitly (for example `npm version 2.0.0-rc.1 --no-git-tag-version`). `npm version prerelease --preid=rc` from `2.0.0` yields `2.0.1-rc.0`, not `2.0.0-rc.1`.
 2. If `package.json` dependencies changed, refresh `package-lock.json` with `npm install`.
 3. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (today's date) and add a fresh empty `## [Unreleased]` above it.
 4. Commit changes with `git commit`.
-5. Create a `git tag` matching the new version (e.g., `v2.0.0` or `v2.0.0-rc.1`).
+5. On `master`, create a `git tag` matching the new version (e.g., `v2.0.0` or `v2.0.0-rc.1`). The publish job requires the tag to point at `origin/master`.
 6. Push the new git tag. Continuous Integration will handle the distribution process. Prerelease versions publish to the `rc` dist-tag, not `latest`.
 
 ## License

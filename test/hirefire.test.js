@@ -30,6 +30,13 @@ describe("HireFire", () => {
     expect(received).toBe(hirefire.configuration)
   })
 
+  test("configure rejects a thenable callback", () => {
+    const hirefire = createHireFire()
+    expect(() => hirefire.configure(async () => {})).toThrow(
+      "HireFire.configure callbacks must be synchronous.",
+    )
+  })
+
   test("boot is configure with empty function", () => {
     process.env.HIREFIRE_TOKEN = "test-token-value"
     const start = jest

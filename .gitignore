@@ -5,3 +5,4 @@ dump.rdb
 node_modules
 /coverage
 AGENTS.md
+*.tgz

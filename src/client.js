@@ -104,13 +104,18 @@ class Client {
   async _executeUntracked(path, headers, body, options = {}) {
     const uri = new URL(this._baseUrl() + path)
     const transport = uri.protocol === "https:" ? https : http
+    const deadlineMs = this._timeout * 1000
+    const controller = new AbortController()
+    const deadline = setTimeout(() => controller.abort(), deadlineMs)
+    if (deadline.unref) deadline.unref()
     const requestOptions = {
       method: "POST",
       hostname: uri.hostname,
       port: uri.port || (uri.protocol === "https:" ? 443 : 80),
       path: uri.pathname + uri.search,
       headers: { ...headers },
-      timeout: this._timeout * 1000,
+      timeout: deadlineMs,
+      signal: controller.signal,
       agent: this._agentFor(transport),
     }
 
@@ -119,12 +124,19 @@ class Client {
     }
 
     try {
-      return await this._attempt(transport, requestOptions, body, options)
-    } catch (error) {
-      if (error instanceof RequestError && error.retriable) {
-        return this._attempt(transport, requestOptions, body, options)
+      try {
+        return await this._attempt(transport, requestOptions, body, options)
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw this._timeoutError(error)
+        }
+        if (error instanceof RequestError && error.retriable) {
+          return await this._attempt(transport, requestOptions, body, options)
+        }
+        throw error
       }
-      throw error
+    } finally {
+      clearTimeout(deadline)
     }
   }
 
@@ -227,8 +239,20 @@ class Client {
     return this._agent
   }
 
+  _timeoutError(error) {
+    if (error instanceof RequestError && /timed out/i.test(error.message)) {
+      return error
+    }
+    return new RequestError("Request timed out.")
+  }
+
   _transportError(error, reusedSocket = false) {
-    if (error.code === "ETIMEDOUT" || error.code === "ESOCKETTIMEDOUT") {
+    if (
+      error.code === "ETIMEDOUT" ||
+      error.code === "ESOCKETTIMEDOUT" ||
+      error.code === "ABORT_ERR" ||
+      error.name === "AbortError"
+    ) {
       return new RequestError("Request timed out.")
     }
     const requestError = new RequestError(

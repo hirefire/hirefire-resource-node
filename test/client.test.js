@@ -75,6 +75,26 @@ describe("Client", () => {
     }
   })
 
+  test("submit samples times out when the request never connects", async () => {
+    const dns = require("dns")
+    const wasActive = nock.isActive()
+    if (wasActive) nock.restore()
+    const spy = jest.spyOn(dns, "lookup").mockImplementation(() => {})
+    const slowClient = new Client(
+      { token: "test-token-value" },
+      { timeout: 0.1 },
+    )
+    const started = Date.now()
+    try {
+      await expect(slowClient.submitSamples(BODY)).rejects.toThrow("timed out")
+      expect(Date.now() - started).toBeLessThan(2000)
+    } finally {
+      spy.mockRestore()
+      await slowClient.close()
+      if (wasActive && !nock.isActive()) nock.activate()
+    }
+  })
+
   test("submit samples raises on transport errors", async () => {
     for (const error of [
       { code: "ECONNREFUSED" },

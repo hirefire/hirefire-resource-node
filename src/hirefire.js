@@ -6,7 +6,10 @@ class HireFire {
   }
 
   configure(fn) {
-    fn(this.configuration)
+    const result = fn(this.configuration)
+    if (result != null && typeof result.then === "function") {
+      throw new TypeError("HireFire.configure callbacks must be synchronous.")
+    }
     this._startIfToken()
     return this.configuration
   }

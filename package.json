@@ -122,7 +122,8 @@
     ],
     "setupFilesAfterEnv": [
       "<rootDir>/test/support.js"
-    ]
+    ],
+    "openHandlesTimeout": 5000
   },
   "engines": {
     "node": ">=20"
