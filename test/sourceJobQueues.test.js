@@ -105,7 +105,7 @@ describe("JobQueues", () => {
 
   test("invalid sample values are dropped and logged", async () => {
     const configuration = configure()
-    const values = ["10", null, -1, Infinity, NaN, 7]
+    const values = ["10", null, -1, Infinity, NaN, 7, 1.5]
     let i = 0
     configuration.dyno("worker", () => values[i++])
     const jobQueue = configuration.jobQueues.findByName("worker")
@@ -114,9 +114,20 @@ describe("JobQueues", () => {
       await configuration.jobQueues.sampleJobQueue(jobQueue, "jql")
     }
     expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
+    const dropped = configuration.logger.error.mock.calls
+      .map((c) => String(c[0]))
+      .join("\n")
+    expect(dropped).toContain("expected a non-negative number")
+    expect(dropped).toContain('string("10")')
+    expect(dropped).toContain('number("-1")')
 
     await configuration.jobQueues.sampleJobQueue(jobQueue, "jql")
     expect(strategyValue(configuration.buffer.flush(), "worker", "jql")).toBe(7)
+
+    await configuration.jobQueues.sampleJobQueue(jobQueue, "jql")
+    expect(strategyValue(configuration.buffer.flush(), "worker", "jql")).toBe(
+      1.5,
+    )
   })
 
   test("a raising logger does not escape sampling", async () => {

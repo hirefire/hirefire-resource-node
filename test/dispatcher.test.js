@@ -1702,6 +1702,27 @@ describe("Dispatcher", () => {
     ).toBe(true)
   })
 
+  test("encode rqt accepts object buckets and empty leaf for non object", async () => {
+    const bodies = captureIngestBodies()
+    const dispatcher = configureWebOnly()
+    freezeTime(1000)
+    const buffer = config().buffer
+    buffer._metrics.web = {
+      rqt: {
+        1000: { sum: 8, count: 2 },
+        999: { sum: 6, count: 2 },
+        998: 12,
+        997: null,
+      },
+    }
+    await dispatcher._dispatchTick()
+    const rqt = bodies[0][0].metrics.rqt
+    expect(rqt["1000"]).toEqual([4, 2])
+    expect(rqt["999"]).toEqual([3, 2])
+    expect(rqt["998"]).toEqual([])
+    expect(rqt["997"]).toEqual([])
+  })
+
   test("encode omits invalid non rqt values", async () => {
     const bodies = captureIngestBodies()
     const dispatcher = configureWebOnly()

@@ -1,4 +1,4 @@
-const { MissingQueueError } = require("../errors")
+const { MissingQueueError } = require("./errors")
 
 function unpack(args) {
   const lastArg = args[args.length - 1]

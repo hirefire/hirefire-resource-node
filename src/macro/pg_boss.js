@@ -1,4 +1,4 @@
-const { unpack, normalizeQueues } = require("./utility")
+const { unpack, normalizeQueues } = require("../utility")
 const Hooks = require("../plan/hooks")
 const blockedColumn = require("./pg_boss/blocked_column")
 

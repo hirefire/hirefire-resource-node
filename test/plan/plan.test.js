@@ -337,21 +337,50 @@ describe("Plan", () => {
     const macro = require("../../src/macro/bullmq")
     const orig = macro.jobQueueSize
     const origWorking = macro.jobQueueWorking
-    macro.jobQueueSize = async () => -1
+    const bad = [-1, NaN, Infinity, null, "nope"]
+    let i = 0
+    macro.jobQueueSize = async () => bad[i++]
     macro.jobQueueWorking = async () => {
       throw new Error("isolated from live redis")
     }
     try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
+      for (let n = 0; n < bad.length; n++) {
+        await Plan.execute(
+          {
+            name: "worker",
+            adapter: "bullmq",
+            strategy: "jqs",
+            queues: ["default"],
+          },
+          configuration,
+        )
+      }
       expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
+      const dropped = configuration.logger.error.mock.calls
+        .map((c) => String(c[0]))
+        .join("\n")
+      expect(dropped).toContain("Sample dropped")
+      expect(dropped).toContain('number("-1")')
+      expect(dropped).toContain('string("nope")')
+
+      const recorded = []
+      for (const good of [7, 1.5]) {
+        macro.jobQueueSize = async () => good
+        await Plan.execute(
+          {
+            name: "worker",
+            adapter: "bullmq",
+            strategy: "jqs",
+            queues: ["default"],
+          },
+          configuration,
+        )
+        recorded.push(...Object.values(configuration.buffer.flush().worker.jqs))
+      }
+      expect(recorded).toContain(7)
+      expect(recorded.some((value) => Math.abs(value - 1.5) < 0.0001)).toBe(
+        true,
+      )
     } finally {
       macro.jobQueueSize = orig
       macro.jobQueueWorking = origWorking

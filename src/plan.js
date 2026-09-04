@@ -1,5 +1,6 @@
 const safeLog = require("./log")
 const { formatError } = safeLog
+const { validSample, coerceSample, formatSampleValue } = require("./sample")
 
 const STRATEGIES = {
   jql: "jobQueueLatency",
@@ -288,7 +289,7 @@ async function sampleJobStrategy(
       return false
     }
 
-    configuration.buffer.sample(name, strategy, Number(value))
+    configuration.buffer.sample(name, strategy, coerceSample(value))
     return true
   } catch (error) {
     const reason = formatError(error)
@@ -326,7 +327,7 @@ async function sampleWorking(
       )
       return
     }
-    configuration.buffer.sample(name, "wrk", Number(wrk))
+    configuration.buffer.sample(name, "wrk", coerceSample(wrk))
   } catch (error) {
     const reason = formatError(error)
     safeLog(
@@ -415,23 +416,6 @@ function normalizePlanQueues(queues, name, logger) {
   }
 
   return list
-}
-
-function validSample(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-}
-
-function formatSampleValue(value) {
-  try {
-    const text = value === null ? "null" : typeof value
-    let preview = String(value)
-    if (Buffer.byteLength(preview) > 64) {
-      preview = preview.slice(0, 64) + "…"
-    }
-    return `${text}(${JSON.stringify(preview)})`
-  } catch {
-    return typeof value
-  }
 }
 
 function formatHookError(error) {

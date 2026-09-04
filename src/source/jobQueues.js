@@ -1,5 +1,6 @@
 const safeLog = require("../log")
 const { formatError } = safeLog
+const { validSample, coerceSample, formatSampleValue } = require("../sample")
 
 class JobQueues {
   constructor(configuration) {
@@ -54,14 +55,18 @@ class JobQueues {
       if (!validSample(value)) {
         this._logger().error(
           `[HireFire] The sampler for ${JSON.stringify(reportName)} returned ` +
-            `${inspect(
+            `${formatSampleValue(
               value,
             )}, expected a non-negative number. Sample dropped.`,
         )
         return
       }
 
-      this._configuration.buffer.sample(reportName, strategy, Number(value))
+      this._configuration.buffer.sample(
+        reportName,
+        strategy,
+        coerceSample(value),
+      )
     } catch (error) {
       this._logger().error(
         `[HireFire] The sampler for ${JSON.stringify(
@@ -74,23 +79,6 @@ class JobQueues {
   _logger() {
     const logger = this._configuration.logger
     return { error: (message) => safeLog(logger, "error", message) }
-  }
-}
-
-function validSample(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-}
-
-function inspect(value) {
-  try {
-    const text = value === null ? "null" : typeof value
-    let preview = String(value)
-    if (Buffer.byteLength(preview) > 64) {
-      preview = preview.slice(0, 64) + "…"
-    }
-    return `${text}(${JSON.stringify(preview)})`
-  } catch {
-    return typeof value
   }
 }
 

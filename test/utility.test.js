@@ -1,5 +1,5 @@
-const { normalizeQueues, unpack } = require("../../src/macro/utility")
-const { MissingQueueError } = require("../../src/errors")
+const { normalizeQueues, unpack } = require("../src/utility")
+const { MissingQueueError } = require("../src/errors")
 
 describe("utility", () => {
   test("strips surrounding whitespace", () => {
