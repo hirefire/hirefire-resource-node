@@ -8,34 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- The library now pushes metrics to `https://data.hirefire.io`.
-- Request queue time is sampled from HTTP traffic through the middleware. A web `dyno` line is not required.
-- CPU activity is sampled automatically.
-- Automatic request queue time and CPU sampling need a process identity (`HIREFIRE_SERVICE_NAME` or `DYNO`).
-- Optional token-only setup with `HireFire.boot()`. Existing `config.dyno` job queue blocks still work.
-- `HireFire.reset()` stops the background dispatcher.
+- Job metrics are pushed to HireFire instead of being read from a poll of the app.
+- CPU activity is sampled automatically on supported platforms when the process is identified.
+- `HireFire.boot()` starts metric collection when a token is set. `HireFire.reset()` stops the dispatcher and clears configuration.
+- `config.token` can set the HireFire token in code. 1.x read only `HIREFIRE_TOKEN`.
+- `HIREFIRE_SERVICE_NAME` sets the process name only on platforms that do not detect it automatically. On Heroku, `DYNO` is used.
 - `HIREFIRE_BULLMQ_URL` and `HIREFIRE_BULL_URL` set the Redis URL for BullMQ and classic Bull samples. `HIREFIRE_PG_BOSS_URL` and `HIREFIRE_PG_BOSS_SCHEMA` set the Postgres URL and schema for pg-boss samples.
-- Count of jobs still being processed (`jobQueueWorking`) for BullMQ, classic Bull, and pg-boss.
+- `jobQueueWorking` reports how many jobs are currently in progress for BullMQ, classic Bull, and pg-boss.
 - Classic Bull job queue size (latency is unsupported).
 - pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them. Versions 11 and 12 require Node.js 22+.
-- Support Node.js 22, 24, and 26.
+- Support Node.js 22+.
 - Support Express 5, Fastify 5, Koa 3, Nest 11 and 12, Next.js 15 and 16, and BullMQ 5 and 6.
 - The package now ships TypeScript declarations.
 
 ### Changed
 
-- Metrics are sent only when `HIREFIRE_TOKEN` is set.
-- Job queue metrics are sampled by one process at a time.
-- Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
-- BullMQ job queue size no longer counts active jobs.
-- BullMQ and classic Bull sampling require the app's `ioredis` package as an optional peer. 1.x never depended on `ioredis` from this package. Without it, those job metrics are not collected.
-- Required Node.js is 20+.
-- Process names allow any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone.
-- `config.dyno` without a sampler raises `MissingSamplerError` (1.x raised `MissingDynoFnError`).
+- Request queue time is sampled automatically from HTTP traffic. `config.dyno("web")` is not required.
+- BullMQ `jobQueueSize` no longer includes jobs already being processed.
+- BullMQ and classic Bull sampling require the app's `ioredis` package as an optional peer. Without it, those job metrics are not collected.
+- Official Node.js support is 20+.
+- Process names may be any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone.
+- `config.dyno` without a sampler raises `MissingSamplerError` except when the name is `"web"` (1.x raised `MissingDynoFnError`). Duplicate dyno names raise `DuplicateDynoError`.
+- `HireFire.configure` callbacks must be synchronous.
 
 ### Deprecated
 
-- Bare `config.dyno("web")` (no sampler) is deprecated. It does nothing. Request queue time is sampled automatically from HTTP traffic. You can remove the line. Leaving it does not break anything.
+- Bare `config.dyno("web")` (no sampler) is deprecated. It does nothing. Request queue time is sampled automatically from HTTP traffic. The line can be removed. Leaving it does not break anything.
 
 ### Removed
 
@@ -44,14 +42,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Request queue time ignores samples older than 60 seconds.
+- BullMQ `jobQueueSize` includes paused and prioritized jobs (1.x omitted both).
 - HTTP requests to HireFire time out within five seconds even when DNS never completes.
-- `HireFire.configure` rejects an async callback instead of starting the dispatcher before the callback finishes.
-- A globally paused BullMQ 4 queue no longer counts the pause marker as a queued job.
-- BullMQ, classic Bull, and pg-boss samples fail within five seconds when Redis or Postgres does not respond.
-
-### Security
-
-- Sampler error logs redact passwords in `user:pass@` connection URLs.
+- BullMQ samples fail within five seconds when Redis does not respond.
+- BullMQ samples with no queue names use Redis `SCAN` instead of `KEYS`.
 
 ## [1.2.0] - 2026-02-03
 
