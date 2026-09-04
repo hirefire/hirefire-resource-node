@@ -1,14 +1,14 @@
-const SampleTraceWave = require("../src/sampleTraceWave")
+const Probe = require("../src/probe")
 
-describe("SampleTraceWave", () => {
-  test("start returns a wave", () => {
-    const wave = SampleTraceWave.start()
-    expect(wave).toBeInstanceOf(SampleTraceWave)
+describe("Probe", () => {
+  test("start returns a probe", () => {
+    const probe = Probe.start()
+    expect(probe).toBeInstanceOf(Probe)
   })
 
   test("finish empty ops", () => {
-    const wave = SampleTraceWave.start()
-    const payload = wave.finish()
+    const probe = Probe.start()
+    const payload = probe.finish()
 
     expect(typeof payload.wave_ms).toBe("number")
     expect(payload.wave_ms).toBeGreaterThanOrEqual(0)
@@ -16,8 +16,8 @@ describe("SampleTraceWave", () => {
   })
 
   test("record builds op shape", () => {
-    const wave = SampleTraceWave.start()
-    wave.record(
+    const probe = Probe.start()
+    probe.record(
       {
         adapter: "bullmq",
         strategy: "jql",
@@ -26,7 +26,7 @@ describe("SampleTraceWave", () => {
       },
       12.3456,
     )
-    const payload = wave.finish()
+    const payload = probe.finish()
 
     expect(payload.ops).toHaveLength(1)
     const op = payload.ops[0]
@@ -38,8 +38,8 @@ describe("SampleTraceWave", () => {
   })
 
   test("record normalizes missing and wrong type fields", () => {
-    const wave = SampleTraceWave.start()
-    wave.record(
+    const probe = Probe.start()
+    probe.record(
       {
         adapter: null,
         strategy: "jqs",
@@ -48,7 +48,7 @@ describe("SampleTraceWave", () => {
       },
       1.0,
     )
-    const op = wave.finish().ops[0]
+    const op = probe.finish().ops[0]
 
     expect(op.adapter).toBeNull()
     expect(op.strategy).toBe("jqs")
@@ -58,19 +58,19 @@ describe("SampleTraceWave", () => {
   })
 
   test("record null strategy is empty string", () => {
-    const wave = SampleTraceWave.start()
-    wave.record({ adapter: "a", strategy: null }, 0.5)
-    wave.record({ adapter: "a" }, 0.5)
-    expect(wave.finish().ops[0].strategy).toBe("")
-    expect(wave.finish().ops[1].strategy).toBe("")
+    const probe = Probe.start()
+    probe.record({ adapter: "a", strategy: null }, 0.5)
+    probe.record({ adapter: "a" }, 0.5)
+    expect(probe.finish().ops[0].strategy).toBe("")
+    expect(probe.finish().ops[1].strategy).toBe("")
   })
 
   test("record non hash entry coerces", () => {
-    const wave = SampleTraceWave.start()
-    wave.record(null, 2.0)
-    wave.record("bad", 3.0)
-    wave.record([1], 4.0)
-    const ops = wave.finish().ops
+    const probe = Probe.start()
+    probe.record(null, 2.0)
+    probe.record("bad", 3.0)
+    probe.record([1], 4.0)
+    const ops = probe.finish().ops
 
     expect(ops).toHaveLength(3)
     for (const op of ops) {
@@ -85,9 +85,9 @@ describe("SampleTraceWave", () => {
   })
 
   test("measure times function and records", async () => {
-    const wave = SampleTraceWave.start()
+    const probe = Probe.start()
     let called = false
-    const result = await wave.measure(
+    const result = await probe.measure(
       { adapter: "a", strategy: "jql", queues: ["q"] },
       async () => {
         called = true
@@ -98,7 +98,7 @@ describe("SampleTraceWave", () => {
 
     expect(called).toBe(true)
     expect(result).toBe("ok")
-    const op = wave.finish().ops[0]
+    const op = probe.finish().ops[0]
     expect(op.adapter).toBe("a")
     expect(op.strategy).toBe("jql")
     expect(op.queues).toEqual(["q"])
@@ -107,38 +107,38 @@ describe("SampleTraceWave", () => {
   })
 
   test("measure does not record when function raises", async () => {
-    const wave = SampleTraceWave.start()
+    const probe = Probe.start()
     await expect(
-      wave.measure({ strategy: "jql" }, async () => {
+      probe.measure({ strategy: "jql" }, async () => {
         throw new Error("boom")
       }),
     ).rejects.toThrow("boom")
-    expect(wave.finish().ops).toEqual([])
+    expect(probe.finish().ops).toEqual([])
   })
 
   test("measure keeps prior ops when later raises", async () => {
-    const wave = SampleTraceWave.start()
-    await wave.measure({ strategy: "jql" }, async () => {})
+    const probe = Probe.start()
+    await probe.measure({ strategy: "jql" }, async () => {})
     await expect(
-      wave.measure({ strategy: "jqs" }, async () => {
+      probe.measure({ strategy: "jqs" }, async () => {
         throw new Error("boom")
       }),
     ).rejects.toThrow("boom")
-    const payload = wave.finish()
+    const payload = probe.finish()
     expect(payload.ops).toHaveLength(1)
     expect(payload.ops[0].strategy).toBe("jql")
     expect(typeof payload.wave_ms).toBe("number")
   })
 
-  test("finish wave ms covers all ops", async () => {
-    const wave = SampleTraceWave.start()
-    await wave.measure({ strategy: "jql" }, async () => {
+  test("finish wave_ms covers all ops", async () => {
+    const probe = Probe.start()
+    await probe.measure({ strategy: "jql" }, async () => {
       await new Promise((r) => setTimeout(r, 15))
     })
-    await wave.measure({ strategy: "jqs" }, async () => {
+    await probe.measure({ strategy: "jqs" }, async () => {
       await new Promise((r) => setTimeout(r, 15))
     })
-    const payload = wave.finish()
+    const payload = probe.finish()
     const opsMs = payload.ops.reduce((sum, op) => sum + op.ms, 0)
 
     expect(payload.ops).toHaveLength(2)
@@ -150,25 +150,25 @@ describe("SampleTraceWave", () => {
   })
 
   test("finish is stable when called twice", () => {
-    const wave = SampleTraceWave.start()
-    wave.record({ strategy: "jql" }, 3.0)
-    const first = wave.finish()
-    const second = wave.finish()
+    const probe = Probe.start()
+    probe.record({ strategy: "jql" }, 3.0)
+    const first = probe.finish()
+    const second = probe.finish()
 
     expect(first).toBe(second)
     expect(first.wave_ms).toBe(second.wave_ms)
   })
 
   test("finish ops isolated from later record", async () => {
-    const wave = SampleTraceWave.start()
-    wave.record({ strategy: "jql" }, 1.0)
-    const first = wave.finish()
+    const probe = Probe.start()
+    probe.record({ strategy: "jql" }, 1.0)
+    const first = probe.finish()
     const firstWaveMs = first.wave_ms
     const firstOps = first.ops
 
     await new Promise((r) => setTimeout(r, 15))
-    wave.record({ strategy: "jqs" }, 2.0)
-    const second = wave.finish()
+    probe.record({ strategy: "jqs" }, 2.0)
+    const second = probe.finish()
 
     expect(firstOps).toHaveLength(1)
     expect(firstOps[0].strategy).toBe("jql")
@@ -185,12 +185,12 @@ describe("SampleTraceWave", () => {
         lines.push(msg)
       },
     }
-    const wave = SampleTraceWave.start()
-    wave.record(
+    const probe = Probe.start()
+    probe.record(
       { adapter: "bullmq", strategy: "jql", queues: ["default"] },
       4.5,
     )
-    wave.logTo(logger)
+    probe.logTo(logger)
 
     const text = lines.join("\n")
     expect(text).toContain("sample_job_queues wave_ms=")

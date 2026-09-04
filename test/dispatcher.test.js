@@ -5,7 +5,7 @@ const Dispatcher = require("../src/dispatcher")
 const MetricsBuffer = require("../src/buffer")
 const Usage = require("../src/source/cpu/usage")
 const Plan = require("../src/plan")
-const SampleTraceWave = require("../src/sampleTraceWave")
+const Probe = require("../src/probe")
 
 const BASE = "https://data.hirefire.io"
 
@@ -961,9 +961,9 @@ describe("Dispatcher", () => {
     config().dyno("mailer", () => 18)
     const dispatcher = config().dispatcher
     let measured = 0
-    const origMeasure = SampleTraceWave.prototype.measure
+    const origMeasure = Probe.prototype.measure
     jest
-      .spyOn(SampleTraceWave.prototype, "measure")
+      .spyOn(Probe.prototype, "measure")
       .mockImplementation(async function measure(entry, fn) {
         const result = await origMeasure.call(this, entry, fn)
         measured += 1

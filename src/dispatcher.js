@@ -2,7 +2,7 @@ const { Client } = require("./client")
 const Lease = require("./lease")
 const MetricsBuffer = require("./buffer")
 const Plan = require("./plan")
-const SampleTraceWave = require("./sampleTraceWave")
+const Probe = require("./probe")
 const safeLog = require("./log")
 const { formatError } = safeLog
 const { rqtParts } = MetricsBuffer
@@ -332,13 +332,13 @@ class Dispatcher {
   }
 
   async _sampleJobQueues(live) {
-    const wave = SampleTraceWave.start()
+    const probe = Probe.start()
     await Plan.aroundJobQueueSample(async () => {
       const localJobQueues = this._configuration.jobQueues
 
       for (const entry of this._lease.jobQueues) {
         if (live && !live()) break
-        await wave.measure(entry, async () => {
+        await probe.measure(entry, async () => {
           if (live && !live()) return
           if (this._adapterPresent(entry)) {
             await this._samplePlanAdapter(entry, localJobQueues, live)
@@ -348,8 +348,8 @@ class Dispatcher {
         })
       }
     }, this._configuration)
-    const payload = wave.finish()
-    if (this._verbose()) wave.logTo(this._logger())
+    const payload = probe.finish()
+    if (this._verbose()) probe.logTo(this._logger())
     if (this._lease.trace()) this._pendingSampleTrace = payload
   }
 

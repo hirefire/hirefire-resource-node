@@ -4,9 +4,9 @@ function elapsedMs(from) {
   return Math.round((performance.now() - from) * 1000) / 1000
 }
 
-class SampleTraceWave {
+class Probe {
   static start() {
-    return new SampleTraceWave()
+    return new Probe()
   }
 
   constructor() {
@@ -72,4 +72,4 @@ class SampleTraceWave {
   }
 }
 
-module.exports = SampleTraceWave
+module.exports = Probe
