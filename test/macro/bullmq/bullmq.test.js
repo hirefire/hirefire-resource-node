@@ -10,6 +10,7 @@ const { JobQueueLatencyUnsupportedError } = require("../../../src/errors")
 const Plan = require("../../../src/plan")
 const Configuration = require("../../../src/configuration")
 const IORedis = require("ioredis")
+const { expectIntegerCount } = require("../numericTypes")
 
 const redisPort = Number(process.env.REDIS_PORT || "6379")
 const redisURL = `redis://127.0.0.1:${redisPort}/0`
@@ -79,14 +80,18 @@ describe("BullMQ", () => {
   })
 
   test("jobQueueSize without jobs", async () => {
-    expect(await jobQueueSize({ connection: redisURL })).toBe(0)
+    const size = await jobQueueSize({ connection: redisURL })
+    expectIntegerCount(size)
+    expect(size).toBe(0)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
   })
 
   test("jobQueueSize with jobs", async () => {
     await defaultQueue.add("testJob", {})
     await mailerQueue.add("testJob", {})
-    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
+    const size = await jobQueueSize({ connection: redisURL })
+    expectIntegerCount(size)
+    expect(size).toBe(2)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
     expect(
       await jobQueueSize("default", "mailer", { connection: redisURL }),
@@ -328,7 +333,9 @@ describe("BullMQ", () => {
   })
 
   test("jobQueueWorking idle is zero", async () => {
-    expect(await jobQueueWorking({ connection: redisURL })).toBe(0)
+    const working = await jobQueueWorking({ connection: redisURL })
+    expectIntegerCount(working)
+    expect(working).toBe(0)
     expect(await jobQueueWorking("default", { connection: redisURL })).toBe(0)
   })
 
@@ -337,7 +344,9 @@ describe("BullMQ", () => {
     await redis.lpush("bull:mailer:active", "m1", "m2")
     await defaultQueue.add("liveJob", {})
 
-    expect(await jobQueueWorking({ connection: redisURL })).toBe(3)
+    const working = await jobQueueWorking({ connection: redisURL })
+    expectIntegerCount(working)
+    expect(working).toBe(3)
     expect(await jobQueueWorking("default", { connection: redisURL })).toBe(1)
     expect(await jobQueueWorking("mailer", { connection: redisURL })).toBe(2)
     expect(await jobQueueWorking("critical", { connection: redisURL })).toBe(0)

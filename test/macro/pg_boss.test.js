@@ -11,6 +11,7 @@ const {
 } = require("../../src/macro/pg_boss/blocked_column")
 const Plan = require("../../src/plan")
 const Configuration = require("../../src/configuration")
+const { expectIntegerCount, expectLatencyNumber } = require("./numericTypes")
 
 const SCHEMA = "hf_pg_boss_test"
 const postgresURL =
@@ -183,9 +184,13 @@ describe("pg-boss", () => {
   })
 
   test("empty queues report size 0 and latency 0", async () => {
-    expect(await jobQueueSize(sampleOpts)).toBe(0)
+    const size = await jobQueueSize(sampleOpts)
+    expectIntegerCount(size)
+    expect(size).toBe(0)
     expect(await jobQueueSize("email", sampleOpts)).toBe(0)
-    expect(await jobQueueLatency(sampleOpts)).toBe(0)
+    const latency = await jobQueueLatency(sampleOpts)
+    expectLatencyNumber(latency)
+    expect(latency).toBe(0)
     expect(await jobQueueLatency("email", sampleOpts)).toBe(0)
   })
 
@@ -197,10 +202,12 @@ describe("pg-boss", () => {
     expect(rows[0].state).toBe("created")
     expect(rows[0].age_from_start_after).toBeGreaterThanOrEqual(5)
 
-    expect(await jobQueueSize("email", sampleOpts)).toBe(1)
+    const size = await jobQueueSize("email", sampleOpts)
+    expectIntegerCount(size)
+    expect(size).toBe(1)
     expect(await jobQueueSize(sampleOpts)).toBe(1)
     const latency = await jobQueueLatency("email", sampleOpts)
-    expect(typeof latency).toBe("number")
+    expectLatencyNumber(latency)
     expect(latency).toBeGreaterThanOrEqual(5)
     expect(latency).toBeLessThan(60)
   })
@@ -600,7 +607,9 @@ describe("pg-boss", () => {
   })
 
   test("jobQueueWorking idle is zero", async () => {
-    expect(await jobQueueWorking(sampleOpts)).toBe(0)
+    const working = await jobQueueWorking(sampleOpts)
+    expectIntegerCount(working)
+    expect(working).toBe(0)
     expect(await jobQueueWorking("email", sampleOpts)).toBe(0)
   })
 
@@ -610,7 +619,9 @@ describe("pg-boss", () => {
     await insertJob(pool, { name: "sms", state: "active" })
     await insertJob(pool, { name: "email", state: "created" })
 
-    expect(await jobQueueWorking(sampleOpts)).toBe(3)
+    const working = await jobQueueWorking(sampleOpts)
+    expectIntegerCount(working)
+    expect(working).toBe(3)
     expect(await jobQueueWorking("email", sampleOpts)).toBe(1)
     expect(await jobQueueWorking("sms", sampleOpts)).toBe(2)
     expect(await jobQueueWorking("critical", sampleOpts)).toBe(0)
