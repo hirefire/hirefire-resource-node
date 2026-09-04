@@ -1,4 +1,4 @@
-const { unpack, normalizeQueues } = require("../../utility")
+const { unpack, normalizeQueues } = require("../utility")
 
 const SAMPLE_REDIS_OPTIONS = {
   maxRetriesPerRequest: 1,
