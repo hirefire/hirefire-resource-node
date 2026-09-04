@@ -32,7 +32,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Required Node.js is 20+. Official Express support is 4+.
 - Process names allow any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone.
 - `config.dyno` without a sampler raises `MissingSamplerError` (1.x raised `MissingDynoFnError`).
-- `HIREFIRE_VERBOSE` still prints dispatch diagnostics and now also prints sample-path timings.
 
 ### Deprecated
 
@@ -41,18 +40,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Removed
 
 - Serving `GET /hirefire/:token/info` and `GET /hirefire` when the token matched.
-- `POST` of request queue time JSON to `logdrain.hirefire.io`.
-- `HIREFIRE_DISPATCH_URL` no longer overrides ingest. The internal override is `HIREFIRE_DATA_URL`.
 - Official support for Node.js 16 and 18.
 
 ### Fixed
 
 - HTTP requests to HireFire time out within five seconds even when DNS never completes.
 - `HireFire.configure` rejects an async callback instead of starting the dispatcher before the callback finishes.
-- Sampler error logs redact passwords in `user:pass@` connection URLs.
 - A globally paused BullMQ 4 queue no longer counts the pause marker as a queued job.
 - BullMQ, classic Bull, and pg-boss samples fail within five seconds when Redis or Postgres does not respond.
-- TypeScript declarations now match the published JavaScript exports, including the error helper, configuration constants, and nested job-queue, HTTP, CPU, dispatcher, and buffer shapes.
+
+### Security
+
+- Sampler error logs redact passwords in `user:pass@` connection URLs.
 
 ## [1.2.0] - 2026-02-03
 

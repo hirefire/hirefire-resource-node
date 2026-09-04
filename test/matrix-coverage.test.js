@@ -109,6 +109,31 @@ function matchesPackage(pkg, line) {
   return false
 }
 
+test("README setup and development match the ship contract", () => {
+  const readme = fs.readFileSync(path.join(root, "README.md"), "utf8")
+  expect(readme).toMatch(/HireFire UI/)
+  expect(readme).toMatch(/Older versions may still work/)
+  expect(readme).not.toMatch(/Render/)
+  expect(readme).not.toMatch(/\bHIREFIRE_TOKEN\b/)
+  for (const token of ["Docker", "mise", "bin/setup", "bin/services"]) {
+    expect(readme).toContain(token)
+  }
+  expect(readme).toMatch(/On `master`/)
+  expect(readme).toContain("2.0.0-rc.1")
+  expect(readme).toContain("2.0.1-rc.0")
+})
+
+test("README has no fenced matcher or install recipe", () => {
+  const readme = fs.readFileSync(path.join(root, "README.md"), "utf8")
+  expect(readme).not.toMatch(
+    /```[\s\S]*?(matcher\s*:|runtime\s*:\s*["']nodejs["']|HIREFIRE_TOKEN|export const config)[\s\S]*?```/,
+  )
+  const afterDocs = readme.split("**Documentation:**")[1]
+  expect(afterDocs).toBeDefined()
+  const beforeDev = afterDocs.split("## Development")[0]
+  expect(beforeDev).not.toMatch(/```/)
+})
+
 test("README runtime floor matches engines.node and matrix.node", () => {
   const pkg = JSON.parse(
     fs.readFileSync(path.join(root, "package.json"), "utf8"),
@@ -171,6 +196,9 @@ test("every matrix integration is in the README and the README has no extras", (
     }
     if (NODE_RUNTIME_ONLY.has(entry.package)) {
       expect(line).toMatch(/not Edge/)
+      expect(line).toMatch(/15\.5\+/)
+      expect(line).toMatch(/proxy\.ts/)
+      expect(line).not.toMatch(/Next\.js 14\+ with a Node/)
     }
   }
   expect([...used].sort()).toEqual([...bullets].sort())

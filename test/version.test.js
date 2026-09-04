@@ -1,7 +1,7 @@
 const VERSION = require("../src/version")
 
 describe("VERSION", () => {
-  test("version", () => {
-    expect(VERSION).toMatch(/\d+\.\d+\.\d+/)
+  test("version is a stable or npm rc semver", () => {
+    expect(VERSION).toMatch(/^\d+\.\d+\.\d+(-rc\.\d+)?$/)
   })
 })

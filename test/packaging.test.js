@@ -34,11 +34,12 @@ describe("TypeScript packaging", () => {
     expect(pkg.homepage).toBe("https://hirefire.io")
   })
 
-  test("npm pack does not include test/", () => {
+  test("npm pack does not include test/ or AGENTS.md", () => {
     const output = execFileSync("npm", ["pack", "--dry-run"], {
       cwd: path.resolve(__dirname, ".."),
       encoding: "utf8",
     })
     expect(output).not.toMatch(/(^|\/)test\//)
+    expect(output).not.toMatch(/(^|\/)AGENTS\.md(\s|$)/)
   })
 })

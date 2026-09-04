@@ -60,6 +60,22 @@ const files = (packed.files || []).map((file) =>
 )
 const fileSet = new Set(files)
 
+const forbidden = files.filter((file) => {
+  const rel = String(file).replace(/^\.\//, "")
+  return (
+    rel === "AGENTS.md" ||
+    rel === ".env" ||
+    rel.startsWith("test/") ||
+    rel.includes("/test/") ||
+    rel.startsWith("node_modules/") ||
+    rel.includes("/node_modules/") ||
+    rel.endsWith(".tgz")
+  )
+})
+if (forbidden.length) {
+  fail(`packed tarball has forbidden path(s):\n${forbidden.join("\n")}`)
+}
+
 const missing = [...required].filter(
   (rel) => !fileSet.has(rel) && !fileSet.has(`./${rel}`),
 )

@@ -32,15 +32,6 @@ The package ships `.d.ts` declarations for TypeScript consumers. Native ESM name
 
 Changelog lives in [CHANGELOG.md](CHANGELOG.md). Setup instructions for supported web frameworks and worker libraries are provided in the HireFire UI during installation.
 
-Next.js middleware (15.5+ Node runtime) should skip static assets:
-
-```js
-export const config = {
-  matcher: "/((?!_next/static|_next/image|favicon.ico).*)",
-  runtime: "nodejs",
-};
-```
-
 ## Development
 
 Requires [Docker](https://www.docker.com/), [mise](https://mise.jdx.dev/), and `jq` (matrix scripts). Redis (BullMQ / classic Bull) and PostgreSQL (pg-boss) for the macro tests run in containers, and mise installs the pinned Node.js versions from `.tool-versions`. `bin/services up` starts them on Docker-assigned free host ports recorded in a git-ignored `.env` (read by the test suite). `bin/services down` stops them and removes `.env`. Because the ports are assigned fresh at startup, multiple worktrees can run side by side without conflicting with each other or with any system-wide databases.
