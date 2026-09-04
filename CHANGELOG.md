@@ -29,7 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Job queue macros count queued jobs plus scheduled or retry jobs that are due. Jobs already being processed are no longer included in job queue size or job queue latency.
 - BullMQ job queue size no longer counts active jobs.
 - BullMQ and classic Bull sampling require the app's `ioredis` package as an optional peer. 1.x never depended on `ioredis` from this package. Without it, those job metrics are not collected.
-- Required Node.js is 20+. Official Express support is 4+.
+- Required Node.js is 20+.
 - Process names allow any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone.
 - `config.dyno` without a sampler raises `MissingSamplerError` (1.x raised `MissingDynoFnError`).
 
@@ -40,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Removed
 
 - Serving `GET /hirefire/:token/info` and `GET /hirefire` when the token matched.
-- Official support for Node.js 16 and 18.
+- Official support for Node.js 16 through 19.
 
 ### Fixed
 
