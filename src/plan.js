@@ -110,7 +110,7 @@ const Plan = {
           "error",
           `[HireFire] beforeSampleJobQueues for ${JSON.stringify(
             name,
-          )} raised ` + formatHookError(error),
+          )} raised ` + formatError(error),
         )
       }
     }
@@ -130,7 +130,7 @@ const Plan = {
             "error",
             `[HireFire] afterSampleJobQueues for ${JSON.stringify(
               name,
-            )} raised ` + formatHookError(error),
+            )} raised ` + formatError(error),
           )
         }
       }
@@ -150,7 +150,7 @@ const Plan = {
           logger,
           "error",
           `[HireFire] reinitAfterFork for ${JSON.stringify(name)} raised ` +
-            formatHookError(error),
+            formatError(error),
         )
       }
     }
@@ -416,10 +416,6 @@ function normalizePlanQueues(queues, name, logger) {
   }
 
   return list
-}
-
-function formatHookError(error) {
-  return formatError(error)
 }
 
 module.exports = Plan

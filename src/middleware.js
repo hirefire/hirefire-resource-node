@@ -70,5 +70,4 @@ module.exports = {
   processRequestQueueTime,
   calculateRequestQueueTime,
   presentHeader,
-  resolveRequestStart,
 }

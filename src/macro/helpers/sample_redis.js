@@ -67,9 +67,4 @@ async function withSampleRedis(args, resolveQueueNames, fn) {
   }
 }
 
-module.exports = {
-  SAMPLE_REDIS_OPTIONS,
-  loadIORedis,
-  connectionEnumKey,
-  withSampleRedis,
-}
+module.exports = { withSampleRedis }
