@@ -4,5 +4,4 @@ dump.rdb
 .env
 node_modules
 /coverage
-AGENTS.md
 *.tgz
