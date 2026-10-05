@@ -8,8 +8,29 @@ describe("pg-boss plan hooks", () => {
     pgBossMacro = require("../../src/macro/pg_boss")
   })
 
-  test("planOptions empty", () => {
+  test("planOptions maps skip_working to skipWorking for jqs", () => {
+    expect(
+      pgBossMacro.planOptions("jqs", { skip_working: true, not_allowed: true }),
+    ).toEqual({ skipWorking: true })
+  })
+
+  test("planOptions keeps a false skip_working", () => {
+    expect(pgBossMacro.planOptions("jqs", { skip_working: false })).toEqual({
+      skipWorking: false,
+    })
+  })
+
+  test("planOptions drops an absent or non-boolean skip_working", () => {
     expect(pgBossMacro.planOptions("jqs", { a: 1 })).toEqual({})
+    expect(pgBossMacro.planOptions("jqs", { skip_working: "true" })).toEqual({})
+    expect(pgBossMacro.planOptions("jqs", { skip_working: 1 })).toEqual({})
+    expect(pgBossMacro.planOptions("jqs", { skip_working: null })).toEqual({})
+    expect(pgBossMacro.planOptions("jqs", { skipWorking: true })).toEqual({})
+    expect(pgBossMacro.planOptions("jqs", null)).toEqual({})
+  })
+
+  test("planOptions passes nothing to a jql entry", () => {
+    expect(pgBossMacro.planOptions("jql", { skip_working: true })).toEqual({})
     expect(pgBossMacro.planOptions("jql", { b: 2 })).toEqual({})
   })
 

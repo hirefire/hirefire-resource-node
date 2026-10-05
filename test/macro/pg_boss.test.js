@@ -22,7 +22,9 @@ const postgresURL =
   }/postgres`
 
 const sampleOpts = { connection: postgresURL, schema: SCHEMA }
+const waitingOpts = { ...sampleOpts, skipWorking: true }
 const setupScript = path.join(__dirname, "pg_boss_setup.mjs")
+const fetchScript = path.join(__dirname, "pg_boss_fetch.mjs")
 
 async function hasBlockedColumn(pool) {
   const { rows } = await pool.query(
@@ -230,14 +232,60 @@ describe("pg-boss", () => {
     expect(latency).toBeGreaterThanOrEqual(4)
   })
 
-  test("active jobs are excluded from size and latency", async () => {
+  test("active jobs count toward size by default and never toward latency", async () => {
     const id = await insertJob(pool, { name: "email", state: "active" })
     await setStartAfter(pool, id, -300)
     const rows = await jobStates(pool)
     expect(rows[0].state).toBe("active")
     expect(rows[0].age_from_start_after).toBeGreaterThanOrEqual(200)
-    expect(await jobQueueSize("email", sampleOpts)).toBe(0)
+    const size = await jobQueueSize("email", sampleOpts)
+    expectIntegerCount(size)
+    expect(size).toBe(1)
+    expect(await jobQueueSize(sampleOpts)).toBe(1)
+    expect(
+      await jobQueueSize("email", { ...sampleOpts, skipWorking: false }),
+    ).toBe(1)
+    expect(
+      await jobQueueSize("email", { ...sampleOpts, skipWorking: null }),
+    ).toBe(1)
     expect(await jobQueueLatency("email", sampleOpts)).toBe(0)
+  })
+
+  test("skipWorking leaves active jobs out of size", async () => {
+    await insertJob(pool, { name: "email" })
+    await insertJob(pool, { name: "email", state: "active" })
+    await insertJob(pool, { name: "email", state: "active" })
+    expect(await jobQueueSize("email", waitingOpts)).toBe(1)
+    expect(await jobQueueSize(waitingOpts)).toBe(1)
+    expect(await jobQueueSize("email", sampleOpts)).toBe(3)
+  })
+
+  test("a job that pg-boss fetched counts toward size", async () => {
+    execFileSync(
+      process.execPath,
+      [fetchScript, postgresURL, SCHEMA, "email"],
+      {
+        stdio: "inherit",
+        env: process.env,
+      },
+    )
+    const rows = await jobStates(pool)
+    expect(rows.map((r) => r.state)).toEqual(["active"])
+    expect(await jobQueueWorking("email", sampleOpts)).toBe(1)
+    expect(await jobQueueSize("email", sampleOpts)).toBe(1)
+    expect(await jobQueueSize("email", waitingOpts)).toBe(0)
+  }, 60_000)
+
+  test("an active job in another queue does not count toward a named queue", async () => {
+    await insertJob(pool, { name: "email" })
+    await insertJob(pool, { name: "sms", state: "active" })
+    await insertJob(pool, { name: "sms", state: "active" })
+
+    expect(await jobQueueSize("email", sampleOpts)).toBe(1)
+    expect(await jobQueueSize("sms", sampleOpts)).toBe(2)
+    expect(await jobQueueSize("email", "sms", sampleOpts)).toBe(3)
+    expect(await jobQueueSize(sampleOpts)).toBe(3)
+    expect(await jobQueueSize("unknown_queue", sampleOpts)).toBe(0)
   })
 
   test("terminal states alone are excluded from size and latency", async () => {
@@ -278,22 +326,29 @@ describe("pg-boss", () => {
     ])
   })
 
-  test("mixed live due future and active counts only waiting", async () => {
+  test("mixed live, due, future, and active jobs count waiting and active", async () => {
     await insertJob(pool, { name: "email" })
     const dueId = await insertJob(pool, { name: "email" })
     await setStartAfter(pool, dueId, -10)
     await insertJob(pool, { name: "email", startAfterSeconds: 7200 })
     await insertJob(pool, { name: "email", state: "active" })
+    await insertJob(pool, {
+      name: "email",
+      state: "active",
+      startAfterSeconds: 7200,
+    })
 
     const rows = await jobStates(pool)
-    expect(rows).toHaveLength(4)
+    expect(rows).toHaveLength(5)
     const future = rows.filter((r) => r.age_from_start_after < 0)
     const active = rows.filter((r) => r.state === "active")
-    expect(future).toHaveLength(1)
-    expect(active).toHaveLength(1)
+    expect(future).toHaveLength(2)
+    expect(active).toHaveLength(2)
 
-    expect(await jobQueueSize("email", sampleOpts)).toBe(2)
-    expect(await jobQueueSize(sampleOpts)).toBe(2)
+    expect(await jobQueueSize("email", sampleOpts)).toBe(4)
+    expect(await jobQueueSize(sampleOpts)).toBe(4)
+    expect(await jobQueueSize("email", waitingOpts)).toBe(2)
+    expect(await jobQueueSize(waitingOpts)).toBe(2)
   })
 
   test("due retry is included and future retry is excluded", async () => {
@@ -626,8 +681,8 @@ describe("pg-boss", () => {
     expect(await jobQueueWorking("sms", sampleOpts)).toBe(2)
     expect(await jobQueueWorking("critical", sampleOpts)).toBe(0)
     expect(await jobQueueWorking("email", "sms", sampleOpts)).toBe(3)
-    expect(await jobQueueSize("email", sampleOpts)).toBe(1)
-    expect(await jobQueueSize("sms", sampleOpts)).toBe(0)
+    expect(await jobQueueSize("email", sampleOpts)).toBe(2)
+    expect(await jobQueueSize("sms", sampleOpts)).toBe(2)
   })
 
   test("plan path samples wrk companion with jqs and jql", async () => {
@@ -654,7 +709,7 @@ describe("pg-boss", () => {
           configuration,
         )
         let flushed = configuration.buffer.flush()
-        expect(Object.values(flushed.worker.jqs)[0]).toBe(1)
+        expect(Object.values(flushed.worker.jqs)[0]).toBe(2)
         expect(Object.values(flushed.worker.wrk)[0]).toBe(1)
         expect(Object.values(flushed.worker.wrk)[0]).toBe(
           await jobQueueWorking("email", sampleOpts),
@@ -675,6 +730,53 @@ describe("pg-boss", () => {
         expect(Object.values(flushed.worker.wrk)[0]).toBe(
           await jobQueueWorking(sampleOpts),
         )
+      },
+    )
+  })
+
+  test("plan path with skip_working samples waiting jobs and still samples wrk", async () => {
+    await insertJob(pool, { name: "email", state: "active" })
+    await insertJob(pool, { name: "email", state: "active" })
+    const waiting = await insertJob(pool, { name: "email", state: "created" })
+    await setStartAfter(pool, waiting, -20)
+
+    const configuration = new Configuration()
+    configuration.logger = { info() {}, warn() {}, error: jest.fn() }
+
+    await withEnv(
+      {
+        HIREFIRE_PG_BOSS_URL: postgresURL,
+        HIREFIRE_PG_BOSS_SCHEMA: SCHEMA,
+      },
+      async () => {
+        await Plan.execute(
+          {
+            name: "worker",
+            adapter: "pg_boss",
+            strategy: "jqs",
+            queues: ["email"],
+            options: { skip_working: true },
+          },
+          configuration,
+        )
+        let flushed = configuration.buffer.flush()
+        expect(Object.values(flushed.worker.jqs)[0]).toBe(1)
+        expect(Object.values(flushed.worker.wrk)[0]).toBe(2)
+
+        await Plan.execute(
+          {
+            name: "worker",
+            adapter: "pg_boss",
+            strategy: "jql",
+            queues: ["email"],
+            options: { skip_working: true },
+          },
+          configuration,
+        )
+        flushed = configuration.buffer.flush()
+        expect(Object.values(flushed.worker.jql)[0]).toBeGreaterThanOrEqual(15)
+        expect(Object.values(flushed.worker.wrk)[0]).toBe(2)
+        expect(configuration.logger.error).not.toHaveBeenCalled()
       },
     )
   })

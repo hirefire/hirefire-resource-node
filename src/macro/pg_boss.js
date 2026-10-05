@@ -2,6 +2,7 @@ const { unpack, normalizeQueues } = require("../utility")
 const Hooks = require("../plan/hooks")
 const blockedColumn = require("./pg_boss/blocked_column")
 
+const PLAN_OPTION_SCHEMA = { jqs: { skip_working: "boolean" } }
 const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://postgres:postgres@127.0.0.1:5432/postgres"
 const SCHEMA_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -22,11 +23,14 @@ function loadPg() {
 }
 
 async function jobQueueSize(...args) {
+  const { skipWorking } = unpack(args).options
   return withConnection(args, async (client, queues, schema, flags) => {
+    const waiting = buildWaitingCondition(flags)
+    const counted = skipWorking ? waiting : `(${waiting}) OR state = 'active'`
     const sql = `
       SELECT COUNT(*)::bigint AS job_queue_size
       FROM ${schema}.job
-      WHERE ${buildWaitingWhere(queues, flags)}
+      WHERE ${buildWhere(counted, queues)}
     `
     const values = queues.length ? [queues] : []
     const { rows } = await client.query(sql, values)
@@ -39,7 +43,7 @@ async function jobQueueLatency(...args) {
     const sql = `
       SELECT EXTRACT(EPOCH FROM (now() - start_after))::float8 AS latency
       FROM ${schema}.job
-      WHERE ${buildWaitingWhere(queues, flags)}
+      WHERE ${buildWhere(buildWaitingCondition(flags), queues)}
       ORDER BY start_after ASC
       LIMIT 1
     `
@@ -56,12 +60,10 @@ async function jobQueueWorking(...args) {
   return withConnection(
     args,
     async (client, queues, schema) => {
-      const parts = [`state = 'active'`]
-      if (queues.length) parts.push(`name = ANY($1::text[])`)
       const sql = `
       SELECT COUNT(*)::bigint AS job_queue_working
       FROM ${schema}.job
-      WHERE ${parts.join("\n  AND ")}
+      WHERE ${buildWhere(`state = 'active'`, queues)}
     `
       const values = queues.length ? [queues] : []
       const { rows } = await client.query(sql, values)
@@ -71,8 +73,13 @@ async function jobQueueWorking(...args) {
   )
 }
 
-function planOptions(_strategy, _options) {
-  return {}
+function planOptions(strategy, options) {
+  const { skip_working: skipWorking } = Hooks.extractPlanOptions(
+    strategy,
+    options,
+    PLAN_OPTION_SCHEMA,
+  )
+  return skipWorking === undefined ? {} : { skipWorking }
 }
 
 function planConnectionOptions() {
@@ -187,11 +194,15 @@ function isQueryable(value) {
   )
 }
 
-function buildWaitingWhere(queues, flags) {
+function buildWaitingCondition(flags) {
   const parts = [`state < 'active'`, `start_after <= now()`]
   if (flags.hasBlockedColumn) parts.push(`NOT blocked`)
-  if (queues.length) parts.push(`name = ANY($1::text[])`)
-  return parts.join("\n  AND ")
+  return parts.join(" AND ")
+}
+
+function buildWhere(condition, queues) {
+  if (!queues.length) return condition
+  return `(${condition}) AND name = ANY($1::text[])`
 }
 
 function blockedCacheKey(schema, connection) {

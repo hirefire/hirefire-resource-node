@@ -194,8 +194,21 @@ expectType<typeof bull.JobQueueLatencyUnsupportedError>(
 )
 
 expectType<Promise<number>>(pgBoss.jobQueueSize("default"))
+expectType<Promise<number>>(
+  pgBoss.jobQueueSize("default", { skipWorking: true }),
+)
+expectType<Promise<number>>(
+  pgBoss.jobQueueSize("default", {
+    connection: "postgres://localhost/db",
+    schema: "pgboss",
+    skipWorking: true,
+  }),
+)
+expectError(pgBoss.jobQueueSize("default", { skipWorking: "true" }))
 expectType<Promise<number>>(pgBoss.jobQueueLatency("default"))
+expectError(pgBoss.jobQueueLatency("default", { skipWorking: true }))
 expectType<Promise<number>>(pgBoss.jobQueueWorking("default"))
+expectError(pgBoss.jobQueueWorking("default", { skipWorking: true }))
 expectType<Promise<number>>(
   pgBoss.jobQueueWorking("default", { connection: "postgres://localhost/db" }),
 )

@@ -52,6 +52,14 @@ describeIfPg("pg-boss connection lifecycle", () => {
       .mockResolvedValueOnce({ rows: [] })
   }
 
+  function whereClause(sql) {
+    return sql
+      .replace(/\s+/g, " ")
+      .split(" WHERE ")[1]
+      .split(" ORDER BY ")[0]
+      .trim()
+  }
+
   function expectWaitingSql(sql) {
     expect(sql).toMatch(/state\s*<\s*'active'/)
     expect(sql).toMatch(/start_after\s*<=\s*now\(\)/)
@@ -189,7 +197,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expectWaitingSql(query.mock.calls[1][0])
   })
 
-  test("size SQL is count of waiting rows with optional queue filter", async () => {
+  test("size SQL counts waiting and active rows inside the queue filter", async () => {
     query
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "4" }] })
@@ -201,9 +209,60 @@ describeIfPg("pg-boss connection lifecycle", () => {
     ).resolves.toBe(4)
     const sizeSql = query.mock.calls[1][0]
     expect(sizeSql).toMatch(/SELECT COUNT\(\*\)::bigint AS job_queue_size/)
-    expect(sizeSql).toMatch(/name = ANY\(\$1::text\[\]\)/)
+    expect(whereClause(sizeSql)).toBe(
+      "((state < 'active' AND start_after <= now()) OR state = 'active') " +
+        "AND name = ANY($1::text[])",
+    )
     expectWaitingSql(sizeSql)
     expect(query.mock.calls[1][1]).toEqual([["email", "sms"]])
+  })
+
+  test("size SQL keeps NOT blocked on the waiting side only", async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+      .mockResolvedValueOnce({ rows: [{ job_queue_size: "4" }] })
+    await jobQueueSize("email", {
+      connection: "postgres://localhost/jobs",
+      schema: "pgboss",
+    })
+    expect(whereClause(query.mock.calls[1][0])).toBe(
+      "((state < 'active' AND start_after <= now() AND NOT blocked) " +
+        "OR state = 'active') AND name = ANY($1::text[])",
+    )
+  })
+
+  test("size SQL with skipWorking counts waiting rows only", async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+      .mockResolvedValueOnce({ rows: [{ job_queue_size: "3" }] })
+      .mockResolvedValueOnce({ rows: [{ job_queue_size: "5" }] })
+    await expect(
+      jobQueueSize("email", {
+        connection: "postgres://localhost/jobs",
+        schema: "pgboss",
+        skipWorking: true,
+      }),
+    ).resolves.toBe(3)
+    const sizeSql = query.mock.calls[1][0]
+    expect(sizeSql).not.toMatch(/state = 'active'/)
+    expect(whereClause(sizeSql)).toBe(
+      "(state < 'active' AND start_after <= now() AND NOT blocked) " +
+        "AND name = ANY($1::text[])",
+    )
+    expectWaitingSql(sizeSql)
+    expect(query.mock.calls[1][1]).toEqual([["email"]])
+
+    await expect(
+      jobQueueSize({
+        connection: "postgres://localhost/jobs",
+        schema: "pgboss",
+        skipWorking: true,
+      }),
+    ).resolves.toBe(5)
+    expect(whereClause(query.mock.calls[2][0])).toBe(
+      "state < 'active' AND start_after <= now() AND NOT blocked",
+    )
+    expect(query.mock.calls[2][1]).toEqual([])
   })
 
   test("working SQL counts active rows with optional queue filter", async () => {
@@ -219,8 +278,9 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expect(workingSql).toMatch(
       /SELECT COUNT\(\*\)::bigint AS job_queue_working/,
     )
-    expect(workingSql).toMatch(/state = 'active'/)
-    expect(workingSql).toMatch(/name = ANY\(\$1::text\[\]\)/)
+    expect(whereClause(workingSql)).toBe(
+      "(state = 'active') AND name = ANY($1::text[])",
+    )
     expect(workingSql).not.toMatch(/information_schema/)
     expect(workingSql).not.toMatch(/FOR UPDATE/i)
     expect(query.mock.calls[0][1]).toEqual([["email"]])
@@ -231,6 +291,9 @@ describeIfPg("pg-boss connection lifecycle", () => {
     await jobQueueSize({ connection: "postgres://localhost/jobs" })
     const sizeSql = query.mock.calls[1][0]
     expect(sizeSql).not.toMatch(/name = ANY/)
+    expect(whereClause(sizeSql)).toBe(
+      "(state < 'active' AND start_after <= now()) OR state = 'active'",
+    )
     expectWaitingSql(sizeSql)
     expect(query.mock.calls[1][1]).toEqual([])
   })
@@ -249,6 +312,9 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expect(latencySql).toMatch(/LIMIT 1/)
     expect(latencySql).not.toMatch(/created_on/)
     expect(latencySql).not.toMatch(/name = ANY/)
+    expect(whereClause(latencySql)).toBe(
+      "state < 'active' AND start_after <= now()",
+    )
     expectWaitingSql(latencySql)
     expect(query.mock.calls[1][1]).toEqual([])
   })
@@ -270,6 +336,9 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expect(latencySql).toMatch(/name = ANY\(\$1::text\[\]\)/)
     expect(latencySql).toMatch(/ORDER BY start_after ASC/)
     expect(latencySql).not.toMatch(/created_on/)
+    expect(whereClause(latencySql)).toBe(
+      "(state < 'active' AND start_after <= now()) AND name = ANY($1::text[])",
+    )
     expectWaitingSql(latencySql)
     expect(query.mock.calls[1][1]).toEqual([["email", "sms"]])
   })
