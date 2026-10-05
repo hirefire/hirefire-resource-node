@@ -171,13 +171,23 @@ expectType<typeof bullmq.JobQueueLatencyUnsupportedError>(
 )
 
 expectType<Promise<number>>(bull.jobQueueSize("default"))
+expectType<Promise<number>>(bull.jobQueueSize("default", { skipWorking: true }))
+expectType<Promise<number>>(
+  bull.jobQueueSize("default", {
+    connection: "redis://localhost:6379/0",
+    skipWorking: true,
+  }),
+)
+expectError(bull.jobQueueSize("default", { skipWorking: "true" }))
 expectType<Promise<number>>(bull.jobQueueWorking("default"))
+expectError(bull.jobQueueWorking("default", { skipWorking: true }))
 expectType<Promise<never>>(bull.jobQueueLatency())
 expectType<Promise<never>>(bull.jobQueueLatency("default"))
 expectType<Promise<never>>(
   bull.jobQueueLatency("default", { connection: "redis://localhost:6379/0" }),
 )
 expectError(bull.jobQueueLatency(1))
+expectError(bull.jobQueueLatency("default", { skipWorking: true }))
 expectType<boolean>(bull.queuesRequired())
 expectType<typeof bull.JobQueueLatencyUnsupportedError>(
   bull.JobQueueLatencyUnsupportedError,

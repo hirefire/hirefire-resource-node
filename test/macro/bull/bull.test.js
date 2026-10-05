@@ -141,20 +141,107 @@ describe("Bull", () => {
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
   })
 
-  test("jobQueueSize excludes active-only jobs", async () => {
+  test("jobQueueSize counts active jobs by default", async () => {
     await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
     expect(await redis.llen("bull:default:active")).toBe(2)
-    expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
+    const size = await jobQueueSize("default", { connection: redisURL })
+    expectIntegerCount(size)
+    expect(size).toBe(2)
+    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
+    expect(
+      await jobQueueSize("default", {
+        connection: redisURL,
+        skipWorking: false,
+      }),
+    ).toBe(2)
+    expect(
+      await jobQueueSize("default", {
+        connection: redisURL,
+        skipWorking: null,
+      }),
+    ).toBe(2)
   })
 
-  test("jobQueueSize counts waiting only when mixed with active", async () => {
+  test("jobQueueSize with skipWorking leaves active jobs out", async () => {
+    await defaultQueue.add({})
+    await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
+    expect(
+      await jobQueueSize("default", {
+        connection: redisURL,
+        skipWorking: true,
+      }),
+    ).toBe(1)
+    expect(
+      await jobQueueSize({ connection: redisURL, skipWorking: true }),
+    ).toBe(1)
+  })
+
+  test("jobQueueSize counts a job that a worker is processing", async () => {
+    jest.useRealTimers()
+    let release
+    const held = new Promise((resolve) => {
+      release = resolve
+    })
+    let started
+    const processing = new Promise((resolve) => {
+      started = resolve
+    })
+    defaultQueue.process(async () => {
+      started()
+      await held
+    })
+    try {
+      await defaultQueue.add({})
+      await processing
+      expect(await jobQueueWorking("default", { connection: redisURL })).toBe(1)
+      expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
+      expect(
+        await jobQueueSize("default", {
+          connection: redisURL,
+          skipWorking: true,
+        }),
+      ).toBe(0)
+    } finally {
+      release()
+    }
+  })
+
+  test("jobQueueSize counts live, due delayed, and active jobs and no future delayed job", async () => {
     await defaultQueue.add({})
     await defaultQueue.add({}, { delay: 1 })
-    await redis.lpush("bull:default:active", "job-active-1")
+    await defaultQueue.add({}, { delay: 60_000 })
+    await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
     jest.setSystemTime(Date.now() + 1)
-    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
-    expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
-    expect(await redis.llen("bull:default:active")).toBe(1)
+    expect(await jobQueueSize({ connection: redisURL })).toBe(4)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(4)
+    expect(
+      await jobQueueSize("default", {
+        connection: redisURL,
+        skipWorking: true,
+      }),
+    ).toBe(2)
+    expect(await redis.llen("bull:default:active")).toBe(2)
+  })
+
+  test("jobQueueSize sums active jobs across two queues in one call", async () => {
+    await defaultQueue.add({})
+    await redis.lpush("bull:default:active", "a1", "a2")
+    await mailerQueue.add({})
+    await mailerQueue.add({})
+    await mailerQueue.add({})
+    await redis.lpush("bull:mailer:active", "m1", "m2", "m3", "m4")
+    expect(
+      await jobQueueSize("default", "mailer", { connection: redisURL }),
+    ).toBe(10)
+    expect(
+      await jobQueueSize("mailer", "default", { connection: redisURL }),
+    ).toBe(10)
+    expect(
+      await jobQueueSize("default", "mailer", {
+        connection: redisURL,
+        skipWorking: true,
+      }),
+    ).toBe(4)
   })
 
   test("jobQueueSize excludes future delayed until due", async () => {
@@ -273,11 +360,14 @@ describe("Bull", () => {
     }
   })
 
-  test("jobQueueSize active-only jobs do not inflate JQS", async () => {
+  test("all-queues discovery counts a queue that has only active jobs", async () => {
     await redis.lpush("bull:active-only:active", "job-a1", "job-a2")
     expect(await redis.llen("bull:active-only:active")).toBe(2)
-    expect(await jobQueueSize("active-only", { connection: redisURL })).toBe(0)
-    expect(await jobQueueSize({ connection: redisURL })).toBe(0)
+    expect(await jobQueueSize("active-only", { connection: redisURL })).toBe(2)
+    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
+    expect(
+      await jobQueueSize({ connection: redisURL, skipWorking: true }),
+    ).toBe(0)
   })
 
   test("jobQueueSize priority-index-only state does not inflate JQS", async () => {
@@ -389,8 +479,8 @@ describe("Bull", () => {
     expect(
       await jobQueueWorking("default", "mailer", { connection: redisURL }),
     ).toBe(3)
-    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
-    expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(0)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(2)
+    expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(2)
   })
 
   test("plan execute bull jqs also samples wrk", async () => {
@@ -421,7 +511,36 @@ describe("Bull", () => {
         await jobQueueWorking("default", { connection: redisURL }),
       )
       expect(wrk).toBe(2)
-      expect(jqs).toBe(1)
+      expect(jqs).toBe(3)
+    } finally {
+      if (prev === undefined) delete process.env.HIREFIRE_BULL_URL
+      else process.env.HIREFIRE_BULL_URL = prev
+    }
+  })
+
+  test("plan execute bull jqs with skip_working samples waiting jobs and still samples wrk", async () => {
+    await redis.lpush("bull:default:active", "a1", "a2")
+    await defaultQueue.add({})
+
+    const configuration = new Configuration()
+    configuration.logger = { info() {}, warn() {}, error: jest.fn() }
+    const prev = process.env.HIREFIRE_BULL_URL
+    process.env.HIREFIRE_BULL_URL = redisURL
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bull",
+          strategy: "jqs",
+          queues: ["default"],
+          options: { skip_working: true },
+        },
+        configuration,
+      )
+      const flushed = configuration.buffer.flush()
+      expect(Object.values(flushed.worker.jqs)[0]).toBe(1)
+      expect(Object.values(flushed.worker.wrk)[0]).toBe(2)
+      expect(configuration.logger.error).not.toHaveBeenCalled()
     } finally {
       if (prev === undefined) delete process.env.HIREFIRE_BULL_URL
       else process.env.HIREFIRE_BULL_URL = prev

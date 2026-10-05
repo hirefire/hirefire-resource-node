@@ -1,7 +1,7 @@
 function emptyQueueResults(count = 1) {
   const rows = []
   for (let i = 0; i < count; i++) {
-    rows.push([null, 0], [null, 0], [null, 0])
+    rows.push([null, 0], [null, 0], [null, 0], [null, 0])
   }
   return rows
 }
@@ -160,7 +160,7 @@ describe("Bull connection lifecycle", () => {
     expect(pipeline.llen).toHaveBeenCalledWith("bull:default:wait")
     expect(pipeline.llen).toHaveBeenCalledWith("bull:mailer:wait")
     expect(pipeline.llen).toHaveBeenCalledWith("bull:prio:wait")
-    expect(pipeline.llen).toHaveBeenCalledTimes(6)
+    expect(pipeline.llen).toHaveBeenCalledTimes(9)
     expect(pipeline.zcount).toHaveBeenCalledTimes(3)
   })
 
@@ -178,6 +178,7 @@ describe("Bull connection lifecycle", () => {
       [null, 1],
       [null, 0],
       [null, 0],
+      [null, 0],
     ])
 
     await expect(
@@ -185,11 +186,11 @@ describe("Bull connection lifecycle", () => {
         connection: "redis://localhost:6379/0",
       }),
     ).resolves.toBe(1)
-    expect(pipeline.llen).toHaveBeenCalledTimes(2)
+    expect(pipeline.llen).toHaveBeenCalledTimes(3)
     expect(pipeline.zcount).toHaveBeenCalledTimes(1)
   })
 
-  test("jobQueueSize counts wait+paused+due delayed only", async () => {
+  test("jobQueueSize counts wait, paused, due delayed, and active", async () => {
     const frozenNow = 1_700_000_000_000
     const expectedDelayedUpper = (frozenNow + 1) * 0x1000 - 1
     jest.spyOn(Date, "now").mockReturnValue(frozenNow)
@@ -197,15 +198,18 @@ describe("Bull connection lifecycle", () => {
       [null, 1],
       [null, 2],
       [null, 4],
+      [null, 8],
     ])
 
     try {
       await expect(
         jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
-      ).resolves.toBe(7)
-      expect(pipeline.llen).toHaveBeenCalledWith("bull:default:wait")
-      expect(pipeline.llen).toHaveBeenCalledWith("bull:default:paused")
-      expect(pipeline.llen).not.toHaveBeenCalledWith("bull:default:active")
+      ).resolves.toBe(15)
+      expect(pipeline.llen.mock.calls).toEqual([
+        ["bull:default:wait"],
+        ["bull:default:paused"],
+        ["bull:default:active"],
+      ])
       expect(pipeline.zcount).toHaveBeenCalledWith(
         "bull:default:delayed",
         "-inf",
@@ -217,16 +221,71 @@ describe("Bull connection lifecycle", () => {
     }
   })
 
+  test("jobQueueSize with skipWorking issues no active LLEN", async () => {
+    exec.mockResolvedValueOnce([
+      [null, 1],
+      [null, 2],
+      [null, 4],
+    ])
+
+    await expect(
+      jobQueueSize("default", {
+        connection: "redis://localhost:6379/0",
+        skipWorking: true,
+      }),
+    ).resolves.toBe(7)
+    expect(pipeline.llen.mock.calls).toEqual([
+      ["bull:default:wait"],
+      ["bull:default:paused"],
+    ])
+  })
+
+  test("jobQueueSize with skipWorking reads three replies per queue across two queues", async () => {
+    exec.mockResolvedValueOnce([
+      [null, 1],
+      [null, 2],
+      [null, 4],
+      [null, 8],
+      [null, 16],
+      [null, 32],
+    ])
+
+    await expect(
+      jobQueueSize("default", "mailer", {
+        connection: "redis://localhost:6379/0",
+        skipWorking: true,
+      }),
+    ).resolves.toBe(63)
+    expect(pipeline.llen.mock.calls).toEqual([
+      ["bull:default:wait"],
+      ["bull:default:paused"],
+      ["bull:mailer:wait"],
+      ["bull:mailer:paused"],
+    ])
+  })
+
   test("jobQueueSize raises pipeline command errors", async () => {
     exec.mockResolvedValueOnce([
       [null, 1],
       [new Error("WRONGTYPE"), null],
       [null, 2],
+      [null, 0],
     ])
 
     await expect(
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
     ).rejects.toThrow("WRONGTYPE")
+
+    exec.mockResolvedValueOnce([
+      [null, 1],
+      [null, 0],
+      [null, 2],
+      [new Error("WRONGTYPE active"), null],
+    ])
+
+    await expect(
+      jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
+    ).rejects.toThrow("WRONGTYPE active")
   })
 
   test("jobQueueSize disconnects when quit rejects after a pipeline failure", async () => {
@@ -303,6 +362,7 @@ describe("Bull connection lifecycle", () => {
       [null, 4],
       [null, 0],
       [null, 0],
+      [null, 0],
     ])
 
     await expect(
@@ -310,7 +370,7 @@ describe("Bull connection lifecycle", () => {
         connection: "redis://localhost:6379/0",
       }),
     ).resolves.toBe(4)
-    expect(pipeline.llen).toHaveBeenCalledTimes(2)
+    expect(pipeline.llen).toHaveBeenCalledTimes(3)
     expect(pipeline.llen).toHaveBeenCalledWith("bull:default:wait")
     expect(pipeline.llen).toHaveBeenCalledWith("bull:default:paused")
     expect(pipeline.zcount).toHaveBeenCalledTimes(1)
@@ -324,11 +384,13 @@ describe("Bull connection lifecycle", () => {
     jest.spyOn(Date, "now").mockReturnValue(frozenNow)
     exec.mockResolvedValueOnce([
       [null, 1],
-      [null, 0],
       [null, 2],
       [null, 4],
-      [null, 1],
-      [null, 0],
+      [null, 8],
+      [null, 16],
+      [null, 32],
+      [null, 64],
+      [null, 128],
     ])
 
     try {
@@ -336,11 +398,13 @@ describe("Bull connection lifecycle", () => {
         jobQueueSize("default", "mailer", {
           connection: "redis://localhost:6379/0",
         }),
-      ).resolves.toBe(8)
+      ).resolves.toBe(255)
       expect(pipeline.llen).toHaveBeenCalledWith("bull:default:wait")
       expect(pipeline.llen).toHaveBeenCalledWith("bull:default:paused")
+      expect(pipeline.llen).toHaveBeenCalledWith("bull:default:active")
       expect(pipeline.llen).toHaveBeenCalledWith("bull:mailer:wait")
       expect(pipeline.llen).toHaveBeenCalledWith("bull:mailer:paused")
+      expect(pipeline.llen).toHaveBeenCalledWith("bull:mailer:active")
       expect(pipeline.zcount).toHaveBeenCalledWith(
         "bull:default:delayed",
         "-inf",
@@ -351,7 +415,7 @@ describe("Bull connection lifecycle", () => {
         "-inf",
         expectedDelayedUpper,
       )
-      expect(pipeline.llen).toHaveBeenCalledTimes(4)
+      expect(pipeline.llen).toHaveBeenCalledTimes(6)
       expect(pipeline.zcount).toHaveBeenCalledTimes(2)
     } finally {
       Date.now.mockRestore()
@@ -363,6 +427,7 @@ describe("Bull connection lifecycle", () => {
       [null, null],
       [null, "x"],
       [null, 5],
+      [null, "y"],
     ])
     await expect(
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
@@ -372,6 +437,7 @@ describe("Bull connection lifecycle", () => {
       [null, null],
       [null, undefined],
       [null, 7],
+      [null, undefined],
     ])
     await expect(
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
@@ -399,7 +465,7 @@ describe("Bull connection lifecycle", () => {
     expect(scan).toHaveBeenCalledWith("0", "MATCH", "bull:*", "COUNT", 100)
     expect(pipeline.llen).toHaveBeenCalledWith("bull:only-active:wait")
     expect(pipeline.llen).toHaveBeenCalledWith("bull:only-prio:wait")
-    expect(pipeline.llen).toHaveBeenCalledTimes(4)
+    expect(pipeline.llen).toHaveBeenCalledTimes(6)
     expect(pipeline.zcount).toHaveBeenCalledTimes(2)
   })
 
@@ -438,7 +504,8 @@ describe("Bull connection lifecycle", () => {
       "-inf",
       expect.any(Number),
     )
-    expect(pipeline.llen).toHaveBeenCalledTimes(2)
+    expect(pipeline.llen).toHaveBeenCalledWith("bull:real:active")
+    expect(pipeline.llen).toHaveBeenCalledTimes(3)
     expect(pipeline.zcount).toHaveBeenCalledTimes(1)
     expect(pipeline.llen).not.toHaveBeenCalledWith("bull:done-only:wait")
     expect(pipeline.llen).not.toHaveBeenCalledWith("bull:fail-only:wait")
@@ -446,32 +513,26 @@ describe("Bull connection lifecycle", () => {
     expect(pipeline.llen).not.toHaveBeenCalledWith("bull:meta-only:wait")
   })
 
-  test("jobQueueSize pipelines wait then paused then delayed per queue in order", async () => {
+  test("jobQueueSize pipelines wait, paused, delayed, then active per queue in order", async () => {
     const frozenNow = 1_700_000_000_000
     const expectedDelayedUpper = (frozenNow + 1) * 0x1000 - 1
     jest.spyOn(Date, "now").mockReturnValue(frozenNow)
-    exec.mockResolvedValue(
-      emptyQueueResults(2).map((row, i) =>
-        i % 3 === 0
-          ? [null, Math.floor(i / 3) * 3 + 1]
-          : i % 3 === 1
-            ? [null, Math.floor(i / 3) * 3 + 2]
-            : [null, Math.floor(i / 3) * 3 + 3],
-      ),
-    )
+    exec.mockResolvedValue(emptyQueueResults(2).map((_row, i) => [null, i + 1]))
 
     try {
       await expect(
         jobQueueSize("default", "mailer", {
           connection: "redis://localhost:6379/0",
         }),
-      ).resolves.toBe(21)
+      ).resolves.toBe(36)
 
       expect(pipeline.llen.mock.calls.map((c) => c[0])).toEqual([
         "bull:default:wait",
         "bull:default:paused",
+        "bull:default:active",
         "bull:mailer:wait",
         "bull:mailer:paused",
+        "bull:mailer:active",
       ])
       expect(pipeline.zcount.mock.calls).toEqual([
         ["bull:default:delayed", "-inf", expectedDelayedUpper],
@@ -491,7 +552,9 @@ describe("Bull connection lifecycle", () => {
         "zcount",
         "llen",
         "llen",
+        "llen",
         "zcount",
+        "llen",
       ])
     } finally {
       Date.now.mockRestore()
@@ -503,10 +566,11 @@ describe("Bull connection lifecycle", () => {
       [null, "2"],
       [null, "3"],
       [null, "4"],
+      [null, "5"],
     ])
     await expect(
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
-    ).resolves.toBe(9)
+    ).resolves.toBe(14)
   })
 
   test("jobQueueSize defaults to localhost Redis when env ladder is empty", async () => {
@@ -630,6 +694,7 @@ describe("Bull connection lifecycle", () => {
       [null, 1],
       [null, 0],
       [null, 0],
+      [null, 0],
     ])
     ;({ IORedis, jobQueueSize } = loadBullWithMockedIORedis(() => ({
       pipeline: () => pipeline,
@@ -652,6 +717,7 @@ describe("Bull connection lifecycle", () => {
     pipeline.lindex = lindex
     exec.mockResolvedValueOnce([
       [null, 1],
+      [null, 0],
       [null, 0],
       [null, 0],
     ])

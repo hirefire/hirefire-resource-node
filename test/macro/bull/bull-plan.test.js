@@ -17,8 +17,31 @@ describe("Bull plan hooks", () => {
     bull = require("../../../src/macro/bull")
   })
 
-  test("planOptions empty", () => {
+  test("planOptions maps skip_working to skipWorking for jqs", () => {
+    expect(
+      bull.planOptions("jqs", { skip_working: true, not_allowed: true }),
+    ).toEqual({ skipWorking: true })
+  })
+
+  test("planOptions keeps a false skip_working", () => {
+    expect(bull.planOptions("jqs", { skip_working: false })).toEqual({
+      skipWorking: false,
+    })
+  })
+
+  test("planOptions drops an absent or non-boolean skip_working", () => {
     expect(bull.planOptions("jqs", { a: 1 })).toEqual({})
+    expect(bull.planOptions("jqs", { skip_working: "true" })).toEqual({})
+    expect(bull.planOptions("jqs", { skip_working: 1 })).toEqual({})
+    expect(bull.planOptions("jqs", { skip_working: null })).toEqual({})
+    expect(bull.planOptions("jqs", { skipWorking: true })).toEqual({})
+    expect(bull.planOptions("jqs", null)).toEqual({})
+    expect(bull.planOptions(undefined, undefined)).toEqual({})
+  })
+
+  test("planOptions passes nothing to a jql entry", () => {
+    expect(bull.planOptions("jql", { skip_working: true })).toEqual({})
+    expect(bull.planOptions("jql", { connection: "x" })).toEqual({})
   })
 
   test("planConnectionOptions from url", () => {
@@ -52,12 +75,6 @@ describe("Bull plan hooks", () => {
     expect(bull.supportsPlanStrategy("")).toBe(false)
     expect(bull.supportsPlanStrategy(Symbol("jqs"))).toBe(false)
     expect(bull.supportsPlanStrategy("JQS")).toBe(false)
-  })
-
-  test("planOptions always empty regardless of strategy or options", () => {
-    expect(bull.planOptions("jql", { connection: "x" })).toEqual({})
-    expect(bull.planOptions("jqs", null)).toEqual({})
-    expect(bull.planOptions(undefined, undefined)).toEqual({})
   })
 
   test("sample-wave hooks open and close the SCAN memo", () => {

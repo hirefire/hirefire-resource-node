@@ -5,6 +5,9 @@ const {
 const SizeOnly = require("../plan/size_only")
 const Hooks = require("../plan/hooks")
 const { withSampleRedis } = require("./helpers/sample_redis")
+const { unpack } = require("../utility")
+
+const PLAN_OPTION_SCHEMA = { jqs: { skip_working: "boolean" } }
 
 let waveEnumCache = null
 
@@ -36,16 +39,18 @@ async function resolveQueueNames(redis, queues, cacheKey) {
 }
 
 async function jobQueueSize(...args) {
+  const { skipWorking } = unpack(args).options
   return withSampleRedis(args, resolveQueueNames, async (redis, queues) => {
     let totalCount = 0
     const pipeline = redis.pipeline()
     const delayedUpper = (Date.now() + 1) * 0x1000 - 1
-    const cmdsPerQueue = 3
+    const cmdsPerQueue = skipWorking ? 3 : 4
 
     for (const queue of queues) {
       pipeline.llen(`bull:${queue}:wait`)
       pipeline.llen(`bull:${queue}:paused`)
       pipeline.zcount(`bull:${queue}:delayed`, "-inf", delayedUpper)
+      if (!skipWorking) pipeline.llen(`bull:${queue}:active`)
     }
 
     const results = await pipeline.exec()
@@ -55,8 +60,11 @@ async function jobQueueSize(...args) {
       const waitCount = toCount(pipelineValue(results[i]))
       const pausedCount = toCount(pipelineValue(results[i + 1]))
       const delayedCount = toCount(pipelineValue(results[i + 2]))
+      const activeCount = skipWorking
+        ? 0
+        : toCount(pipelineValue(results[i + 3]))
 
-      totalCount += waitCount + pausedCount + delayedCount
+      totalCount += waitCount + pausedCount + delayedCount + activeCount
     }
 
     return Math.max(0, totalCount)
@@ -121,8 +129,13 @@ function toCount(value) {
   return Number.isFinite(n) ? n : 0
 }
 
-function planOptions(_strategy, _options) {
-  return {}
+function planOptions(strategy, options) {
+  const { skip_working: skipWorking } = Hooks.extractPlanOptions(
+    strategy,
+    options,
+    PLAN_OPTION_SCHEMA,
+  )
+  return skipWorking === undefined ? {} : { skipWorking }
 }
 
 function planConnectionOptions() {
