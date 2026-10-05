@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `jobQueueWorking` reports how many jobs are currently in progress for BullMQ, classic Bull, and pg-boss.
 - Classic Bull job queue size (latency is unsupported).
 - pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them. Versions 11 and 12 require Node.js 22+.
+- BullMQ, classic Bull, and pg-boss `jobQueueSize` include jobs being processed, and `skipWorking: true` leaves them out.
 - Support Node.js 22+.
 - Support Express 5, Fastify 5, Koa 3, Nest 11 and 12, Next.js 15 and 16, and BullMQ 5 and 6.
 - The package now ships TypeScript declarations.
@@ -24,7 +25,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Request queue time is sampled automatically from HTTP traffic. `config.dyno("web")` is not required.
-- BullMQ `jobQueueSize` no longer includes jobs already being processed.
 - BullMQ and classic Bull sampling require the app's `ioredis` package as an optional peer. Without it, those job metrics are not collected.
 - Official Node.js support is 20+.
 - Process names may be any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone.
