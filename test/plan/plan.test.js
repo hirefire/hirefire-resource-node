@@ -1086,6 +1086,48 @@ describe("Plan", () => {
     }
   })
 
+  test("execute passes only connection options to job queue working", async () => {
+    const jobQueueSize = jest.fn(async () => 7)
+    const jobQueueWorking = jest.fn(async () => 3)
+    const mod = {
+      supportsPlanStrategy: () => true,
+      planOptions: () => ({ skipWorking: true }),
+      planConnectionOptions: () => ({ connection: "redis://plan" }),
+      jobQueueSize,
+      jobQueueWorking,
+    }
+    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
+    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
+      get: () => mod,
+      configurable: true,
+      enumerable: true,
+    })
+    try {
+      await Plan.execute(
+        {
+          name: "worker",
+          adapter: "bullmq",
+          strategy: "jqs",
+          queues: ["default"],
+          options: { skip_working: true },
+        },
+        configuration,
+      )
+      expect(jobQueueSize).toHaveBeenCalledWith("default", {
+        skipWorking: true,
+        connection: "redis://plan",
+      })
+      expect(jobQueueWorking).toHaveBeenCalledWith("default", {
+        connection: "redis://plan",
+      })
+      const data = configuration.buffer.flush()
+      expect(Object.values(data.worker.jqs)[0]).toBe(7)
+      expect(Object.values(data.worker.wrk)[0]).toBe(3)
+    } finally {
+      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  })
+
   test("execute still samples wrk when job strategy sample invalid", async () => {
     let workingCalled = false
     const mod = {

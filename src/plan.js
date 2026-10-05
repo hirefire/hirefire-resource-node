@@ -214,9 +214,10 @@ const Plan = {
     }
 
     try {
+      const connectionOptions = macro.planConnectionOptions()
       const options = {
         ...macro.planOptions(strategy, entry.options),
-        ...macro.planConnectionOptions(),
+        ...connectionOptions,
       }
       const method = macro[methodName]
       if (typeof method !== "function") {
@@ -247,7 +248,7 @@ const Plan = {
           name,
           macro.jobQueueWorking,
           queues,
-          options,
+          connectionOptions,
           logger,
           live,
         )
