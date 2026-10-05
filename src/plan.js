@@ -242,7 +242,7 @@ const Plan = {
         live,
       )
 
-      if (typeof macro.jobQueueWorking === "function") {
+      if (samplesWorking(macro, strategy, options)) {
         await sampleWorking(
           configuration,
           name,
@@ -262,6 +262,11 @@ const Plan = {
       )
     }
   },
+}
+
+function samplesWorking(macro, strategy, options) {
+  if (typeof macro.jobQueueWorking !== "function") return false
+  return strategy === "jql" || options.skipWorking === true
 }
 
 async function sampleJobStrategy(

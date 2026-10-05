@@ -685,7 +685,7 @@ describe("pg-boss", () => {
     expect(await jobQueueSize("sms", sampleOpts)).toBe(2)
   })
 
-  test("plan path samples wrk companion with jqs and jql", async () => {
+  test("plan path samples wrk with jql and none with a jqs that counts running jobs", async () => {
     await insertJob(pool, { name: "email", state: "active" })
     await insertJob(pool, { name: "email", state: "created" })
     await insertJob(pool, { name: "sms", state: "active" })
@@ -710,10 +710,8 @@ describe("pg-boss", () => {
         )
         let flushed = configuration.buffer.flush()
         expect(Object.values(flushed.worker.jqs)[0]).toBe(2)
-        expect(Object.values(flushed.worker.wrk)[0]).toBe(1)
-        expect(Object.values(flushed.worker.wrk)[0]).toBe(
-          await jobQueueWorking("email", sampleOpts),
-        )
+        expect(flushed.worker.wrk).toBeUndefined()
+        expect(await jobQueueWorking("email", sampleOpts)).toBe(1)
 
         await Plan.execute(
           {

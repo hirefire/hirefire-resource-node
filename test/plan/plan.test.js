@@ -451,6 +451,7 @@ describe("Plan", () => {
           adapter: "bullmq",
           strategy: "jqs",
           queues: ["default"],
+          options: { skip_working: true },
         },
         configuration,
         () => false,
@@ -1048,19 +1049,23 @@ describe("Plan", () => {
     }
   })
 
-  test("execute samples wrk when macro implements job queue working", async () => {
+  const executeWithWorkingMacro = async (strategy, options) => {
+    const Hooks = require("../../src/plan/hooks")
+    const jobQueueWorking = jest.fn(async () => 3)
     const mod = {
       supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
+      planOptions: (strategy, options) => {
+        const { skip_working: skipWorking } = Hooks.extractPlanOptions(
+          strategy,
+          options,
+          { jqs: { skip_working: "boolean" } },
+        )
+        return skipWorking === undefined ? {} : { skipWorking }
+      },
       planConnectionOptions: () => ({}),
-      jobQueueSize: async (...queues) => {
-        expect(queues.slice(0, -1)).toEqual(["default"])
-        return 7
-      },
-      jobQueueWorking: async (...queues) => {
-        expect(queues.slice(0, -1)).toEqual(["default"])
-        return 3
-      },
+      jobQueueSize: async () => 7,
+      jobQueueLatency: async () => 1.5,
+      jobQueueWorking,
     }
     const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
     Object.defineProperty(Plan.ADAPTERS, "bullmq", {
@@ -1073,16 +1078,53 @@ describe("Plan", () => {
         {
           name: "worker",
           adapter: "bullmq",
-          strategy: "jqs",
+          strategy,
           queues: ["default"],
+          options,
         },
         configuration,
       )
-      const data = configuration.buffer.flush()
-      expect(Object.values(data.worker.jqs)[0]).toBe(7)
-      expect(Object.values(data.worker.wrk)[0]).toBe(3)
+      return { data: configuration.buffer.flush(), jobQueueWorking }
     } finally {
       Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
+    }
+  }
+
+  test("execute samples no wrk for jqs without skip working", async () => {
+    for (const options of [
+      undefined,
+      {},
+      { skip_working: false },
+      { skip_working: "true" },
+    ]) {
+      const { data, jobQueueWorking } = await executeWithWorkingMacro(
+        "jqs",
+        options,
+      )
+      expect(Object.values(data.worker.jqs)[0]).toBe(7)
+      expect(data.worker.wrk).toBeUndefined()
+      expect(jobQueueWorking).not.toHaveBeenCalled()
+    }
+  })
+
+  test("execute samples wrk for jqs with skip working", async () => {
+    const { data, jobQueueWorking } = await executeWithWorkingMacro("jqs", {
+      skip_working: true,
+    })
+    expect(Object.values(data.worker.jqs)[0]).toBe(7)
+    expect(Object.values(data.worker.wrk)[0]).toBe(3)
+    expect(jobQueueWorking).toHaveBeenCalledWith("default", {})
+  })
+
+  test("execute samples wrk for every jql entry", async () => {
+    for (const options of [undefined, {}, { skip_working: false }]) {
+      const { data, jobQueueWorking } = await executeWithWorkingMacro(
+        "jql",
+        options,
+      )
+      expect(Object.values(data.worker.jql)[0]).toBe(1.5)
+      expect(Object.values(data.worker.wrk)[0]).toBe(3)
+      expect(jobQueueWorking).toHaveBeenCalledWith("default", {})
     }
   })
 
@@ -1132,7 +1174,7 @@ describe("Plan", () => {
     let workingCalled = false
     const mod = {
       supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
+      planOptions: () => ({ skipWorking: true }),
       planConnectionOptions: () => ({}),
       jobQueueSize: async () => -1,
       jobQueueWorking: async () => {
@@ -1169,7 +1211,7 @@ describe("Plan", () => {
     let workingCalled = false
     const mod = {
       supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
+      planOptions: () => ({ skipWorking: true }),
       planConnectionOptions: () => ({}),
       jobQueueSize: async () => {
         throw new Error("jqs boom")
@@ -1213,7 +1255,7 @@ describe("Plan", () => {
   test("execute skips wrk when macro lacks job queue working", async () => {
     const mod = {
       supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
+      planOptions: () => ({ skipWorking: true }),
       planConnectionOptions: () => ({}),
       jobQueueSize: async () => 5,
     }
@@ -1244,7 +1286,7 @@ describe("Plan", () => {
   test("execute keeps jqs when job queue working raises", async () => {
     const mod = {
       supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
+      planOptions: () => ({ skipWorking: true }),
       planConnectionOptions: () => ({}),
       jobQueueSize: async () => 9,
       jobQueueWorking: async () => {
@@ -1286,7 +1328,7 @@ describe("Plan", () => {
   test("execute drops invalid wrk without clearing jqs", async () => {
     const mod = {
       supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
+      planOptions: () => ({ skipWorking: true }),
       planConnectionOptions: () => ({}),
       jobQueueSize: async () => 4,
       jobQueueWorking: async () => -2,

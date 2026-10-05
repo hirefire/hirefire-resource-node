@@ -453,7 +453,7 @@ describe("BullMQ", () => {
     expect(await jobQueueSize("mailer", { connection: redisURL })).toBe(2)
   })
 
-  test("plan execute bullmq jqs also samples wrk", async () => {
+  test("plan execute bullmq jqs counts running jobs and samples no wrk", async () => {
     await redis.lpush("bull:default:active", "a1", "a2")
     await defaultQueue.add("liveJob", {})
 
@@ -473,14 +473,10 @@ describe("BullMQ", () => {
       )
       const flushed = configuration.buffer.flush()
       expect(flushed.worker.jqs).toBeDefined()
-      expect(flushed.worker.wrk).toBeDefined()
+      expect(flushed.worker.wrk).toBeUndefined()
       const jqs = Object.values(flushed.worker.jqs)[0]
-      const wrk = Object.values(flushed.worker.wrk)[0]
       expect(jqs).toBe(await jobQueueSize("default", { connection: redisURL }))
-      expect(wrk).toBe(
-        await jobQueueWorking("default", { connection: redisURL }),
-      )
-      expect(wrk).toBe(2)
+      expect(await jobQueueWorking("default", { connection: redisURL })).toBe(2)
       expect(jqs).toBe(3)
     } finally {
       if (prev === undefined) delete process.env.HIREFIRE_BULLMQ_URL
@@ -532,6 +528,7 @@ describe("BullMQ", () => {
           adapter: "bullmq",
           strategy: "jqs",
           queues: [],
+          options: { skip_working: true },
         },
         configuration,
       )
