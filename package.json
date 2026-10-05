@@ -112,9 +112,9 @@
   "scripts": {
     "test": "bin/matrix",
     "test:core": "bin/run-cell core",
-    "check": "prettier --check --no-semi . && tsc -p test/types/tsconfig.json && tsd && attw --pack . --ignore-rules named-exports",
+    "check": "prettier --check . && tsc -p test/types/tsconfig.json && tsd && attw --pack . --ignore-rules named-exports",
     "types:test": "tsd",
-    "format": "prettier --write --no-semi ."
+    "format": "prettier --write ."
   },
   "jest": {
     "setupFiles": [
