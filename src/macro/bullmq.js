@@ -5,6 +5,9 @@ const {
 const SizeOnly = require("../plan/size_only")
 const Hooks = require("../plan/hooks")
 const { withSampleRedis } = require("./helpers/sample_redis")
+const { unpack } = require("../utility")
+
+const PLAN_OPTION_SCHEMA = { jqs: { skip_working: "boolean" } }
 
 let waveEnumCache = null
 
@@ -36,11 +39,12 @@ async function resolveQueueNames(redis, queues, cacheKey) {
 }
 
 async function jobQueueSize(...args) {
+  const { skipWorking } = unpack(args).options
   return withSampleRedis(args, resolveQueueNames, async (redis, queues) => {
     let totalCount = 0
     const pipeline = redis.pipeline()
     const delayedUpper = (Date.now() + 1) * 0x1000 - 1
-    const cmdsPerQueue = 6
+    const cmdsPerQueue = skipWorking ? 6 : 7
 
     for (const queue of queues) {
       pipeline.lindex(`bull:${queue}:wait`, -1)
@@ -49,6 +53,7 @@ async function jobQueueSize(...args) {
       pipeline.lindex(`bull:${queue}:paused`, -1)
       pipeline.zcount(`bull:${queue}:delayed`, "-inf", delayedUpper)
       pipeline.zcard(`bull:${queue}:prioritized`)
+      if (!skipWorking) pipeline.llen(`bull:${queue}:active`)
     }
 
     const results = await pipeline.exec()
@@ -61,8 +66,12 @@ async function jobQueueSize(...args) {
       const lastPausedJob = pipelineValue(results[i + 3])
       const delayedCount = toCount(pipelineValue(results[i + 4]))
       const prioritizedCount = toCount(pipelineValue(results[i + 5]))
+      const activeCount = skipWorking
+        ? 0
+        : toCount(pipelineValue(results[i + 6]))
 
-      totalCount += waitCount + pausedCount + delayedCount + prioritizedCount
+      totalCount +=
+        waitCount + pausedCount + delayedCount + prioritizedCount + activeCount
 
       const waitMarker =
         typeof lastWaitJob === "string" && lastWaitJob.startsWith("0:")
@@ -135,8 +144,13 @@ function toCount(value) {
   return Number.isFinite(n) ? n : 0
 }
 
-function planOptions(_strategy, _options) {
-  return {}
+function planOptions(strategy, options) {
+  const { skip_working: skipWorking } = Hooks.extractPlanOptions(
+    strategy,
+    options,
+    PLAN_OPTION_SCHEMA,
+  )
+  return skipWorking === undefined ? {} : { skipWorking }
 }
 
 function planConnectionOptions() {

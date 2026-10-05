@@ -20,6 +20,7 @@ function emptyQueueResults(count = 1) {
       [null, null],
       [null, 0],
       [null, 0],
+      [null, 0],
     )
   }
   return rows
@@ -158,6 +159,7 @@ describe("BullMQ connection lifecycle", () => {
       [null, null],
       [null, 0],
       [null, 0],
+      [null, 0],
     ])
 
     await expect(
@@ -165,13 +167,13 @@ describe("BullMQ connection lifecycle", () => {
         connection: "redis://localhost:6379/0",
       }),
     ).resolves.toBe(1)
-    expect(pipeline.llen).toHaveBeenCalledTimes(2)
+    expect(pipeline.llen).toHaveBeenCalledTimes(3)
     expect(pipeline.lindex).toHaveBeenCalledTimes(2)
     expect(pipeline.zcount).toHaveBeenCalledTimes(1)
     expect(pipeline.zcard).toHaveBeenCalledTimes(1)
   })
 
-  test("jobQueueSize counts prioritized and paused, excludes active", async () => {
+  test("jobQueueSize counts wait, paused, due delayed, prioritized, and active", async () => {
     const frozenNow = 1_700_000_000_000
     const expectedDelayedUpper = (frozenNow + 1) * 0x1000 - 1
     jest.spyOn(Date, "now").mockReturnValue(frozenNow)
@@ -181,16 +183,19 @@ describe("BullMQ connection lifecycle", () => {
       [null, 2],
       [null, null],
       [null, 4],
-      [null, 5],
+      [null, 8],
+      [null, 16],
     ])
 
     try {
       await expect(
         jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
-      ).resolves.toBe(12)
-      expect(pipeline.llen).toHaveBeenCalledWith("bull:default:wait")
-      expect(pipeline.llen).toHaveBeenCalledWith("bull:default:paused")
-      expect(pipeline.llen).not.toHaveBeenCalledWith("bull:default:active")
+      ).resolves.toBe(31)
+      expect(pipeline.llen.mock.calls).toEqual([
+        ["bull:default:wait"],
+        ["bull:default:paused"],
+        ["bull:default:active"],
+      ])
       expect(pipeline.zcount).toHaveBeenCalledWith(
         "bull:default:delayed",
         "-inf",
@@ -202,12 +207,123 @@ describe("BullMQ connection lifecycle", () => {
     }
   })
 
+  test("jobQueueSize with skipWorking issues no active LLEN", async () => {
+    exec.mockResolvedValueOnce([
+      [null, null],
+      [null, 1],
+      [null, 2],
+      [null, null],
+      [null, 4],
+      [null, 8],
+    ])
+
+    await expect(
+      jobQueueSize("default", {
+        connection: "redis://localhost:6379/0",
+        skipWorking: true,
+      }),
+    ).resolves.toBe(15)
+    expect(pipeline.llen.mock.calls).toEqual([
+      ["bull:default:wait"],
+      ["bull:default:paused"],
+    ])
+  })
+
+  test("jobQueueSize reads seven replies per queue across two queues", async () => {
+    exec.mockResolvedValueOnce([
+      [null, null],
+      [null, 1],
+      [null, 2],
+      [null, null],
+      [null, 4],
+      [null, 8],
+      [null, 16],
+      [null, null],
+      [null, 32],
+      [null, 64],
+      [null, null],
+      [null, 128],
+      [null, 256],
+      [null, 512],
+    ])
+
+    await expect(
+      jobQueueSize("default", "mailer", {
+        connection: "redis://localhost:6379/0",
+      }),
+    ).resolves.toBe(1023)
+    expect(pipeline.llen.mock.calls).toEqual([
+      ["bull:default:wait"],
+      ["bull:default:paused"],
+      ["bull:default:active"],
+      ["bull:mailer:wait"],
+      ["bull:mailer:paused"],
+      ["bull:mailer:active"],
+    ])
+  })
+
+  test("jobQueueSize with skipWorking reads six replies per queue across two queues", async () => {
+    exec.mockResolvedValueOnce([
+      [null, null],
+      [null, 1],
+      [null, 2],
+      [null, null],
+      [null, 4],
+      [null, 8],
+      [null, null],
+      [null, 16],
+      [null, 32],
+      [null, null],
+      [null, 64],
+      [null, 128],
+    ])
+
+    await expect(
+      jobQueueSize("default", "mailer", {
+        connection: "redis://localhost:6379/0",
+        skipWorking: true,
+      }),
+    ).resolves.toBe(255)
+    expect(pipeline.llen.mock.calls).toEqual([
+      ["bull:default:wait"],
+      ["bull:default:paused"],
+      ["bull:mailer:wait"],
+      ["bull:mailer:paused"],
+    ])
+  })
+
+  test("jobQueueSize subtracts a marker in the second of two queues", async () => {
+    exec.mockResolvedValueOnce([
+      [null, null],
+      [null, 1],
+      [null, 0],
+      [null, null],
+      [null, 0],
+      [null, 0],
+      [null, 2],
+      [null, "0:7"],
+      [null, 3],
+      [null, 0],
+      [null, null],
+      [null, 0],
+      [null, 0],
+      [null, 4],
+    ])
+
+    await expect(
+      jobQueueSize("default", "mailer", {
+        connection: "redis://localhost:6379/0",
+      }),
+    ).resolves.toBe(9)
+  })
+
   test("jobQueueSize subtracts wait marker when last entry is 0:", async () => {
     exec.mockResolvedValueOnce([
       [null, "0:123"],
       [null, 1],
       [null, 0],
       [null, null],
+      [null, 0],
       [null, 0],
       [null, 0],
     ])
@@ -220,6 +336,7 @@ describe("BullMQ connection lifecycle", () => {
       [null, 2],
       [null, 0],
       [null, null],
+      [null, 0],
       [null, 0],
       [null, 0],
     ])
@@ -236,6 +353,7 @@ describe("BullMQ connection lifecycle", () => {
       [null, "0:0"],
       [null, 0],
       [null, 0],
+      [null, 0],
     ])
     await expect(
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
@@ -246,6 +364,7 @@ describe("BullMQ connection lifecycle", () => {
       [null, 1],
       [null, 1],
       [null, "0:0"],
+      [null, 0],
       [null, 0],
       [null, 0],
     ])
@@ -262,11 +381,26 @@ describe("BullMQ connection lifecycle", () => {
       [null, null],
       [null, 2],
       [null, 0],
+      [null, 0],
     ])
 
     await expect(
       jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
     ).rejects.toThrow("WRONGTYPE")
+
+    exec.mockResolvedValueOnce([
+      [null, null],
+      [null, 1],
+      [null, 0],
+      [null, null],
+      [null, 2],
+      [null, 0],
+      [new Error("WRONGTYPE active"), null],
+    ])
+
+    await expect(
+      jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
+    ).rejects.toThrow("WRONGTYPE active")
   })
 
   test("jobQueueSize disconnects when quit rejects after a pipeline failure", async () => {

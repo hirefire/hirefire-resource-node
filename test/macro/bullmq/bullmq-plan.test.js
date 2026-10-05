@@ -7,8 +7,29 @@ describe("BullMQ plan hooks", () => {
     bullmq = require("../../../src/macro/bullmq")
   })
 
-  test("planOptions empty", () => {
+  test("planOptions maps skip_working to skipWorking for jqs", () => {
+    expect(
+      bullmq.planOptions("jqs", { skip_working: true, not_allowed: true }),
+    ).toEqual({ skipWorking: true })
+  })
+
+  test("planOptions keeps a false skip_working", () => {
+    expect(bullmq.planOptions("jqs", { skip_working: false })).toEqual({
+      skipWorking: false,
+    })
+  })
+
+  test("planOptions drops an absent or non-boolean skip_working", () => {
     expect(bullmq.planOptions("jqs", { a: 1 })).toEqual({})
+    expect(bullmq.planOptions("jqs", { skip_working: "true" })).toEqual({})
+    expect(bullmq.planOptions("jqs", { skip_working: 1 })).toEqual({})
+    expect(bullmq.planOptions("jqs", { skip_working: null })).toEqual({})
+    expect(bullmq.planOptions("jqs", { skipWorking: true })).toEqual({})
+    expect(bullmq.planOptions("jqs", null)).toEqual({})
+  })
+
+  test("planOptions passes nothing to a jql entry", () => {
+    expect(bullmq.planOptions("jql", { skip_working: true })).toEqual({})
   })
 
   test("planConnectionOptions from url", () => {

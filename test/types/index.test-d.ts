@@ -139,14 +139,26 @@ expectType<Promise<number>>(bullmq.jobQueueSize("default"))
 expectType<Promise<number>>(
   bullmq.jobQueueSize("default", { connection: "redis://localhost:6379/0" }),
 )
+expectType<Promise<number>>(
+  bullmq.jobQueueSize("default", { skipWorking: true }),
+)
+expectType<Promise<number>>(
+  bullmq.jobQueueSize("default", {
+    connection: "redis://localhost:6379/0",
+    skipWorking: true,
+  }),
+)
+expectError(bullmq.jobQueueSize("default", { skipWorking: "true" }))
 expectType<Promise<number>>(bullmq.jobQueueWorking())
 expectType<Promise<number>>(bullmq.jobQueueWorking("default"))
+expectError(bullmq.jobQueueWorking("default", { skipWorking: true }))
 expectType<Promise<never>>(bullmq.jobQueueLatency())
 expectType<Promise<never>>(bullmq.jobQueueLatency("default"))
 expectType<Promise<never>>(
   bullmq.jobQueueLatency("default", { connection: "redis://localhost:6379/0" }),
 )
 expectError(bullmq.jobQueueLatency(1))
+expectError(bullmq.jobQueueLatency("default", { skipWorking: true }))
 expectType<boolean>(bullmq.queuesRequired())
 expectType<boolean>(bullmq.supportsPlanStrategy("jqs"))
 expectType<object>(bullmq.planOptions("jqs", {}))

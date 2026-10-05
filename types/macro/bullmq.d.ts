@@ -2,19 +2,22 @@ export type BullMQOptions = {
   connection?: string | object
   connectionOptions?: object
 }
+export type BullMQSizeOptions = BullMQOptions & {
+  skipWorking?: boolean
+}
 export function jobQueueLatency(...queues: string[]): Promise<never>
 export function jobQueueLatency(
   ...queuesAndOptions: (string | BullMQOptions)[]
 ): Promise<never>
 export function jobQueueSize(...queues: string[]): Promise<number>
 export function jobQueueSize(
-  ...queuesAndOptions: (string | BullMQOptions)[]
+  ...queuesAndOptions: (string | BullMQSizeOptions)[]
 ): Promise<number>
 export function jobQueueWorking(...queues: string[]): Promise<number>
 export function jobQueueWorking(
   ...queuesAndOptions: (string | BullMQOptions)[]
 ): Promise<number>
-export function planOptions(_strategy: string, _options: any): object
+export function planOptions(strategy: string, options: any): object
 export function planConnectionOptions(): object
 export function supportsPlanStrategy(strategy: string | symbol): boolean
 export function queuesRequired(): boolean
