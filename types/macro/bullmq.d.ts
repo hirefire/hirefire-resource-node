@@ -2,7 +2,10 @@ export type BullMQOptions = {
   connection?: string | object
   connectionOptions?: object
 }
-export function jobQueueLatency(...args: any[]): Promise<never>
+export function jobQueueLatency(...queues: string[]): Promise<never>
+export function jobQueueLatency(
+  ...queuesAndOptions: (string | BullMQOptions)[]
+): Promise<never>
 export function jobQueueSize(...queues: string[]): Promise<number>
 export function jobQueueSize(
   ...queuesAndOptions: (string | BullMQOptions)[]

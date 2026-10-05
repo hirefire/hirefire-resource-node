@@ -142,6 +142,11 @@ expectType<Promise<number>>(
 expectType<Promise<number>>(bullmq.jobQueueWorking())
 expectType<Promise<number>>(bullmq.jobQueueWorking("default"))
 expectType<Promise<never>>(bullmq.jobQueueLatency())
+expectType<Promise<never>>(bullmq.jobQueueLatency("default"))
+expectType<Promise<never>>(
+  bullmq.jobQueueLatency("default", { connection: "redis://localhost:6379/0" }),
+)
+expectError(bullmq.jobQueueLatency(1))
 expectType<boolean>(bullmq.queuesRequired())
 expectType<boolean>(bullmq.supportsPlanStrategy("jqs"))
 expectType<object>(bullmq.planOptions("jqs", {}))
@@ -156,6 +161,11 @@ expectType<typeof bullmq.JobQueueLatencyUnsupportedError>(
 expectType<Promise<number>>(bull.jobQueueSize("default"))
 expectType<Promise<number>>(bull.jobQueueWorking("default"))
 expectType<Promise<never>>(bull.jobQueueLatency())
+expectType<Promise<never>>(bull.jobQueueLatency("default"))
+expectType<Promise<never>>(
+  bull.jobQueueLatency("default", { connection: "redis://localhost:6379/0" }),
+)
+expectError(bull.jobQueueLatency(1))
 expectType<boolean>(bull.queuesRequired())
 expectType<typeof bull.JobQueueLatencyUnsupportedError>(
   bull.JobQueueLatencyUnsupportedError,
