@@ -267,9 +267,9 @@ describe("Dispatcher", () => {
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
   })
 
-  test("payload size limit is 65536 with strict greater drop", async () => {
+  test("payload size limit is 131072 with strict greater drop", async () => {
     const limit = Dispatcher.PAYLOAD_SIZE_LIMIT
-    expect(limit).toBe(65536)
+    expect(limit).toBe(131072)
     const dispatcher = configureWebOnly()
     const posted = []
     dispatcher._client.submitSamples = async (body) => {
@@ -298,7 +298,7 @@ describe("Dispatcher", () => {
     expect(loggerErrors()).toContain(`exceeds the ${limit}-byte limit`)
   })
 
-  test("three sample waves of a full plan with working counts ship in one payload", async () => {
+  test("seven sample waves of a full plan with the longest names ship in one payload", async () => {
     stubLease()
     const dispatcher = config().dispatcher
     const posted = []
@@ -307,10 +307,10 @@ describe("Dispatcher", () => {
       return { statusCode: 200, headers: {} }
     }
     const names = Array.from({ length: Lease.MAX_JOB_QUEUES }, (_, i) =>
-      `worker_${String(i).padStart(3, "0")}`.padEnd(40, "x"),
+      `worker_${String(i).padStart(3, "0")}`.padEnd(Lease.MAX_NAME_BYTES, "x"),
     )
 
-    for (const second of [1000, 1015, 1030]) {
+    for (const second of [1000, 1005, 1010, 1015, 1020, 1025, 1030]) {
       freezeTime(second)
       for (const name of names) {
         config().buffer.sample(name, "jqs", 1234)
@@ -325,11 +325,11 @@ describe("Dispatcher", () => {
     expect(
       entries.every((entry) =>
         Object.values(entry.metrics).every(
-          (series) => Object.keys(series).length === 3,
+          (series) => Object.keys(series).length === 7,
         ),
       ),
     ).toBe(true)
-    expect(Buffer.byteLength(posted[0])).toBeGreaterThan(32768)
+    expect(Buffer.byteLength(posted[0])).toBeGreaterThan(65536)
     expect(loggerErrors()).not.toContain("Dropped metrics payload")
   })
 
