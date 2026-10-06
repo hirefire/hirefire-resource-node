@@ -3,7 +3,7 @@ const https = require("https")
 const VERSION = require("./version")
 
 const STALE_CONNECTION_CODES = new Set(["ECONNRESET", "ECONNABORTED", "EPIPE"])
-const MAX_LEASE_BODY_BYTES = 16384
+const MAX_LEASE_BODY_BYTES = 131072
 
 function isStaleConnectionCode(code) {
   return (

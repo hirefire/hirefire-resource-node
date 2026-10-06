@@ -5,8 +5,8 @@ const safeLog = require("./log")
 class Lease {
   static SAMPLE_FREQUENCY_BOUNDS = [1, 3600]
   static TTL_BOUNDS = [5, 3600]
-  static MAX_BODY_BYTES = 16384
-  static MAX_JOB_QUEUES = 64
+  static MAX_BODY_BYTES = 131072
+  static MAX_JOB_QUEUES = 256
   static MAX_NAME_BYTES = 128
 
   constructor(configuration) {

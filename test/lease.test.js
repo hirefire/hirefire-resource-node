@@ -279,6 +279,8 @@ describe("Lease", () => {
   })
 
   test("ignores oversized grant body", async () => {
+    const error = jest.fn()
+    lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
     const huge = "x".repeat(Lease.MAX_BODY_BYTES + 1)
     grant(
       {
@@ -290,6 +292,63 @@ describe("Lease", () => {
     await lease.requestIfDue({ hold: holdTrue })
     expect(lease.granted()).toBe(true)
     expect(lease.jobQueues).toEqual([])
+    expect(
+      error.mock.calls.map((call) => String(call[0])).join("\n"),
+    ).toContain("exceeded")
+  })
+
+  test("accepts grant body of exactly max body bytes", async () => {
+    expect(Lease.MAX_BODY_BYTES).toBe(131072)
+    const error = jest.fn()
+    lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
+    let body = JSON.stringify({
+      version: 1,
+      job_queues: [
+        {
+          name: "worker",
+          strategy: "jql",
+          adapter: null,
+          queues: [],
+          options: {},
+        },
+      ],
+    })
+    body += " ".repeat(Lease.MAX_BODY_BYTES - Buffer.byteLength(body))
+    grant(
+      {
+        "HireFire-Lease-Granted": "true",
+        "HireFire-Sample-Frequency": "15",
+      },
+      body,
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.jobQueues.map((entry) => entry.name)).toEqual(["worker"])
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  test("accepts a plan of max job queues with three queues each", async () => {
+    expect(Lease.MAX_JOB_QUEUES).toBe(256)
+    const error = jest.fn()
+    lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
+    const entries = Array.from({ length: Lease.MAX_JOB_QUEUES }, (_, i) => ({
+      name: `background_worker_${i}`,
+      strategy: "jqs",
+      adapter: "bullmq",
+      queues: [`critical_${i}`, `default_${i}`, `low_priority_${i}`],
+      options: { skip_working: true },
+    }))
+    const body = JSON.stringify({ version: 1, job_queues: entries })
+    expect(Buffer.byteLength(body)).toBeGreaterThan(32768)
+    grant(
+      {
+        "HireFire-Lease-Granted": "true",
+        "HireFire-Sample-Frequency": "15",
+      },
+      body,
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.jobQueues).toEqual(entries)
+    expect(error).not.toHaveBeenCalled()
   })
 
   test("truncates plan to max job queues", async () => {
