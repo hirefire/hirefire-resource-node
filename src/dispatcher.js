@@ -11,7 +11,7 @@ const { RQT, rqt } = require("./strategy")
 class Dispatcher {
   static RQT_BACKFILL_LIMIT = 60
   static PAYLOAD_SIZE_LIMIT = 65536
-  static WARN_MAP_LIMIT = 128
+  static WARN_MAP_LIMIT = 256
   static SAMPLE_COUNT_LIMIT = MetricsBuffer.SAMPLE_COUNT_LIMIT
   static METRIC_VALUE_LIMIT = 1e15
   static DEFAULT_DISPATCH_FREQUENCY = 1

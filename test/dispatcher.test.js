@@ -1436,6 +1436,34 @@ describe("Dispatcher", () => {
     ).toBe(true)
   })
 
+  test("a full plan of unknown adapters warns once per entry", async () => {
+    expect(Dispatcher.WARN_MAP_LIMIT).toBe(Lease.MAX_JOB_QUEUES)
+    stubLease(
+      true,
+      JSON.stringify({
+        version: 1,
+        job_queues: Array.from({ length: Lease.MAX_JOB_QUEUES }, (_, i) => ({
+          name: `worker_${i}`,
+          strategy: "jql",
+          adapter: "nope",
+          queues: [],
+          options: {},
+        })),
+      }),
+    )
+    captureIngestBodies()
+    config().dyno("other", () => 0)
+    const dispatcher = config().dispatcher
+    freezeTime(1000)
+    await dispatcher._jobQueueTick()
+    await dispatcher._sampleJobQueues()
+    expect(
+      logger.error.mock.calls.filter((call) =>
+        String(call[0]).includes("Unknown plan adapter"),
+      ),
+    ).toHaveLength(Lease.MAX_JOB_QUEUES)
+  })
+
   test("known unloaded adapter skips without local fallback", async () => {
     jest.spyOn(Plan, "executable").mockReturnValue(false)
     jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
