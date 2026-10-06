@@ -2,6 +2,7 @@ const { freezeTime } = require("./support")
 const nock = require("nock")
 const HireFire = require("../src")
 const Dispatcher = require("../src/dispatcher")
+const Lease = require("../src/lease")
 const MetricsBuffer = require("../src/buffer")
 const Usage = require("../src/source/cpu/usage")
 const Plan = require("../src/plan")
@@ -266,34 +267,70 @@ describe("Dispatcher", () => {
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
   })
 
-  test("payload equality at 32768 posts", async () => {
+  test("payload size limit is 65536 with strict greater drop", async () => {
+    const limit = Dispatcher.PAYLOAD_SIZE_LIMIT
+    expect(limit).toBe(65536)
     const dispatcher = configureWebOnly()
-    const exact = "x".repeat(Dispatcher.PAYLOAD_SIZE_LIMIT)
-    expect(Buffer.byteLength(exact)).toBe(32768)
-    const drop = dispatcher._dropOversizedPayload.bind(dispatcher)
-    let dropped = false
-    dispatcher._dropOversizedPayload = (...args) => {
-      dropped = true
-      return drop(...args)
-    }
-    const orig = dispatcher._client.submitSamples
-    let posted = false
-    dispatcher._client.submitSamples = async () => {
-      posted = true
+    const posted = []
+    dispatcher._client.submitSamples = async (body) => {
+      posted.push(Buffer.byteLength(body))
       return { statusCode: 200, headers: {} }
     }
-    const body = JSON.stringify([
-      { name: "web", metrics: { rqt: { 1000: [] } } },
-    ])
-    expect(Buffer.byteLength(body)).toBeLessThanOrEqual(
-      Dispatcher.PAYLOAD_SIZE_LIMIT,
+    const stringify = jest.spyOn(JSON, "stringify")
+    try {
+      freezeTime(1000)
+      config().buffer.sample("web", "rqt", 1)
+      stringify.mockReturnValueOnce("e".repeat(limit))
+      await dispatcher._dispatch()
+      expect(posted).toEqual([limit])
+      expect(loggerErrors()).not.toContain("Dropped metrics payload")
+
+      freezeTime(1001)
+      config().buffer.sample("web", "rqt", 1)
+      stringify.mockReturnValueOnce("o".repeat(limit + 1))
+      await dispatcher._dispatch()
+    } finally {
+      stringify.mockRestore()
+    }
+    expect(posted).toEqual([limit])
+    expect(loggerErrors()).toContain("Dropped metrics payload")
+    expect(loggerErrors()).toContain(`${limit + 1} bytes`)
+    expect(loggerErrors()).toContain(`exceeds the ${limit}-byte limit`)
+  })
+
+  test("three sample waves of a full plan with working counts ship in one payload", async () => {
+    stubLease()
+    const dispatcher = config().dispatcher
+    const posted = []
+    dispatcher._client.submitSamples = async (body) => {
+      posted.push(body)
+      return { statusCode: 200, headers: {} }
+    }
+    const names = Array.from({ length: Lease.MAX_JOB_QUEUES }, (_, i) =>
+      `worker_${String(i).padStart(3, "0")}`.padEnd(40, "x"),
     )
-    freezeTime(1000)
-    config().buffer.sample("web", "rqt", 1)
+
+    for (const second of [1000, 1015, 1030]) {
+      freezeTime(second)
+      for (const name of names) {
+        config().buffer.sample(name, "jqs", 1234)
+        config().buffer.sample(name, "wrk", 12)
+      }
+    }
     await dispatcher._dispatch()
-    expect(posted).toBe(true)
-    expect(dropped).toBe(false)
-    dispatcher._client.submitSamples = orig
+
+    expect(posted).toHaveLength(1)
+    const entries = JSON.parse(posted[0])
+    expect(entries.map((entry) => entry.name)).toEqual(names)
+    expect(
+      entries.every((entry) =>
+        Object.values(entry.metrics).every(
+          (series) => Object.keys(series).length === 3,
+        ),
+      ),
+    ).toBe(true)
+    expect(Buffer.byteLength(posted[0])).toBeGreaterThan(32768)
+    expect(loggerErrors()).not.toContain("Dropped metrics payload")
   })
 
   test("logs the payload when verbose is set", async () => {
@@ -1000,7 +1037,7 @@ describe("Dispatcher", () => {
         {
           adapter: "bullmq",
           strategy: "jqs",
-          queues: ["q".repeat(40000)],
+          queues: ["q".repeat(Dispatcher.PAYLOAD_SIZE_LIMIT)],
           options: {},
           ms: 1.0,
         },
