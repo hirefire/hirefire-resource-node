@@ -20,6 +20,32 @@ describe("Plan", () => {
     expect(Plan.knownAdapter("__proto__")).toBe(false)
   })
 
+  test("every planned adapter takes the strategies and options the server sends", () => {
+    const sizeOnly = ["bull", "bullmq"]
+
+    expect(Object.keys(Plan.ADAPTERS).sort()).toEqual([
+      "bull",
+      "bullmq",
+      "pg_boss",
+    ])
+
+    for (const adapter of Object.keys(Plan.ADAPTERS)) {
+      const macro = Plan.ADAPTERS[adapter]
+
+      expect(macro.supportsPlanStrategy("jqs")).toBe(true)
+      expect(macro.supportsPlanStrategy("jql")).toBe(
+        !sizeOnly.includes(adapter),
+      )
+      expect(macro.queuesRequired()).toBe(false)
+      expect(typeof macro.jobQueueWorking).toBe("function")
+      expect(macro.planOptions("jqs", { skip_working: true })).toEqual({
+        skipWorking: true,
+      })
+      expect(macro.planOptions("jqs", {})).toEqual({})
+      expect(macro.planOptions("jql", { skip_working: true })).toEqual({})
+    }
+  })
+
   test("known strategy", () => {
     expect(Plan.knownStrategy("jqs")).toBe(true)
     expect(Plan.knownStrategy("jql")).toBe(true)
