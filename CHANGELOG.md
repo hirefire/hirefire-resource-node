@@ -28,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Request queue time is sampled automatically from HTTP traffic. `config.dyno("web")` is not required.
 - BullMQ and classic Bull sampling require the app's `ioredis` package as an optional peer. Without it, those job metrics are not collected.
 - Official Node.js support is 20+.
-- Process names may be any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone.
+- Process names may be any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone. An invalid name throws `TypeError` (1.x threw `InvalidDynoNameError`).
 - `config.dyno` without a sampler raises `MissingSamplerError` except when the name is `"web"` (1.x raised `MissingDynoFnError`). Duplicate dyno names raise `DuplicateDynoError`.
 - `HireFire.configure` callbacks must be synchronous.
 
@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Request queue time ignores samples older than 60 seconds.
+- The Fastify plugin works without the `fastify-plugin` package. 1.x required it and did not declare it as a dependency.
 - BullMQ `jobQueueSize` includes paused and prioritized jobs (1.x omitted both).
 - HTTP requests to HireFire time out within five seconds even when DNS never completes.
 - BullMQ samples fail within five seconds when Redis does not respond.
