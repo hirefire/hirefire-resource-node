@@ -6,6 +6,7 @@ const PLAN_OPTION_SCHEMA = { jqs: { skip_working: "boolean" } }
 const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://postgres:postgres@127.0.0.1:5432/postgres"
 const SCHEMA_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+const URL_SSL_RE = /[?&]ssl[a-z]*=/i
 const SAMPLE_QUERY_TIMEOUT_MS = 5000
 const SAMPLE_POOL_OPTIONS = {
   max: 1,
@@ -131,6 +132,7 @@ async function withConnection(args, fn, { detectBlocked = true } = {}) {
     const connectionString = String(connection)
     ownedPool = new Pool({
       ...SAMPLE_POOL_OPTIONS,
+      ...herokuSslDefault(connectionString, userOpts),
       ...userOpts,
       connectionString,
     })
@@ -184,6 +186,14 @@ function resolveConnection(options) {
     return String(databaseUrl).trim()
   }
   return DEFAULT_URL
+}
+
+function herokuSslDefault(connectionString, userOpts) {
+  if (!process.env.DYNO) return {}
+  if (userOpts.ssl !== undefined) return {}
+  if (process.env.PGSSLMODE) return {}
+  if (URL_SSL_RE.test(connectionString)) return {}
+  return { ssl: { rejectUnauthorized: false } }
 }
 
 function isQueryable(value) {

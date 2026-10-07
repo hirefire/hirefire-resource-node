@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `jobQueueWorking` reports how many jobs are currently in progress for BullMQ, classic Bull, and pg-boss.
 - Classic Bull job queue size (latency is unsupported).
 - pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them. Versions 11 and 12 require Node.js 22+.
+- On Heroku, pg-boss samples connect to Postgres over SSL without certificate verification, as Heroku Postgres requires. `connectionOptions.ssl`, `PGSSLMODE`, or an SSL parameter in the URL sets it otherwise.
 - BullMQ, classic Bull, and pg-boss `jobQueueSize` include jobs being processed, and `skipWorking: true` leaves them out.
 - Support Node.js 22+.
 - Support Express 5, Fastify 5, Koa 3, Nest 11 and 12, Next.js 15 and 16, and BullMQ 5 and 6.

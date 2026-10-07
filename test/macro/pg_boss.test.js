@@ -558,6 +558,24 @@ describe("pg-boss", () => {
     )
   })
 
+  test("a dyno asks the server for SSL unless SSL is switched off", async () => {
+    await insertJob(pool, { name: "email" })
+    await withEnv({ DYNO: "worker.1", PGSSLMODE: undefined }, async () => {
+      await expect(jobQueueSize("email", sampleOpts)).rejects.toThrow(
+        /does not support SSL/,
+      )
+      expect(
+        await jobQueueSize("email", {
+          ...sampleOpts,
+          connectionOptions: { ssl: false },
+        }),
+      ).toBe(1)
+    })
+    await withEnv({ DYNO: "worker.1", PGSSLMODE: "disable" }, async () => {
+      expect(await jobQueueSize("email", sampleOpts)).toBe(1)
+    })
+  })
+
   test("options.schema wins over HIREFIRE_PG_BOSS_SCHEMA", async () => {
     await insertJob(pool, { name: "email" })
     await withEnv(

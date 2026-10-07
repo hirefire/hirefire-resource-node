@@ -547,4 +547,97 @@ describeIfPg("pg-boss connection lifecycle", () => {
       else process.env.HIREFIRE_PG_BOSS_SCHEMA = prevSchema
     }
   })
+
+  describe("SSL on Heroku", () => {
+    const keys = ["DYNO", "PGSSLMODE", "DATABASE_URL", "HIREFIRE_PG_BOSS_URL"]
+    let saved
+
+    beforeEach(() => {
+      saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]))
+      for (const key of keys) delete process.env[key]
+    })
+
+    afterEach(() => {
+      for (const key of keys) {
+        if (saved[key] === undefined) delete process.env[key]
+        else process.env[key] = saved[key]
+      }
+    })
+
+    async function poolOptions(...args) {
+      mockEmptySize()
+      await jobQueueSize(...args)
+      return poolSpy.mock.calls[0][0]
+    }
+
+    test("a dyno connects over SSL without certificate verification", async () => {
+      process.env.DYNO = "worker.1"
+      const options = await poolOptions({ connection: "postgres://host/jobs" })
+      expect(options.ssl).toEqual({ rejectUnauthorized: false })
+    })
+
+    test("a dyno connects over SSL to a URL from the environment", async () => {
+      process.env.DYNO = "worker.1"
+      process.env.DATABASE_URL = "postgres://database-url/jobs"
+      const options = await poolOptions()
+      expect(options.connectionString).toBe("postgres://database-url/jobs")
+      expect(options.ssl).toEqual({ rejectUnauthorized: false })
+    })
+
+    test("no SSL option is set off Heroku", async () => {
+      const options = await poolOptions({ connection: "postgres://host/jobs" })
+      expect(options).not.toHaveProperty("ssl")
+    })
+
+    test("a blank DYNO sets no SSL option", async () => {
+      process.env.DYNO = ""
+      const options = await poolOptions({ connection: "postgres://host/jobs" })
+      expect(options).not.toHaveProperty("ssl")
+    })
+
+    test.each([[false], [true], [{ ca: "certificate" }]])(
+      "connectionOptions.ssl %j wins on a dyno",
+      async (ssl) => {
+        process.env.DYNO = "worker.1"
+        const options = await poolOptions({
+          connection: "postgres://host/jobs",
+          connectionOptions: { ssl },
+        })
+        expect(options.ssl).toEqual(ssl)
+      },
+    )
+
+    test("PGSSLMODE leaves the SSL setting to pg on a dyno", async () => {
+      process.env.DYNO = "worker.1"
+      process.env.PGSSLMODE = "disable"
+      const options = await poolOptions({ connection: "postgres://host/jobs" })
+      expect(options).not.toHaveProperty("ssl")
+    })
+
+    test.each([
+      ["postgres://host/jobs?sslmode=require"],
+      ["postgres://host/jobs?application_name=app&sslmode=disable"],
+      ["postgres://host/jobs?ssl=true"],
+      ["postgres://host/jobs?sslrootcert=/etc/ca.pem"],
+    ])(
+      "an SSL parameter in %s leaves the setting to pg on a dyno",
+      async (url) => {
+        process.env.DYNO = "worker.1"
+        const options = await poolOptions({ connection: url })
+        expect(options).not.toHaveProperty("ssl")
+      },
+    )
+
+    test("a borrowed pool is used as it is on a dyno", async () => {
+      process.env.DYNO = "worker.1"
+      const borrowed = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({ rows: [] })
+          .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] }),
+      }
+      await expect(jobQueueSize({ pool: borrowed })).resolves.toBe(0)
+      expect(poolSpy).not.toHaveBeenCalled()
+    })
+  })
 })
