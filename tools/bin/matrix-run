@@ -1,0 +1,90 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { execFileSync } = require("child_process")
+const { root, runDirectory } = require("../lib/paths")
+const { cells, cellId, prepareLane, runCell } = require("../lib/matrix")
+
+const args = process.argv.slice(2)
+const name = args.find((entry) => !entry.startsWith("--"))
+if (!name) {
+  console.error(
+    "usage: tools/bin/matrix-run <run> [--coverage] [--seed=<n>] [--only=<cell id pattern>]",
+  )
+  process.exit(64)
+}
+const coverage = args.includes("--coverage")
+const seedArg = args.find((entry) => entry.startsWith("--seed="))
+const seed = seedArg ? Number(seedArg.split("=")[1]) : undefined
+const onlyArg = args.find((entry) => entry.startsWith("--only="))
+const only = onlyArg ? new RegExp(onlyArg.split("=")[1]) : null
+
+const directory = runDirectory(name)
+for (const sub of ["logs", "jest", "coverage"]) {
+  fs.mkdirSync(path.join(directory, sub), { recursive: true })
+}
+const record = path.join(directory, "cells.jsonl")
+fs.rmSync(record, { force: true })
+
+const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+  cwd: root,
+  encoding: "utf8",
+}).trim()
+const all = cells().filter((cell) => !only || only.test(cellId(cell)))
+const majors = [...new Set(all.map((cell) => cell.node))]
+
+async function lane(major, index) {
+  const mine = all.filter((cell) => cell.node === major)
+  const prepared = await prepareLane(
+    major,
+    String(index + 2),
+    path.join(directory, "logs", `lane-${major}.log`),
+  )
+  const outcomes = []
+  for (const cell of mine) {
+    const outcome = await runCell(prepared, cell, { directory, coverage, seed })
+    fs.appendFileSync(record, JSON.stringify(outcome) + "\n")
+    outcomes.push(outcome)
+  }
+  return outcomes
+}
+
+async function main() {
+  const started = Date.now()
+  const outcomes = (await Promise.all(majors.map(lane))).flat()
+  const failed = outcomes.filter((outcome) => outcome.status !== "pass")
+  const tests = outcomes.reduce(
+    (sum, outcome) => sum + (outcome.totals ? outcome.totals.tests : 0),
+    0,
+  )
+  const lines = [
+    `run: ${name}`,
+    `commit: ${commit}`,
+    `seed: ${seed ?? "none (file and test order as written)"}`,
+    `cells: ${outcomes.length}`,
+    `passed: ${outcomes.length - failed.length}`,
+    `failed: ${failed.length}`,
+    `tests run: ${tests}`,
+    `seconds: ${Math.round((Date.now() - started) / 1000)}`,
+  ]
+  for (const outcome of failed) {
+    lines.push(`FAILED ${outcome.id} (${outcome.status}, exit ${outcome.exit})`)
+    for (const entry of outcome.failed) {
+      lines.push(`  ${entry.file}: ${entry.test}`)
+    }
+  }
+  fs.writeFileSync(path.join(directory, "summary.txt"), lines.join("\n") + "\n")
+  console.log(lines.join("\n"))
+  process.exit(failed.length === 0 ? 0 : 1)
+}
+
+main().catch((error) => {
+  fs.writeFileSync(
+    path.join(directory, "summary.txt"),
+    `run: ${name}\ncrashed: ${error.stack}\n`,
+  )
+  console.error(error)
+  process.exit(2)
+})

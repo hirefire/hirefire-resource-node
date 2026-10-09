@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -lt 2 ]; then
+  echo "usage: tools/bin/cell-sandbox NAME SLOT [PACKAGE...]" >&2
+  exit 1
+fi
+
+root="$(cd "$(dirname "$0")/../.." && pwd -P)"
+base="${TOOLS_SANDBOXES:-$(node -p 'require("fs").realpathSync(require("os").tmpdir())')/hirefire-resource-node-tools}"
+name="$1"
+slot="$2"
+shift 2
+dest="${base}/${name}"
+
+"$root/tools/bin/sandbox" "$dest" "$slot"
+cd "$dest"
+if [ ! -d node_modules ]; then
+  npm ci --silent --no-audit --no-fund
+fi
+if [ "$#" -gt 0 ]; then
+  npm install "$@" --no-save --no-audit --no-fund --silent
+fi
+echo "$dest"

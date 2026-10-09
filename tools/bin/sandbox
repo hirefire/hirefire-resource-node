@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -lt 1 ]; then
+  echo "usage: tools/bin/sandbox DESTINATION [SLOT]" >&2
+  exit 1
+fi
+
+src="$(cd "$(dirname "$0")/../.." && pwd -P)"
+dest="$1"
+slot="${2:-}"
+mkdir -p "$dest"
+rsync -a --delete \
+  --exclude .git --exclude .env --exclude coverage --exclude node_modules \
+  --exclude tools/results --exclude '*.tgz' \
+  "$src/" "$dest/"
+
+if [ -n "$slot" ]; then
+  "$src/tools/bin/services" env "$slot" > "$dest/.env"
+fi

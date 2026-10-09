@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+
+count="${TOOLS_SLOTS:-9}"
+
+compose() {
+  docker compose -p "$(bin/worktree compose-project)" \
+    -f docker-compose.yml -f tools/docker-compose.yml "$@"
+}
+
+redis_port() {
+  compose port --index "$1" redis 6379 | cut -d: -f2
+}
+
+postgres_port() {
+  compose port postgres 5432 | cut -d: -f2
+}
+
+slot_env() {
+  slot="$1"
+  redis="$(redis_port "$slot")"
+  postgres="$(postgres_port)"
+  database="tools_${slot}"
+  exists="$(compose exec -T postgres psql -U postgres -tAc \
+    "SELECT 1 FROM pg_database WHERE datname = '${database}'")"
+  if [ "$exists" != "1" ]; then
+    compose exec -T postgres createdb -U postgres "$database"
+  fi
+  printf 'REDIS_PORT=%s\nREDIS_URL=redis://127.0.0.1:%s/0\n' "$redis" "$redis"
+  printf 'POSTGRES_PORT=%s\nDATABASE_URL=postgres://postgres:postgres@127.0.0.1:%s/%s\n' \
+    "$postgres" "$postgres" "$database"
+}
+
+case "${1:-}" in
+  up)
+    compose up -d --wait --scale "redis=${count}"
+    rm -f .env
+    bin/services up
+    ;;
+  env) slot_env "${2:?slot}" ;;
+  status) compose ps ;;
+  down)
+    compose down
+    rm -f .env
+    ;;
+  *)
+    echo "usage: tools/bin/services {up|env <slot>|status|down}" >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,142 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { createCoverageMap } = require("istanbul-lib-coverage")
+const { root, runDirectory } = require("../lib/paths")
+
+const name = process.argv[2]
+if (!name) {
+  console.error("usage: tools/bin/coverage-report <run>")
+  process.exit(64)
+}
+
+const directory = runDirectory(name)
+const coverageRoot = path.join(directory, "coverage")
+
+function sourceFiles(dir) {
+  const found = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) found.push(...sourceFiles(full))
+    else if (entry.name.endsWith(".js")) found.push(path.relative(root, full))
+  }
+  return found.sort()
+}
+
+function relative(file) {
+  const index = file.lastIndexOf("/src/")
+  return index === -1 ? null : file.slice(index + 1)
+}
+
+const merged = createCoverageMap({})
+const cellsByFile = {}
+const emptyCells = []
+for (const cell of fs.readdirSync(coverageRoot).sort()) {
+  const file = path.join(coverageRoot, cell, "coverage-final.json")
+  if (!fs.existsSync(file)) {
+    emptyCells.push(cell)
+    continue
+  }
+  const raw = JSON.parse(fs.readFileSync(file, "utf8"))
+  const rebased = {}
+  for (const data of Object.values(raw)) {
+    const rel = relative(data.path)
+    if (!rel) continue
+    rebased[rel] = { ...data, path: rel }
+  }
+  if (Object.keys(rebased).length === 0) emptyCells.push(cell)
+  const map = createCoverageMap(rebased)
+  for (const rel of map.files()) {
+    const lines = map.fileCoverageFor(rel).getLineCoverage()
+    const covered = Object.keys(lines)
+      .filter((line) => lines[line] > 0)
+      .map(Number)
+    if (covered.length === 0) continue
+    cellsByFile[rel] = cellsByFile[rel] || {}
+    cellsByFile[rel][cell] = covered
+  }
+  merged.merge(map)
+}
+
+const files = {}
+const totals = {
+  lines: { total: 0, covered: 0 },
+  branches: { total: 0, covered: 0 },
+  functions: { total: 0, covered: 0 },
+}
+const unloaded = []
+for (const rel of sourceFiles(path.join(root, "src"))) {
+  if (!merged.files().includes(rel)) {
+    unloaded.push(rel)
+    continue
+  }
+  const coverage = merged.fileCoverageFor(rel)
+  const summary = coverage.toSummary()
+  const branches = coverage.getBranchCoverageByLine()
+  const partial = Object.keys(branches)
+    .filter((line) => branches[line].covered < branches[line].total)
+    .map(Number)
+  files[rel] = {
+    lines: { total: summary.lines.total, covered: summary.lines.covered },
+    branches: {
+      total: summary.branches.total,
+      covered: summary.branches.covered,
+    },
+    functions: {
+      total: summary.functions.total,
+      covered: summary.functions.covered,
+    },
+    uncoveredLines: coverage.getUncoveredLines().map(Number),
+    partialBranchLines: partial,
+  }
+  for (const kind of ["lines", "branches", "functions"]) {
+    totals[kind].total += summary[kind].total
+    totals[kind].covered += summary[kind].covered
+  }
+}
+
+function percent({ total, covered }) {
+  return total === 0 ? "100.00" : ((covered / total) * 100).toFixed(2)
+}
+
+const rows = [
+  "file | lines | branches | uncovered lines | lines with an untaken branch",
+]
+for (const [rel, entry] of Object.entries(files)) {
+  rows.push(
+    [
+      rel,
+      `${entry.lines.covered}/${entry.lines.total} (${percent(entry.lines)}%)`,
+      `${entry.branches.covered}/${entry.branches.total} (${percent(
+        entry.branches,
+      )}%)`,
+      entry.uncoveredLines.join(",") || "-",
+      entry.partialBranchLines.join(",") || "-",
+    ].join(" | "),
+  )
+}
+rows.push(
+  `TOTAL | ${totals.lines.covered}/${totals.lines.total} (${percent(
+    totals.lines,
+  )}%) | ${totals.branches.covered}/${totals.branches.total} (${percent(
+    totals.branches,
+  )}%) | functions ${totals.functions.covered}/${
+    totals.functions.total
+  } (${percent(totals.functions)}%)`,
+)
+rows.push(`files under src: ${sourceFiles(path.join(root, "src")).length}`)
+rows.push(`files no cell loads: ${unloaded.join(", ") || "none"}`)
+rows.push(`cells without coverage data: ${emptyCells.join(", ") || "none"}`)
+
+fs.writeFileSync(
+  path.join(directory, "coverage.json"),
+  JSON.stringify({ totals, files, unloaded, emptyCells }, null, 2) + "\n",
+)
+fs.writeFileSync(
+  path.join(directory, "coverage-cells.json"),
+  JSON.stringify(cellsByFile) + "\n",
+)
+fs.writeFileSync(path.join(directory, "coverage.txt"), rows.join("\n") + "\n")
+console.log(rows.join("\n"))
