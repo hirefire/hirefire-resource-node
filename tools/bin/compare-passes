@@ -98,7 +98,7 @@ for (const key of new Set([...failing[0].keys(), ...failing[1].keys()])) {
   row(
     `failures of ${key}`,
     failing.map((map) => {
-      const where = map.get(key) || []
+      const where = (map.get(key) || []).slice().sort()
       return where.length > 4
         ? where.length
         : `${where.length} (${where.join(", ")})`
@@ -125,6 +125,8 @@ for (const key of new Set(reruns.flat().map(rerunKey))) {
 section("Mutation run")
 const mutants = passes.map((pass) => jsonl(pass, "mutation/mutants.jsonl"))
 const caught = (status) => (status === "survived" ? "survived" : "caught")
+const ended = (mutant) =>
+  mutant.by ? `${mutant.status} by ${mutant.by}` : mutant.status
 for (const status of ["killed", "timeout", "survived"]) {
   row(
     status,
@@ -168,9 +170,9 @@ for (const mutant of changed) {
   out.push(
     `  ${mutant.file}:${mutant.line} ${mutant.mutator} ${JSON.stringify(
       mutant.original,
-    )} -> ${JSON.stringify(mutant.replacement)}: ${
-      byId.get(mutant.id).status
-    }, then ${mutant.status}`,
+    )} -> ${JSON.stringify(mutant.replacement)}: ${ended(
+      byId.get(mutant.id),
+    )}, then ${ended(mutant)}`,
   )
 }
 const groups = mutants.map((list) => {
@@ -189,6 +191,31 @@ for (const key of new Set([...groups[0].keys(), ...groups[1].keys()])) {
     key,
     groups.map((map) => map.get(key) || 0),
   )
+}
+
+section("Faults")
+for (const run of ["faults", "faults-2"]) {
+  const data = passes.map(
+    (pass) =>
+      new Map(
+        (json(pass, `${run}/results.json`) || []).map((entry) => [
+          entry.scenario,
+          entry,
+        ]),
+      ),
+  )
+  for (const scenario of new Set([...data[0].keys(), ...data[1].keys()])) {
+    row(
+      `${run} ${scenario}`,
+      data.map((map) => {
+        const entry = map.get(scenario)
+        return (
+          entry &&
+          `ingest ${entry.ingest_requests}, lease ${entry.lease_requests}, log lines per minute ${entry.log_lines_per_minute}, stop ${entry.stop_seconds_under_fault} s, escaped ${entry.escaped.length}`
+        )
+      }),
+    )
+  }
 }
 
 section("Soak")
