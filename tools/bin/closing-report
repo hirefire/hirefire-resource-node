@@ -130,8 +130,7 @@ section(
     ["git rev-parse --abbrev-ref HEAD && git diff next -- src types | wc -c"],
     ["git status --short | wc -l"],
     [
-      "npm run check 2>&1 | grep -vE '^$|🟢|\\*\\*\\*|^\"hirefire|^$' | tail -12",
-      { tail: 12 },
+      "npm run check > tools/results/check.out 2>&1; echo \"npm run check: exit $?\"; grep -c 'No problems found' tools/results/check.out; grep 'All matched files' tools/results/check.out",
     ],
     ["bin/verify-package 2>&1 | grep -E 'pack ok|No problems|problems'"],
     [`cd ${tree} && uv run --with tiktoken bin/canon-check`, { cwd: canon }],
