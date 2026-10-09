@@ -1,0 +1,128 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { root } = require("../lib/paths")
+
+const directory = path.join(root, "tools", "baseline", "wire")
+const names = fs
+  .readdirSync(directory)
+  .filter((file) => file.endsWith(".json"))
+  .map((file) => file.replace(/\.json$/, ""))
+  .sort()
+
+function load(file) {
+  return JSON.parse(fs.readFileSync(file, "utf8"))
+}
+
+function headerMap(headers) {
+  const map = new Map()
+  for (const [name, value] of headers)
+    map.set(name.toLowerCase(), [name, value])
+  return map
+}
+
+function walk(ruby, node, where, out) {
+  if (
+    ruby !== null &&
+    node !== null &&
+    typeof ruby === "object" &&
+    typeof node === "object"
+  ) {
+    const keys = new Set([...Object.keys(ruby), ...Object.keys(node)])
+    for (const key of keys) {
+      const at = `${where}/${key}`
+      if (!(key in ruby))
+        out.push(`${at}: only in Node (${JSON.stringify(node[key])})`)
+      else if (!(key in node))
+        out.push(`${at}: only in Ruby (${JSON.stringify(ruby[key])})`)
+      else walk(ruby[key], node[key], at, out)
+    }
+    return
+  }
+  if (ruby !== node) {
+    out.push(
+      `${where}: Ruby ${JSON.stringify(ruby)}, Node ${JSON.stringify(node)}`,
+    )
+  }
+}
+
+let differences = 0
+for (const name of names) {
+  const ruby = load(path.join(directory, "ruby", `${name}.json`))
+  const node = load(path.join(directory, `${name}.json`))
+  console.log(`## ${name}`)
+  if (ruby.requests.length !== node.requests.length) {
+    console.log(
+      `request count: Ruby ${ruby.requests.length}, Node ${node.requests.length}`,
+    )
+    differences += 1
+  }
+  ruby.requests.forEach((rubyRequest, index) => {
+    const nodeRequest = node.requests[index]
+    if (!nodeRequest) return
+    const label = `${rubyRequest.verb} ${rubyRequest.path}`
+    const lines = []
+    if (
+      rubyRequest.verb !== nodeRequest.verb ||
+      rubyRequest.path !== nodeRequest.path
+    ) {
+      lines.push(`request line: Node ${nodeRequest.verb} ${nodeRequest.path}`)
+    }
+    const rubyHeaders = headerMap(rubyRequest.headers)
+    const nodeHeaders = headerMap(nodeRequest.headers)
+    for (const [key, [spelled, value]] of rubyHeaders) {
+      if (!nodeHeaders.has(key)) {
+        lines.push(`header only in Ruby: ${spelled}: ${value}`)
+        continue
+      }
+      const [nodeSpelled, nodeValue] = nodeHeaders.get(key)
+      if (value !== nodeValue) {
+        lines.push(`header value: ${spelled}: Ruby ${value}, Node ${nodeValue}`)
+      }
+      if (spelled !== nodeSpelled) {
+        lines.push(`header spelling: Ruby ${spelled}, Node ${nodeSpelled}`)
+      }
+    }
+    for (const [key, [spelled, value]] of nodeHeaders) {
+      if (!rubyHeaders.has(key))
+        lines.push(`header only in Node: ${spelled}: ${value}`)
+    }
+    const order = (headers) => headers.map(([header]) => header.toLowerCase())
+    const shared = (headers, other) =>
+      order(headers).filter((header) => other.has(header))
+    if (
+      shared(rubyRequest.headers, nodeHeaders).join() !==
+      shared(nodeRequest.headers, rubyHeaders).join()
+    ) {
+      lines.push(
+        `header order: Ruby ${shared(rubyRequest.headers, nodeHeaders).join(
+          ", ",
+        )}; Node ${shared(nodeRequest.headers, rubyHeaders).join(", ")}`,
+      )
+    }
+    if (rubyRequest.body !== nodeRequest.body) {
+      const body = []
+      if (rubyRequest.body && nodeRequest.body) {
+        walk(
+          JSON.parse(rubyRequest.body),
+          JSON.parse(nodeRequest.body),
+          "body",
+          body,
+        )
+      }
+      if (body.length === 0) {
+        lines.push(
+          `body text only (same values after parsing): Ruby ${rubyRequest.body}; Node ${nodeRequest.body}`,
+        )
+      } else {
+        lines.push(...body)
+      }
+    }
+    differences += lines.length
+    console.log(`${label}: ${lines.length} differences`)
+    for (const line of lines) console.log(`  - ${line}`)
+  })
+}
+console.log(`total differences: ${differences}`)

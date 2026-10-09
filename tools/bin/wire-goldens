@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+"use strict"
+
+const { execFileSync, spawnSync } = require("child_process")
+const fs = require("fs")
+const os = require("os")
+const path = require("path")
+const prettier = require("prettier")
+const { root } = require("../lib/paths")
+
+const SCENARIOS = {
+  ingest_rqt: "core",
+  ingest_rqt_idle: "core",
+  ingest_cpu: "core",
+  lease_local_sampler: "core",
+  lease_plan_trace: "pg-boss",
+}
+const SCHEMA = "tools_wire"
+const check = process.argv.includes("--check")
+const directory = path.join(root, "tools", "baseline", "wire")
+fs.mkdirSync(directory, { recursive: true })
+
+function envFile(file) {
+  const env = {}
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const separator = line.indexOf("=")
+    if (separator > 0) env[line.slice(0, separator)] = line.slice(separator + 1)
+  }
+  return env
+}
+
+async function main() {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "wire-goldens-"))
+  const failed = []
+  let cell = null
+  for (const [name, needs] of Object.entries(SCENARIOS)) {
+    let library = root
+    const env = { ...process.env }
+    if (needs === "pg-boss") {
+      if (!cell) {
+        cell = execFileSync(
+          path.join(root, "tools", "bin", "cell-sandbox"),
+          ["wire", "6", "pg-boss@12", "pg"],
+          { encoding: "utf8" },
+        )
+          .trim()
+          .split("\n")
+          .pop()
+      }
+      library = cell
+      const url = envFile(path.join(cell, ".env")).DATABASE_URL
+      execFileSync(
+        "node",
+        ["tools/lib/pg_boss_seed.mjs", url, SCHEMA, "default=3", "empty=0"],
+        { cwd: cell, stdio: "inherit" },
+      )
+      env.HIREFIRE_PG_BOSS_URL = url
+      env.HIREFIRE_PG_BOSS_SCHEMA = SCHEMA
+    }
+    const fresh = path.join(scratch, `${name}.json`)
+    const run = spawnSync(
+      "node",
+      [
+        path.join(library, "tools", "lib", "wire_scenario.js"),
+        name,
+        library,
+        fresh,
+      ],
+      { cwd: library, env, encoding: "utf8" },
+    )
+    if (run.status !== 0 || !fs.existsSync(fresh)) {
+      failed.push(name)
+      console.log(
+        `FAIL ${name}: ${run.stderr.trim().split("\n").slice(-3).join(" ")}`,
+      )
+      continue
+    }
+    const text = await prettier.format(fs.readFileSync(fresh, "utf8"), {
+      parser: "json",
+    })
+    const golden = path.join(directory, `${name}.json`)
+    if (check) {
+      const same =
+        fs.existsSync(golden) && fs.readFileSync(golden, "utf8") === text
+      if (!same) failed.push(name)
+      console.log(`${same ? "same" : "DIFF"} ${name}`)
+    } else {
+      fs.writeFileSync(golden, text)
+      console.log(`wrote ${name}`)
+    }
+  }
+  fs.rmSync(scratch, { recursive: true, force: true })
+  process.exit(failed.length === 0 ? 0 : 1)
+}
+
+main()
