@@ -6,7 +6,6 @@ const path = require("path")
 
 const record = process.env.TOOLS_NET_GUARD
 const LOCAL = new Set(["127.0.0.1", "::1", "localhost"])
-const source = path.resolve(__dirname, "..", "..", "src")
 const root = path.resolve(__dirname, "..", "..")
 
 function current() {
@@ -19,10 +18,20 @@ function current() {
   }
 }
 
+function describeRequest(args) {
+  const options = args.find(
+    (entry) => entry && typeof entry === "object" && !(entry instanceof URL),
+  )
+  const headers = (options && options.headers) || {}
+  return `${(options && options.path) || ""} with the token ${JSON.stringify(
+    headers["HireFire-Token"] || "",
+  )}`
+}
+
 if (record) {
-  if (!process.toolsNetGuard) {
-    const holder = { current, origin: null }
-    process.toolsNetGuard = holder
+  let holder = net.Socket.prototype.connect.toolsNetGuard
+  if (!holder) {
+    holder = { current, request: null }
     const connect = net.Socket.prototype.connect
     net.Socket.prototype.connect = function guardedConnect(...args) {
       const first = Array.isArray(args[0]) ? args[0][0] : args[0]
@@ -32,44 +41,26 @@ if (record) {
         fs.appendFileSync(
           record,
           `${host}:${options.port}\t${holder.current()}\t${
-            holder.origin ||
-            (options.agent && options.agent.toolsOrigin
-              ? `later socket of ${options.agent.toolsOrigin}`
-              : `(not a client request) ${new Error().stack
-                  .split("\n")
-                  .slice(2, 14)
-                  .map((line) => line.trim().replace(root, ""))
-                  .join(" <- ")}`)
+            holder.request || "(no request in flight)"
           }\n`,
         )
         options.lookup = () => {}
       }
       return connect.apply(this, args)
     }
-  }
-  const holder = process.toolsNetGuard
-  holder.current = current
-  try {
-    const Dispatcher = require(path.join(source, "dispatcher"))
-    const { Client } = require(path.join(source, "client"))
-    const start = Dispatcher.prototype.start
-    Dispatcher.prototype.start = function guardedStart(...args) {
-      if (!this.startedBy) this.startedBy = current()
-      return start.apply(this, args)
-    }
-    const execute = Client.prototype._executeUntracked
-    Client.prototype._executeUntracked = function guardedExecute(...args) {
-      const configuration = this._configuration
-      const dispatcher = configuration && configuration._dispatcher
-      holder.origin =
-        (dispatcher && dispatcher.startedBy) ||
-        `a client without a started dispatcher, created in ${current()}`
-      try {
-        return execute.apply(this, args)
-      } finally {
-        if (this._agent) this._agent.toolsOrigin = holder.origin
-        holder.origin = null
+    net.Socket.prototype.connect.toolsNetGuard = holder
+    for (const transport of [require("http"), require("https")]) {
+      const request = transport.request
+      transport.request = function guardedRequest(...args) {
+        const previous = holder.request
+        holder.request = describeRequest(args)
+        try {
+          return request.apply(this, args)
+        } finally {
+          holder.request = previous
+        }
       }
     }
-  } catch {}
+  }
+  holder.current = current
 }
