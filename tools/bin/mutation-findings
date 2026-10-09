@@ -1,0 +1,88 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { results } = require("../lib/paths")
+
+const directory = path.join(results, process.env.TOOLS_RUN || "mutation")
+const text = fs.readFileSync(path.join(directory, "verdicts.txt"), "utf8")
+const counts = {}
+for (const line of text.split("\n")) {
+  const match = line.match(/^finding \| (\d+) \| .* \| (N:[a-z-]+):/)
+  if (match) counts[match[2]] = (counts[match[2]] || 0) + Number(match[1])
+}
+
+const FINDINGS = [
+  [
+    "mut-lifecycle",
+    "No test pins the state changes of start, stop, and the loops",
+    "`src/dispatcher.js:65`, `src/dispatcher.js:129`, and `src/dispatcher.js:257`",
+    "Deleting `this._generation += 1`, the `this._wakeSleepers()` of `start` or of `stop`, any of the three `await this._joinLoops(...)`, `this._lease.demote()` on a restart, or the whole timer of `_sleep` fails no test. Neither does turning off the stopping gate of `stop` (`:120`), eight of the checks that follow an `await` (`:275`, `:294`, `:299`, `:342`, `:364`, `:384`, `:394`, `:492`), or any `unref`.",
+    "F-26, fixed: tests assert what each change protects.",
+    "The Ruby fix fits: a stop that returns inside the join timeout, a start after and during a stop, a loop of an old start that writes nothing, and a process that exits while the loops sleep.",
+  ],
+  [
+    "mut-lease",
+    "Lease rules without a test",
+    "`src/lease.js:75`, `src/lease.js:98`, and `src/lease.js:144`",
+    "No test fails when the epoch check after the lease request is removed (`:75`), when a response that is not a 2xx keeps the grant (`:84`), when the pull-forward on a lower sample frequency is altered, when a fresh grant does not sample at once (`:144`), or when the first request and the first sample are not due at once (`:19`, `:20`).",
+    "F-27, fixed: one test per lease rule through the two public gates.",
+    "The Ruby fix fits as it is.",
+  ],
+  [
+    "mut-dispatch",
+    "Dispatch rules without a test",
+    "`src/dispatcher.js:552`, `src/dispatcher.js:557`, and `src/dispatcher.js:616`",
+    "No test fails when a 413 is treated as a success (`:552`), when the trace is not cleared after it was sent (`:557`, so it would go out again with every dispatch), when an empty series or an omitted second is kept (`:616`, `:629`), when the handoff to the final flush is widened (`:572`), or when the clamp of the backfill start is removed (`:760`).",
+    "F-28, fixed: tests at the boundary, the requests a flush produces in each case.",
+    "The Ruby fix fits as it is.",
+  ],
+  [
+    "mut-logs",
+    "Log lines, error names, and once-only warnings are not asserted",
+    "`src/dispatcher.js:422`, `src/configuration.js:183`, and `src/configuration.js:86`",
+    "The text of most log lines and error messages can be emptied, the `name` of `RequestError`, `MissingSamplerError`, and `DuplicateDynoError` removed, and the once-only gate of four plan warnings and of the identity and Heroku warnings turned off, and no test fails. `test/support.js` gives every test a silent logger.",
+    "F-29, fixed: the tests capture the logger and assert each message and each once-only warning.",
+    "The Ruby fix fits as it is.",
+  ],
+  [
+    "mut-limits",
+    "Limits and defaults are not pinned by a test",
+    "`src/dispatcher.js:520`, `src/dispatcher.js:12` to `:19`, and `src/lease.js:6` to `:10`",
+    "Raising a constant by one, or moving a comparison by one, fails no test: the payload limit at exactly 131,072 bytes (`:520`), the value range of `_encodeLeaf`, the backfill limit, the warn map limit, the bounds and defaults of the lease, the 5 seconds of the client, the unit thresholds of the middleware, and the sample count limit.",
+    "F-30, fixed: one test holds every limit and default, and each boundary has a test at the exact value.",
+    "The Ruby fix fits as it is, starting with the values the server shares.",
+  ],
+  [
+    "mut-adapters",
+    "Adapter branches without a test",
+    "`src/macro/pg_boss.js:119`, `src/macro/helpers/sample_redis.js:30`, and `src/macro/bullmq.js:33`",
+    "Changes that survive in the macros and their helper: the branches that pick a client or pool in pg-boss and build its cache key, the order of the Redis variables, the wave cache of queue names, and the handling of an empty pipeline result. Each ran in every cell that covers its line.",
+    "F-31, fixed: each macro got the missing cases, and branches without an effect were removed.",
+    "The Ruby fix fits: go through the list per macro and add the missing case or remove the branch.",
+  ],
+  [
+    "mut-guards",
+    "Guards and fallbacks in the core that no test contradicts",
+    "`src/client.js:130`, `src/client.js:243`, and `src/dispatcher.js:358`",
+    'Changes that survive outside the groups above: the guards of the client (the abort check at `:130`, the settle-once flag, the error codes that count as a timeout, the drain of an oversized body), the parsing of `HIREFIRE_VERBOSE`, the fallbacks of `rqtParts`, the trimming of names, and the `?? ""` fallbacks for a plan entry the lease already normalized. Some of these will turn out to be code without an effect.',
+    "F-32, fixed: each guard got a test, a verdict with its reason, or was removed.",
+    "The Ruby fix fits as it is.",
+  ],
+]
+
+const blocks = FINDINGS.map(([slug, title, location, evidence, ruby, fix]) => {
+  const count = counts[`N:${slug}`] || 0
+  return `### N:${slug}: ${title}
+
+- **Location:** ${location}
+- **Lens:** Tests
+- **Severity:** test gap
+- **Evidence:** mutation run, ${count} surviving changes of this kind ([results/mutation/verdicts.txt](./results/mutation/verdicts.txt)). ${evidence}
+- **Ruby counterpart:** ${ruby}
+- **Proposed fix:** ${fix}
+- **Behavior change:** no.
+`
+})
+process.stdout.write(blocks.join("\n"))
