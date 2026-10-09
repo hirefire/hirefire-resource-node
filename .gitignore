@@ -5,3 +5,4 @@ dump.rdb
 node_modules
 /coverage
 *.tgz
+tools/results
