@@ -113,7 +113,7 @@ section(
 )
 section(
   "Faults, matrix runs, soak, hosts",
-  "The result per fault type beside the Ruby numbers is in [results/fault-compare.md](./results/fault-compare.md) and read in [stress.md](./stress.md#faults). The 10 matrix runs of the second pass have no flaky test: the four tests that failed belong to one file and depend on the order, and each passes alone. The first pass had three flaky tests, which are named in [stress.md](./stress.md#matrix). The blocks below are both fault runs beside the Ruby numbers of its audit and of its fix pass, the exit code of each long run, the 10 matrix runs, every test that failed in them with its count, the reruns, what the network guard recorded in the 11 matrix runs, the soak, the hosts, and the count of measures that are the same and that differ between the two passes.",
+  "The result per fault type beside the Ruby numbers is in [results/fault-compare.md](./results/fault-compare.md) and read in [stress.md](./stress.md#faults). The 10 matrix runs of the second pass have no flaky test: the four tests that failed belong to one file and depend on the order, and each passes alone. The first pass had three flaky tests, which are named in [stress.md](./stress.md#matrix). The blocks below, in order: both fault runs beside the Ruby numbers of its audit and of its fix pass, the exit code of each long run, the tests that failed in the 10 matrix runs, the 10 runs, the reruns, what the network guard recorded in the 11 matrix runs, the soak, and the hosts.",
   [
     [
       `tools/bin/fault-compare ${tree}/hirefire-resource/ruby-audit/results/faults/results.json ${tree}/hirefire-resource/ruby-audit/results/fixes/faults/results.json | grep -E 'Measure|ingest requests|log lines|stop under'`,
@@ -125,8 +125,10 @@ section(
     [
       "for run in tools/results/matrix-*/; do grep -E '^(run|seed|passed|failed):' $run/summary.txt | tr '\\n' ' '; echo; done",
     ],
-    ["cat tools/results/alone/reruns.jsonl"],
-    ["sed -n '1,3p' tools/results/net-guard.txt | cut -f1,2"],
+    [
+      "jq -r '\"\\(.cell): \\(.test): passed \\(.passed) of \\(.runs) alone\"' tools/results/alone/reruns.jsonl",
+    ],
+    ["sed -n '1,3p' tools/results/net-guard.txt"],
     [
       "jq -c '{seconds, requests_sent_to_app, requests_failed_to_app, worker_restarts, server_requests, escaped_worker_a}' tools/results/soak/summary.json",
     ],
@@ -138,9 +140,6 @@ section(
     ],
     [
       'jq -r \'.[] | select(.name|test("build|idle|one-off")) | "\\(.name): exit \\(.exit_code) \\(.exits_by_itself // "") \\((.lines // [])[0:2] | join(" / "))"\' tools/results/hosts.json tools/results/hosts-next-with-drivers.json',
-    ],
-    [
-      "tools/bin/compare-passes tools/results/first-pass tools/results | grep -oE '^(same|DIFF)' | sort | uniq -c",
     ],
   ],
 )
