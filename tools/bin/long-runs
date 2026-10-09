@@ -34,6 +34,11 @@ mutation() {
   node tools/bin/mutation-verdicts > /dev/null 2>&1
 }
 
+faults() {
+  node tools/bin/fault-run > "$results/faults.out" 2>&1 || return 3
+  node tools/bin/fault-run --run=faults-2 > "$results/faults-2.out" 2>&1
+}
+
 hosts() {
   tools/bin/host-run || return 3
   cp "$results/hosts/hosts.json" "$results/hosts.json"
@@ -46,6 +51,7 @@ step baseline baseline
 step matrix tools/bin/matrix-repeat 10 4100
 step alone node tools/bin/rerun-failed
 step mutation mutation
+step faults faults
 step soak tools/bin/soak 1860 soak
 step hosts hosts
 step net-guard node tools/bin/net-guard-summary
