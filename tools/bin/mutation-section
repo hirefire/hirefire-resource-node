@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { results } = require("../lib/paths")
+
+const directory = path.join(results, process.env.TOOLS_RUN || "mutation")
+const [scores, groups] = fs
+  .readFileSync(path.join(directory, "verdicts.txt"), "utf8")
+  .split("\n\n")
+const rows = scores.trim().split("\n").slice(1)
+const table = [
+  "| File | Changes | Caught | Timed out | Survived | Equivalent | Tied to a finding | Score |",
+  "| --- | --- | --- | --- | --- | --- | --- | --- |",
+]
+for (const row of rows) {
+  const cells = row.split(" | ")
+  const name = cells[0] === "TOTAL" ? "**Total**" : `\`${cells[0]}\``
+  table.push(`| ${name} | ${cells.slice(1).join(" | ")} |`)
+}
+const causes = ["| Verdict | Changes | Cause |", "| --- | --- | --- |"]
+const merged = new Map()
+for (const row of groups.trim().split("\n").slice(1)) {
+  const [verdict, count, , reason] = row.split(" | ")
+  const key = `${verdict}\t${reason}`
+  merged.set(key, (merged.get(key) || 0) + Number(count))
+}
+for (const [key, count] of merged) {
+  const [verdict, reason] = key.split("\t")
+  causes.push(`| ${verdict} | ${count} | ${reason} |`)
+}
+process.stdout.write(`${table.join("\n")}\n\n${causes.join("\n")}\n`)

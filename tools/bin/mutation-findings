@@ -57,8 +57,8 @@ const FINDINGS = [
   [
     "mut-adapters",
     "Adapter branches without a test",
-    "`src/macro/pg_boss.js:119`, `src/macro/helpers/sample_redis.js:30`, and `src/macro/bullmq.js:33`",
-    "Changes that survive in the macros and their helper: the branches that pick a client or pool in pg-boss and build its cache key, the order of the Redis variables, the wave cache of queue names, and the handling of an empty pipeline result. Each ran in every cell that covers its line.",
+    "`src/macro/bullmq.js:120`, `src/macro/helpers/sample_redis.js:17`, and `src/macro/bullmq.js:60`",
+    "Changes that survive in the Redis macros and their helper: the paging of the BullMQ `SCAN` walk (`:120` and `:130`: no test has more keys than one page, so a walk that stops after its first page passes), the key of the wave cache (`sample_redis.js:17`: without it two connections of one round share their queue names), and the guards for an empty pipeline result. Each ran in every cell that covers its line. The pg-boss macro has no surviving change: all 267 are caught.",
     "F-31, fixed: each macro got the missing cases, and branches without an effect were removed.",
     "The Ruby fix fits: go through the list per macro and add the missing case or remove the branch.",
   ],
