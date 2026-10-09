@@ -6,8 +6,8 @@ const fs = require("fs")
 const path = require("path")
 const { root, results } = require("../lib/paths")
 
-const ALONE = 30
-const SEEDED = 10
+const ALONE = Number(process.env.TOOLS_ALONE_RUNS || 30)
+const SEEDED = Number(process.env.TOOLS_SEEDED_RUNS || 10)
 
 const failures = new Map()
 for (const run of fs.readdirSync(results).sort()) {
