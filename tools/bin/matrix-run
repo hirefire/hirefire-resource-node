@@ -28,10 +28,13 @@ for (const sub of ["logs", "jest", "coverage"]) {
 const record = path.join(directory, "cells.jsonl")
 fs.rmSync(record, { force: true })
 
-const commit = execFileSync("git", ["rev-parse", "HEAD"], {
-  cwd: root,
-  encoding: "utf8",
-}).trim()
+function git(args) {
+  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim()
+}
+const outsideTools = ["--", ".", ":(exclude)tools", ":(exclude).gitignore"]
+const commit = git(["log", "-1", "--format=%H", ...outsideTools])
+const tools = git(["rev-parse", "HEAD"])
+const dirty = git(["status", "--porcelain", ...outsideTools]) !== ""
 const all = cells().filter((cell) => !only || only.test(cellId(cell)))
 const majors = [...new Set(all.map((cell) => cell.node))]
 
@@ -65,7 +68,8 @@ async function main() {
   )
   const lines = [
     `run: ${name}`,
-    `commit: ${commit}`,
+    `commit: ${commit}${dirty ? " with uncommitted changes" : ""}`,
+    `tools: ${tools}`,
     `seed: ${seed ?? "none (file and test order as written)"}`,
     `cells: ${outcomes.length}`,
     `passed: ${outcomes.length - failed.length}`,
