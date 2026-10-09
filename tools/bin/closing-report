@@ -85,12 +85,9 @@ section("The map covers every file", null, [
 ])
 section(
   "The 11 lenses",
-  "Each lens has a section with what was examined, how, and what was found, and one answer per Node point. The check counts the answers per lens against the points of the plan.",
+  "Each lens has a section with what was examined, how, and what was found, and one answer per Node point. The check reads the Node points of each lens from the plan itself, 85 in all, and fails when one of them has no answer under its own wording.",
   [
     [`grep -h '^## ' ${audit}/lenses.md ${audit}/lenses-2.md`],
-    [
-      `for f in lenses.md lenses-2.md; do awk '/^## /{name=$0} /^- \\*\\*[^*]+:\\*\\*/{count[name]++} END{for (n in count) print count[n], n}' ${audit}/$f; done | sort -k2`,
-    ],
     [`tools/bin/check-audit ${audit} | grep -E '^lenses|pass|problems'`],
   ],
 )
