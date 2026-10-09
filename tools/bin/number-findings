@@ -24,17 +24,23 @@ for (const file of ["findings.md", "findings-design.md"]) {
 }
 
 const unknown = new Set()
-for (const file of fs.readdirSync(directory)) {
-  if (!file.endsWith(".md")) continue
-  const full = path.join(directory, file)
+const targets = fs
+  .readdirSync(directory)
+  .filter((file) => file.endsWith(".md"))
+  .map((file) => path.join(directory, file))
+  .concat(process.argv.slice(3))
+for (const full of targets) {
   const text = fs.readFileSync(full, "utf8")
-  const replaced = text.replace(/\[?N:([a-z0-9-]+)\]?/g, (whole, slug) => {
+  const number = (whole, slug) => {
     if (!numbers[slug]) {
-      unknown.add(`${file}: ${slug}`)
+      unknown.add(`${path.basename(full)}: ${slug}`)
       return whole
     }
     return numbers[slug]
-  })
+  }
+  const replaced = text
+    .replace(/\[N:([a-z0-9-]+)\](?!\()/g, number)
+    .replace(/N:([a-z0-9-]+)/g, number)
   if (replaced !== text) fs.writeFileSync(full, replaced)
 }
 if (unknown.size > 0) {

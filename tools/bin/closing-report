@@ -1,0 +1,148 @@
+#!/usr/bin/env node
+"use strict"
+
+const { spawnSync } = require("child_process")
+const fs = require("fs")
+const os = require("os")
+const path = require("path")
+const { root, sandboxes } = require("../lib/paths")
+
+const [directory, canon] = process.argv.slice(2)
+if (!directory || !canon) {
+  console.error(
+    "usage: tools/bin/closing-report <audit directory of the canon> <canon tree>",
+  )
+  process.exit(64)
+}
+
+function clean(text) {
+  return text
+    .split(sandboxes)
+    .join("<sandboxes>")
+    .split(directory)
+    .join("<audit>")
+    .split(canon)
+    .join("<canon>")
+    .split(root)
+    .join("<tree>")
+    .split(os.homedir())
+    .join("~")
+}
+
+function run(command, options = {}) {
+  const result = spawnSync("bash", ["-c", command], {
+    cwd: options.cwd || root,
+    encoding: "utf8",
+    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+  })
+  let output = `${result.stdout}${result.stderr}`.replace(/\x1b\[[0-9;]*m/g, "")
+  let lines = output.trimEnd().split("\n")
+  if (options.tail && lines.length > options.tail) {
+    lines = ["...", ...lines.slice(-options.tail)]
+  }
+  return {
+    text: clean(lines.join("\n")),
+    status: result.status,
+  }
+}
+
+const out = []
+function section(title, intro, commands) {
+  out.push(`## ${title}`, "")
+  if (intro) out.push(intro, "")
+  for (const [command, options] of commands) {
+    const shown = clean(command)
+    const result = run(command, options || {})
+    out.push(
+      "```text",
+      `$ ${shown}`,
+      result.text,
+      `exit ${result.status}`,
+      "```",
+      "",
+    )
+  }
+}
+
+const audit = JSON.stringify(directory)
+const tree = JSON.stringify(canon)
+
+out.push(
+  "# Node client audit: closing report",
+  "",
+  "The closing report of the [plan](./README.md). Every block below is a command and its output, run on 2026-10-09 in the Node tree on the branch `node-audit` unless a block says otherwise. `<tree>` is the Node tree, `<canon>` the canon tree, `<audit>` this directory, and `<sandboxes>` the directory of the throwaway copies.",
+  "",
+)
+
+section("Matrix and coverage at the named commit", null, [
+  ["cat tools/results/baseline/summary.txt"],
+  ["tail -4 tools/results/baseline/coverage.txt"],
+])
+section("The map covers every file", null, [
+  ["find src types -name '*.js' -o -name '*.d.ts' | wc -l"],
+  [`tools/bin/check-audit ${audit} | grep '^map'`],
+])
+section(
+  "The 11 lenses",
+  "Each lens has a section with what was examined, how, and what was found, and one answer per Node point. The check counts the answers per lens against the points of the plan.",
+  [
+    [`grep -h '^## ' ${audit}/lenses.md ${audit}/lenses-2.md`],
+    [
+      `for f in lenses.md lenses-2.md; do awk '/^## /{name=$0} /^- \\*\\*[^*]+:\\*\\*/{count[name]++} END{for (n in count) print count[n], n}' ${audit}/$f; done | sort -k2`,
+    ],
+    [`tools/bin/check-audit ${audit} | grep -E '^lenses|pass|problems'`],
+  ],
+)
+section("The comparison table", null, [
+  [`tools/bin/check-audit ${audit} | grep '^comparison'`],
+])
+section("The five wire scenarios", null, [
+  ["tools/bin/wire-goldens --check"],
+  ["tools/bin/wire-compare | grep -E '^##|differences'"],
+])
+section("Mutation score per file", null, [["tools/bin/mutation-verdicts"]])
+section("Faults, matrix runs, soak, hosts", null, [
+  ["cat tools/results/faults/console.txt"],
+  [
+    "for run in tools/results/matrix-*/; do grep -E '^(run|seed|passed|failed):' $run/summary.txt | tr '\\n' ' '; echo; done",
+  ],
+  ["cat tools/results/alone/reruns.jsonl"],
+  [
+    "jq -c '{seconds, requests_sent_to_app, requests_failed_to_app, worker_restarts, server_requests, escaped_worker_a}' tools/results/soak/summary.json",
+  ],
+  [
+    "jq -c '.roles[\"worker-a\"] | {rss_kb, heap_used_kb_after_gc, handles, sockets, listeners, event_loop_delay_p99_ms_worst, event_loop_delay_max_ms, middleware_calls, middleware_max_ms, log_lines_per_minute}' tools/results/soak/summary.json",
+  ],
+  [
+    "jq -r '.[] | select(.sending_connections) | \"\\(.name): \\(.sending_connections|length) senders, \\(.warnings|length) warnings, SIGTERM \\(.sigterm.exit_after_ms) ms, \\(.sigterm.ingest_requests_after_signal) requests after it\"' tools/results/hosts.json",
+  ],
+  [
+    'jq -r \'.[] | select(.name|test("build|idle|one-off")) | "\\(.name): exit \\(.exit_code) \\(.exits_by_itself // "") \\((.lines // [])[0:2] | join(" / "))"\' tools/results/hosts.json tools/results/hosts-next16-with-drivers.json tools/results/hosts-next-with-drivers.json',
+  ],
+])
+section("Every finding has all fields", null, [
+  [`tools/bin/check-audit ${audit}`],
+])
+section(
+  "Nothing changed under src or types, the checks pass, nothing was pushed",
+  null,
+  [
+    ["git rev-parse --abbrev-ref HEAD && git diff next -- src types | wc -c"],
+    ["git status --short | wc -l"],
+    [
+      "npm run check 2>&1 | grep -vE '^$|🟢|\\*\\*\\*|^\"hirefire|^$' | tail -12",
+      { tail: 12 },
+    ],
+    ["bin/verify-package 2>&1 | grep -E 'pack ok|No problems|problems'"],
+    [`cd ${tree} && uv run --with tiktoken bin/canon-check`, { cwd: canon }],
+    [
+      "git for-each-ref --format='%(refname)' refs/remotes | grep -c node-audit; git config --get branch.node-audit.remote || echo 'node-audit has no upstream'",
+    ],
+    [
+      `cd ${tree} && git rev-parse --abbrev-ref HEAD && git for-each-ref --format='%(refname)' refs/remotes | grep -c node-audit; git config --get branch.node-audit.remote || echo 'node-audit has no upstream'`,
+      { cwd: canon },
+    ],
+  ],
+)
+
+process.stdout.write(out.join("\n") + "\n")
