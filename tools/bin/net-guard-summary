@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { results } = require("../lib/paths")
+
+function count(files) {
+  const counts = new Map()
+  for (const file of files) {
+    if (!fs.existsSync(file)) continue
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      if (line) counts.set(line, (counts.get(line) || 0) + 1)
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .map(([line, total]) => `${String(total).padStart(4)} ${line}`)
+}
+
+const runs = fs
+  .readdirSync(results)
+  .filter((name) => name === "baseline" || /^matrix-\d+$/.test(name))
+  .sort()
+let cells = 0
+const matrix = []
+for (const run of runs) {
+  const record = path.join(results, run, "cells.jsonl")
+  if (fs.existsSync(record)) {
+    cells += fs.readFileSync(record, "utf8").split("\n").filter(Boolean).length
+  }
+  const directory = path.join(results, run, "net")
+  if (!fs.existsSync(directory)) continue
+  for (const name of fs.readdirSync(directory)) {
+    matrix.push(path.join(directory, name))
+  }
+}
+
+const lines = [
+  `Matrix runs (${runs.join(
+    ", ",
+  )}), ${cells} cell runs: connection attempts to a host that is not local, by test and request`,
+  ...count(matrix),
+  "",
+  "Mutation run: connection attempts by test and request",
+  ...count([path.join(results, "mutation", "net-guard.txt")]),
+]
+fs.writeFileSync(path.join(results, "net-guard.txt"), lines.join("\n") + "\n")
+console.log(lines.join("\n"))

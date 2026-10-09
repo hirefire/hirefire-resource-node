@@ -1,0 +1,47 @@
+#!/usr/bin/env node
+"use strict"
+
+const { spawnSync } = require("child_process")
+const fs = require("fs")
+const path = require("path")
+const { root, results } = require("../lib/paths")
+
+const ALONE = 30
+const SEEDED = 10
+
+const failures = new Map()
+for (const run of fs.readdirSync(results).sort()) {
+  if (!/^matrix-\d+$/.test(run)) continue
+  const file = path.join(results, run, "cells.jsonl")
+  if (!fs.existsSync(file)) continue
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    if (!line) continue
+    const cell = JSON.parse(line)
+    for (const entry of cell.failed) {
+      const key = `${entry.file}: ${entry.test}`
+      if (!failures.has(key)) {
+        failures.set(key, { cell, test: entry.test })
+      }
+    }
+  }
+}
+
+fs.rmSync(path.join(results, "alone"), { recursive: true, force: true })
+let status = 0
+function rerun(args) {
+  const outcome = spawnSync(
+    "node",
+    [path.join(root, "tools", "bin", "rerun-alone"), ...args],
+    { cwd: root, stdio: "inherit" },
+  )
+  if (outcome.status !== 0) status = 1
+}
+
+for (const { cell, test } of failures.values()) {
+  rerun([cell.id, test, String(ALONE)])
+  if (cell.package !== "core") {
+    rerun([cell.id, test, String(SEEDED), `--seed=${cell.seed}`, "--file"])
+  }
+}
+console.log(`${failures.size} failed tests run again`)
+process.exit(status)

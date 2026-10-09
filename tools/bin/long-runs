@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -uo pipefail
+cd "$(dirname "$0")/../.."
+
+results="tools/results"
+status="$results/long-runs.txt"
+mkdir -p "$results"
+: > "$status"
+export TOOLS_CORE_TREES="${TOOLS_CORE_TREES:-8}"
+export TOOLS_MUTANTS_IN_FLIGHT="${TOOLS_MUTANTS_IN_FLIGHT:-20}"
+
+step() {
+  local name="$1" started code
+  shift
+  started="$(date +%s)"
+  "$@"
+  code=$?
+  printf '%s\texit %s\t%s seconds\n' "$name" "$code" "$(($(date +%s) - started))" >> "$status"
+}
+
+baseline() {
+  local code
+  node tools/bin/matrix-run baseline --coverage > "$results/baseline.out" 2>&1
+  code=$?
+  node tools/bin/coverage-report baseline > /dev/null 2>&1 || return 3
+  return "$code"
+}
+
+mutation() {
+  rm -rf "$results/mutation"
+  mkdir -p "$results/mutation"
+  node tools/bin/mutate prepare > "$results/mutation/prepare.out" 2>&1 || return 3
+  node tools/bin/mutate run > "$results/mutation/run.out" 2>&1 || return 4
+  node tools/bin/mutation-verdicts > /dev/null 2>&1
+}
+
+hosts() {
+  tools/bin/host-run || return 3
+  cp "$results/hosts/hosts.json" "$results/hosts.json"
+  HOST_RUN=hosts-next-with-drivers NEXT_EXTRA="ioredis pg" HOST_ONLY=next \
+    tools/bin/host-run || return 4
+  cp "$results/hosts-next-with-drivers/hosts.json" "$results/hosts-next-with-drivers.json"
+}
+
+step baseline baseline
+step matrix tools/bin/matrix-repeat 10 4100
+step alone node tools/bin/rerun-failed
+step mutation mutation
+step soak tools/bin/soak 1860 soak
+step hosts hosts
+step net-guard node tools/bin/net-guard-summary
