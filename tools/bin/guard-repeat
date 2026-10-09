@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -uo pipefail
+cd "$(dirname "$0")/../.."
+
+count="${1:-5}"
+for index in $(seq 1 "$count"); do
+  run="$(printf 'guard-%02d' "$index")"
+  tools/bin/matrix-run "$run" "--only=core" > "tools/results/${run}.out" 2>&1
+done
+cat tools/results/guard-*/net/*.txt 2>/dev/null | sort | uniq -c | sort -rn > tools/results/guard-summary.txt

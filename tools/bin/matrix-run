@@ -44,7 +44,11 @@ async function lane(major, index) {
   )
   const outcomes = []
   for (const cell of mine) {
-    const outcome = await runCell(prepared, cell, { directory, coverage, seed })
+    const outcome = await runCell(prepared, cell, {
+      directory,
+      coverage,
+      seed,
+    })
     fs.appendFileSync(record, JSON.stringify(outcome) + "\n")
     outcomes.push(outcome)
   }

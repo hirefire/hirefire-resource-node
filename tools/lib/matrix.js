@@ -91,7 +91,7 @@ async function runCell(lane, cell, options) {
   const report = path.join(options.directory, "jest", `${id}.json`)
   fs.rmSync(log, { force: true })
   fs.rmSync(report, { force: true })
-  const args = ["--json", `--outputFile=${report}`]
+  const args = []
   if (options.coverage) {
     const coverage = path.join(options.directory, "coverage", id)
     fs.rmSync(coverage, { recursive: true, force: true })
@@ -113,10 +113,25 @@ async function runCell(lane, cell, options) {
       )}`,
     )
   }
+  if (options.extra) args.push(...options.extra)
+  const guard = path.join(options.directory, "net", `${id}.txt`)
+  fs.mkdirSync(path.dirname(guard), { recursive: true })
+  fs.rmSync(guard, { force: true })
+  args.push(
+    `--setupFilesAfterEnv=${path.join(lane.sandbox, "test", "support.js")}`,
+    `--setupFilesAfterEnv=${path.join(
+      lane.sandbox,
+      "tools",
+      "lib",
+      "net_guard.js",
+    )}`,
+  )
+  args.push("--json", `--outputFile=${report}`)
   const env = {
     ...process.env,
     TOOLS_JEST_ARGS: args.join(" "),
     TOOLS_SEED: String(options.seed ?? ""),
+    TOOLS_NET_GUARD: guard,
   }
   delete env.DATABASE_URL
   delete env.REDIS_URL
