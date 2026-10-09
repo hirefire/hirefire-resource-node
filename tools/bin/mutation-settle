@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { results } = require("../lib/paths")
+
+function read(file) {
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+}
+
+const again = path.join(results, "mutation-again")
+const runs = fs
+  .readdirSync(again)
+  .filter((name) => /^run-\d+$/.test(name))
+  .map(
+    (name) =>
+      new Map(
+        read(path.join(again, name, "mutants.jsonl")).map((m) => [m.id, m]),
+      ),
+  )
+
+let settled = 0
+const record = read(path.join(results, "mutation", "mutants.jsonl")).map(
+  (mutant) => {
+    const alone = runs.filter((run) => run.has(mutant.id))
+    const survived = alone.filter(
+      (run) => run.get(mutant.id).status === "survived",
+    ).length
+    if (mutant.status === "survived" || survived * 2 <= alone.length) {
+      return mutant
+    }
+    settled += 1
+    const { by, ...rest } = mutant
+    return {
+      ...rest,
+      status: "survived",
+      settled: `${mutant.status} by ${by} in the run, survived ${survived} of ${alone.length} runs alone`,
+    }
+  },
+)
+
+const directory = path.join(results, "mutation-settled")
+fs.rmSync(directory, { recursive: true, force: true })
+fs.mkdirSync(directory)
+fs.writeFileSync(
+  path.join(directory, "mutants.jsonl"),
+  record.map((mutant) => JSON.stringify(mutant)).join("\n") + "\n",
+)
+console.log(
+  `${settled} changes that the run counted as caught survive alone and count as survived`,
+)

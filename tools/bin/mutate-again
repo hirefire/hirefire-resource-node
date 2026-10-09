@@ -1,0 +1,88 @@
+#!/usr/bin/env node
+"use strict"
+
+const { spawnSync } = require("child_process")
+const fs = require("fs")
+const path = require("path")
+const { root, results } = require("../lib/paths")
+
+const [first, second] = process.argv.slice(2)
+const times = Number(process.argv[4] || 3)
+if (!first || !second) {
+  console.error(
+    "usage: tools/bin/mutate-again <results of the first pass> <results of the second pass> [times]",
+  )
+  process.exit(64)
+}
+
+function read(file) {
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+}
+
+const caught = (status) => (status === "survived" ? "survived" : "caught")
+const outcome = (mutant) =>
+  mutant.by ? `${mutant.status} by ${mutant.by}` : mutant.status
+const before = new Map(
+  read(path.join(first, "mutation", "mutants.jsonl")).map((m) => [m.id, m]),
+)
+const changed = read(path.join(second, "mutation", "mutants.jsonl")).filter(
+  (mutant) =>
+    before.has(mutant.id) &&
+    caught(before.get(mutant.id).status) !== caught(mutant.status),
+)
+
+const directory = path.join(results, "mutation-again")
+fs.rmSync(directory, { recursive: true, force: true })
+fs.mkdirSync(directory, { recursive: true })
+const ids = path.join(directory, "ids.txt")
+fs.writeFileSync(ids, changed.map((mutant) => mutant.id).join("\n") + "\n")
+
+const runs = []
+for (let run = 1; run <= times; run += 1) {
+  const name = path.join("mutation-again", `run-${run}`)
+  fs.mkdirSync(path.join(results, name))
+  fs.copyFileSync(
+    path.join(results, "mutation", "coverage-core.json"),
+    path.join(results, name, "coverage-core.json"),
+  )
+  spawnSync(
+    "node",
+    [path.join(root, "tools", "bin", "mutate"), "run", `--ids=${ids}`],
+    {
+      cwd: root,
+      env: { ...process.env, TOOLS_RUN: name, TOOLS_MUTANTS_IN_FLIGHT: "1" },
+      stdio: "ignore",
+    },
+  )
+  runs.push(
+    new Map(
+      read(path.join(results, name, "mutants.jsonl")).map((m) => [m.id, m]),
+    ),
+  )
+}
+
+const lines = [
+  `change | first pass | second pass | alone, ${times} times, one change at a time`,
+]
+for (const mutant of changed) {
+  lines.push(
+    [
+      `${mutant.file}:${mutant.line} ${mutant.mutator} ${JSON.stringify(
+        mutant.original,
+      )} -> ${JSON.stringify(mutant.replacement)}`,
+      outcome(before.get(mutant.id)),
+      outcome(mutant),
+      runs
+        .map((run) =>
+          run.has(mutant.id) ? outcome(run.get(mutant.id)) : "not run",
+        )
+        .join(", "),
+    ].join(" | "),
+  )
+}
+fs.writeFileSync(path.join(directory, "outcomes.txt"), lines.join("\n") + "\n")
+console.log(lines.join("\n"))
