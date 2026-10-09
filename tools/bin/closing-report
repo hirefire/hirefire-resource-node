@@ -7,7 +7,7 @@ const os = require("os")
 const path = require("path")
 const { root, sandboxes } = require("../lib/paths")
 
-const [directory, canon] = process.argv.slice(2)
+const [directory, canon, only] = process.argv.slice(2)
 if (!directory || !canon) {
   console.error(
     "usage: tools/bin/closing-report <audit directory of the canon> <canon tree>",
@@ -48,6 +48,7 @@ function run(command, options = {}) {
 
 const out = []
 function section(title, intro, commands) {
+  if (only && !title.includes(only)) return
   out.push(`## ${title}`, "")
   if (intro) out.push(intro, "")
   for (const [command, options] of commands) {
@@ -111,9 +112,15 @@ section(
 )
 section(
   "Faults, matrix runs, soak, hosts",
-  "The result per fault type beside the Ruby numbers is in [results/fault-compare.md](./results/fault-compare.md) and read in [stress.md](./stress.md#faults). The flaky tests of the 10 matrix runs are named in [stress.md](./stress.md#matrix): three tests, each rerun alone, and four tests of one file that depend on the order. The blocks below are the first fault run, the 10 matrix runs, the reruns, the soak, and the hosts.",
+  "The result per fault type beside the Ruby numbers is in [results/fault-compare.md](./results/fault-compare.md) and read in [stress.md](./stress.md#faults). The flaky tests of the 10 matrix runs are named in [stress.md](./stress.md#matrix): three tests, each rerun alone, and four tests of one file that depend on the order. The blocks below are the first fault run, both fault runs beside the Ruby numbers of its audit and of its fix pass, the 10 matrix runs, every test that failed in them with its count, the reruns, the soak, and the hosts.",
   [
     ["cat tools/results/faults/console.txt"],
+    [
+      `tools/bin/fault-compare ${tree}/hirefire-resource/ruby-audit/results/faults/results.json ${tree}/hirefire-resource/ruby-audit/results/fixes/faults/results.json | grep -E 'Measure|ingest requests|log lines|stop under'`,
+    ],
+    [
+      'cat tools/results/matrix-*/cells.jsonl | jq -r \'select(.status != "pass") | .failed[] | "\\(.file): \\(.test)"\' | sort | uniq -c | sort -rn',
+    ],
     [
       "for run in tools/results/matrix-*/; do grep -E '^(run|seed|passed|failed):' $run/summary.txt | tr '\\n' ' '; echo; done",
     ],
