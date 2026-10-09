@@ -729,7 +729,7 @@
     "types/source/jobQueues.d.ts": {
       "entry": false,
       "exportEquals": "JobQueues",
-      "any": 1,
+      "any": 0,
       "names": {
         "JobQueues": {
           "kinds": ["class"],
