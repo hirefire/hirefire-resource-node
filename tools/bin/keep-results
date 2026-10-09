@@ -1,0 +1,39 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const os = require("os")
+const path = require("path")
+const { root, results, sandboxes } = require("../lib/paths")
+
+const [destination, ...files] = process.argv.slice(2)
+if (!destination || files.length === 0) {
+  console.error(
+    "usage: tools/bin/keep-results <destination> <file under tools/results>...",
+  )
+  process.exit(64)
+}
+
+const replacements = [
+  [sandboxes, "<sandboxes>"],
+  [sandboxes.replace(/^\/private/, ""), "<sandboxes>"],
+  [root, "<tree>"],
+  [fs.realpathSync(os.tmpdir()), "<tmp>"],
+  [os.tmpdir().replace(/\/$/, ""), "<tmp>"],
+  [os.homedir(), "~"],
+]
+
+for (const file of files) {
+  const from = path.join(results, file)
+  const to = path.join(destination, file)
+  let text = fs.readFileSync(from, "utf8")
+  for (const [needle, label] of replacements) {
+    text = text.split(needle).join(label)
+  }
+  if (text.includes(os.userInfo().username)) {
+    throw new Error(`${file} still names the user of this machine`)
+  }
+  fs.mkdirSync(path.dirname(to), { recursive: true })
+  fs.writeFileSync(to, text)
+  console.log(`kept ${file}`)
+}
