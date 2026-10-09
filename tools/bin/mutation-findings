@@ -58,7 +58,7 @@ const FINDINGS = [
     "mut-adapters",
     "Adapter branches without a test",
     "`src/macro/bullmq.js:120`, `src/macro/helpers/sample_redis.js:17`, and `src/macro/bullmq.js:60`",
-    "Changes that survive in the Redis macros and their helper: the paging of the BullMQ `SCAN` walk (`:120` and `:130`: no test has more keys than one page, so a walk that stops after its first page passes), the key of the wave cache (`sample_redis.js:17`: without it two connections of one round share their queue names), and the guards for an empty pipeline result. Each ran in every cell that covers its line. The pg-boss macro has no surviving change: all 267 are caught.",
+    "Changes that survive in the Redis macros and their helper: the paging of the BullMQ `SCAN` walk (`:120` and `:130`: no test has more keys than one page, so a walk that stops after its first page passes), the key of the wave cache (`sample_redis.js:17`: without it two connections of one round share their queue names), and the guards for an empty pipeline result. Each ran in every cell that covers its line. In the pg-boss macro 3 of 267 changes survive, all in the key under which the macro remembers whether a schema has the `blocked` column (`pg_boss.js:219`, `:231`, and `:236`): no test has two connections with one schema name.",
     "F-31, fixed: each macro got the missing cases, and branches without an effect were removed.",
     "The Ruby fix fits: go through the list per macro and add the missing case or remove the branch.",
   ],
@@ -79,7 +79,7 @@ const blocks = FINDINGS.map(([slug, title, location, evidence, ruby, fix]) => {
 - **Location:** ${location}
 - **Lens:** Tests
 - **Severity:** test gap
-- **Evidence:** mutation run, ${count} surviving changes of this kind ([results/mutation/verdicts.txt](./results/mutation/verdicts.txt)). ${evidence}
+- **Evidence:** mutation run, ${count} surviving changes of this kind ([results/mutation-settled/verdicts.txt](./results/mutation-settled/verdicts.txt)). ${evidence}
 - **Ruby counterpart:** ${ruby}
 - **Proposed fix:** ${fix}
 - **Behavior change:** no.
