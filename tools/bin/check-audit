@@ -11,19 +11,19 @@ if (!directory) {
   process.exit(64)
 }
 
-const LENSES = {
-  Logic: 10,
-  "Concurrency and fork": 12,
-  "Host safety": 8,
-  "Contract and integrator experience": 7,
-  Adapters: 7,
-  Architecture: 4,
-  "Code quality": 3,
-  Performance: 7,
-  Security: 7,
-  Tests: 7,
-  "Packaging and docs": 8,
-}
+const LENS_NAMES = [
+  "Logic",
+  "Concurrency and fork",
+  "Host safety",
+  "Contract and integrator experience",
+  "Adapters",
+  "Architecture",
+  "Code quality",
+  "Performance",
+  "Security",
+  "Tests",
+  "Packaging and docs",
+]
 const SEVERITIES = ["defect", "risk", "test gap", "design", "cleanup", "docs"]
 const FIELDS = [
   "Location",
@@ -84,8 +84,9 @@ for (const file of ["findings.md", "findings-design.md"]) {
       if (!field(name).trim()) problems.push(`${id}: ${name} is empty`)
     }
     if (!/^N-\d\d$/.test(id)) problems.push(`${id}: not a finding number`)
-    if (!(field("Lens") in LENSES))
+    if (!LENS_NAMES.includes(field("Lens"))) {
       problems.push(`${id}: unknown lens ${field("Lens")}`)
+    }
     if (!SEVERITIES.includes(field("Severity"))) {
       problems.push(`${id}: unknown severity ${field("Severity")}`)
     }
@@ -161,10 +162,59 @@ console.log(
     .join(", ")})`,
 )
 
+function topLevelParts(text) {
+  const parts = []
+  let depth = 0
+  let current = ""
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    if (char === "(" || char === "[") depth += 1
+    if (char === ")" || char === "]") depth -= 1
+    if (char === "," && depth === 0 && text[index + 1] === " ") {
+      parts.push(current)
+      current = ""
+      index += 1
+    } else {
+      current += char
+    }
+  }
+  parts.push(current)
+  return parts
+}
+
+function normalize(text) {
+  return text
+    .toLowerCase()
+    .replace(/`/g, "")
+    .replace(/\s+\(.*$/, "")
+    .replace(/\.$/, "")
+    .replace(/^(and|or) /, "")
+    .replace(/^(a|an|the) /, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function planLenses() {
+  const plan = read("README.md")
+  const section = plan
+    .split(/^## /m)
+    .find((part) => part.startsWith("Lenses\n"))
+  const lenses = {}
+  for (const match of section.matchAll(/^- \*\*([^:*]+):\*\* (.*)$/gm)) {
+    const points = topLevelParts(match[2].split(" Node: ")[1])
+      .map(normalize)
+      .filter((point) => point && !point.startsWith("judged by"))
+    lenses[match[1]] = points
+  }
+  return lenses
+}
+
+const LENSES = planLenses()
 const lensText = ["lenses.md", "lenses-2.md"]
   .filter((file) => fs.existsSync(path.join(directory, file)))
   .map(read)
   .join("\n")
+const lensCounts = []
 for (const [lens, points] of Object.entries(LENSES)) {
   const section = lensText
     .split(/^## /m)
@@ -173,15 +223,30 @@ for (const [lens, points] of Object.entries(LENSES)) {
     problems.push(`no lens section "${lens}"`)
     continue
   }
-  const answered = [...section.matchAll(/^- \*\*[^*]+:\*\*/gm)].length
-  if (answered < points) {
-    problems.push(`lens "${lens}" answers ${answered} of ${points} Node points`)
+  const answers = [...section.matchAll(/^- \*\*([^*]+):\*\* *(.*)$/gm)].map(
+    (match) => ({ lead: normalize(match[1]), text: match[2].trim() }),
+  )
+  let answered = 0
+  for (const point of points) {
+    const answer = answers.find((entry) => entry.lead === point)
+    if (!answer) problems.push(`lens "${lens}" has no answer for "${point}"`)
+    else if (answer.text.length < 40) {
+      problems.push(`lens "${lens}" answers "${point}" in under 40 characters`)
+    } else answered += 1
   }
+  lensCounts.push(`${lens} ${answered}/${points.length}`)
   for (const part of ["**Examined:**", "**How:**", "**Found:**"]) {
     if (!section.includes(part)) problems.push(`lens "${lens}" lacks ${part}`)
   }
 }
-console.log(`lenses: ${Object.keys(LENSES).length} sections expected`)
+if (Object.keys(LENSES).length !== 11) {
+  problems.push(`the plan names ${Object.keys(LENSES).length} lenses, not 11`)
+}
+console.log(
+  `lenses: ${
+    Object.keys(LENSES).length
+  } in the plan, Node points answered per lens: ${lensCounts.join(", ")}`,
+)
 
 if (problems.length > 0) {
   console.log(`\n${problems.length} problems:\n${problems.join("\n")}`)
