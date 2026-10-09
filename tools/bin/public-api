@@ -1,0 +1,276 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const ts = require("typescript")
+const { root } = require("../lib/paths")
+
+const check = process.argv.includes("--check")
+const pkg = require(path.join(root, "package.json"))
+const golden = path.join(root, "tools", "baseline", "public_api.json")
+
+function isPrivate(name) {
+  return name.startsWith("_")
+}
+
+function split(names) {
+  const sorted = [...new Set(names)].sort()
+  return {
+    public: sorted.filter((name) => !isPrivate(name)),
+    private: sorted.filter(isPrivate),
+  }
+}
+
+function describeFunction(value) {
+  const source = Function.prototype.toString.call(value)
+  const kind = /^class\s/.test(source) ? "class" : "function"
+  const statics = Object.getOwnPropertyNames(value).filter(
+    (name) => !["length", "name", "prototype"].includes(name),
+  )
+  const members =
+    kind === "class"
+      ? Object.getOwnPropertyNames(value.prototype).filter(
+          (name) => name !== "constructor",
+        )
+      : []
+  const out = { kind, name: value.name, arity: value.length }
+  if (kind === "class") {
+    out.statics = split(statics)
+    out.members = split(members)
+    if (value.length === 0) {
+      try {
+        out.properties = split(Object.getOwnPropertyNames(new value()))
+      } catch {}
+    }
+  } else if (statics.length > 0) {
+    out.statics = split(statics)
+  }
+  return out
+}
+
+function describe(value) {
+  if (typeof value === "function") return describeFunction(value)
+  if (value && typeof value === "object") {
+    const proto = Object.getPrototypeOf(value)
+    if (proto && proto !== Object.prototype) {
+      return {
+        kind: "instance",
+        of: proto.constructor.name,
+        members: split(
+          Object.getOwnPropertyNames(proto).filter(
+            (name) => name !== "constructor",
+          ),
+        ),
+        properties: split(Object.getOwnPropertyNames(value)),
+      }
+    }
+    const names = {}
+    for (const name of Object.keys(value).sort()) {
+      const member = value[name]
+      names[name] =
+        typeof member === "function"
+          ? describeFunction(member)
+          : { kind: typeof member }
+    }
+    return { kind: "object", names }
+  }
+  return { kind: typeof value }
+}
+
+function memberName(member, source) {
+  if (member.name) return member.name.getText(source)
+  if (ts.isConstructorDeclaration(member)) return "constructor"
+  return member.getText(source).split("(")[0]
+}
+
+function declared(file) {
+  const text = fs.readFileSync(path.join(root, file), "utf8")
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)
+  const names = {}
+  let exportEquals = null
+  const add = (name, kind, extra = {}) => {
+    names[name] = names[name] || { kinds: [], ...extra }
+    names[name].kinds.push(kind)
+    Object.assign(names[name], extra)
+  }
+  for (const node of source.statements) {
+    const exported =
+      (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Export) !== 0
+    if (ts.isExportAssignment(node)) {
+      exportEquals = node.expression.getText(source)
+    } else if (ts.isClassDeclaration(node)) {
+      const statics = []
+      const members = []
+      for (const member of node.members) {
+        const name = memberName(member, source)
+        const isStatic =
+          (ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Static) !== 0
+        if (name === "constructor") continue
+        ;(isStatic ? statics : members).push(name)
+      }
+      add(node.name.getText(source), "class", {
+        exported,
+        statics: [...new Set(statics)].sort(),
+        members: [...new Set(members)].sort(),
+      })
+    } else if (ts.isFunctionDeclaration(node)) {
+      add(node.name.getText(source), "function", { exported })
+    } else if (ts.isTypeAliasDeclaration(node)) {
+      add(node.name.getText(source), "type", { exported })
+    } else if (ts.isVariableStatement(node)) {
+      for (const declaration of node.declarationList.declarations) {
+        add(declaration.name.getText(source), "const", { exported })
+      }
+    } else if (ts.isModuleDeclaration(node)) {
+      const inner = []
+      if (node.body && node.body.statements) {
+        for (const statement of node.body.statements) {
+          if (ts.isExportDeclaration(statement) && statement.exportClause) {
+            for (const element of statement.exportClause.elements) {
+              inner.push(element.name.getText(source))
+            }
+          } else if (statement.name) {
+            inner.push(statement.name.getText(source))
+          }
+        }
+      }
+      add(node.name.getText(source), "namespace", { namespace: inner.sort() })
+    } else if (ts.isExportDeclaration(node) && node.exportClause) {
+      for (const element of node.exportClause.elements) {
+        add(element.name.getText(source), "reexport", { exported: true })
+      }
+    } else if (ts.isImportEqualsDeclaration(node)) {
+      add(node.name.getText(source), "import")
+    }
+  }
+  const anyCount = (text.match(/\bany\b/g) || []).length
+  return { exportEquals, names, any: anyCount }
+}
+
+function codeNames(description) {
+  if (description.kind === "object") return Object.keys(description.names)
+  if (description.kind === "instance") {
+    return [...description.members.public, ...description.properties.public]
+  }
+  if (description.kind === "class") {
+    return [
+      ...description.members.public,
+      ...description.statics.public,
+      ...(description.properties ? description.properties.public : []),
+    ]
+  }
+  return []
+}
+
+function typeNames(types) {
+  if (types.exportEquals) {
+    let target = types.names[types.exportEquals]
+    if (target && target.kinds.includes("const")) return null
+    if (!target) return []
+    return [
+      ...(target.members || []),
+      ...(target.statics || []),
+      ...(target.namespace || []),
+    ]
+  }
+  return Object.entries(types.names)
+    .filter(([, entry]) => entry.exported && !entry.kinds.includes("type"))
+    .map(([name]) => name)
+}
+
+const snapshot = { package: pkg.name, version: pkg.version, subpaths: {} }
+const typeFiles = new Set()
+for (const [subpath, target] of Object.entries(pkg.exports)) {
+  if (typeof target !== "object") continue
+  const code = describe(require(path.join(root, target.default)))
+  const typesFile = target.types.replace(/^\.\//, "")
+  typeFiles.add(typesFile)
+  const types = declared(typesFile)
+  const entry = { code: target.default, types: target.types, exports: code }
+  const fromTypes = typeNames(types)
+  if (fromTypes) {
+    const fromCode = codeNames(code)
+    entry.onlyInCode = fromCode
+      .filter((name) => !fromTypes.includes(name))
+      .sort()
+    entry.onlyInTypes = fromTypes
+      .filter((name) => !fromCode.includes(name))
+      .sort()
+  }
+  snapshot.subpaths[subpath] = entry
+}
+
+snapshot.typeFiles = {}
+function typeFilesUnder(dir) {
+  const found = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) found.push(...typeFilesUnder(full))
+    else if (entry.name.endsWith(".d.ts")) found.push(path.relative(root, full))
+  }
+  return found.sort()
+}
+for (const file of typeFilesUnder(path.join(root, "types"))) {
+  const types = declared(file)
+  snapshot.typeFiles[file] = {
+    entry: typeFiles.has(file),
+    exportEquals: types.exportEquals,
+    any: types.any,
+    names: types.names,
+  }
+}
+
+async function main() {
+  const prettier = require("prettier")
+  const text = await prettier.format(JSON.stringify(snapshot), {
+    parser: "json",
+  })
+  if (check) {
+    const same =
+      fs.existsSync(golden) && fs.readFileSync(golden, "utf8") === text
+    console.log(same ? "same public_api.json" : "DIFF public_api.json")
+    process.exit(same ? 0 : 1)
+  }
+  fs.mkdirSync(path.dirname(golden), { recursive: true })
+  fs.writeFileSync(golden, text)
+  let exported = 0
+  let privateNames = 0
+  for (const [subpath, entry] of Object.entries(snapshot.subpaths)) {
+    const names = codeNames(entry.exports)
+    exported += names.length
+    const kind = entry.exports
+    for (const part of [kind.members, kind.statics, kind.properties]) {
+      if (part) privateNames += part.private.length
+    }
+    console.log(
+      `${subpath}: ${entry.exports.kind}, ${names.length} public names` +
+        (entry.onlyInCode && entry.onlyInCode.length
+          ? `, only in code: ${entry.onlyInCode.join(", ")}`
+          : "") +
+        (entry.onlyInTypes && entry.onlyInTypes.length
+          ? `, only in types: ${entry.onlyInTypes.join(", ")}`
+          : ""),
+    )
+  }
+  const declaredNames = Object.values(snapshot.typeFiles).reduce(
+    (sum, file) => sum + Object.keys(file.names).length,
+    0,
+  )
+  const anyTotal = Object.values(snapshot.typeFiles).reduce(
+    (sum, file) => sum + file.any,
+    0,
+  )
+  console.log(
+    `subpaths: ${
+      Object.keys(snapshot.subpaths).length
+    }, public names the code exports: ${exported}, underscore names reachable: ${privateNames}`,
+  )
+  console.log(
+    `type files: ${
+      Object.keys(snapshot.typeFiles).length
+    }, names declared: ${declaredNames}, uses of any: ${anyTotal}`,
+  )
+}
+
+main()

@@ -1,0 +1,750 @@
+{
+  "package": "hirefire-resource",
+  "version": "2.0.0",
+  "subpaths": {
+    ".": {
+      "code": "./src/index.js",
+      "types": "./types/index.d.ts",
+      "exports": {
+        "kind": "instance",
+        "of": "HireFire",
+        "members": {
+          "public": ["boot", "configure", "reset"],
+          "private": ["_startIfToken"]
+        },
+        "properties": { "public": ["configuration"], "private": [] }
+      }
+    },
+    "./configuration": {
+      "code": "./src/configuration.js",
+      "types": "./types/configuration.d.ts",
+      "exports": {
+        "kind": "class",
+        "name": "Configuration",
+        "arity": 0,
+        "statics": {
+          "public": [
+            "DuplicateDynoError",
+            "MAX_NAME_BYTES",
+            "MissingSamplerError"
+          ],
+          "private": []
+        },
+        "members": {
+          "public": [
+            "activeCpuSources",
+            "buffer",
+            "dispatcher",
+            "dyno",
+            "httpName",
+            "httpSource",
+            "markHttpActive",
+            "rqtEnabled",
+            "rqtLiveness",
+            "token"
+          ],
+          "private": [
+            "_register",
+            "_softIdentity",
+            "_warnBareWebDynoOnce",
+            "_warnCpuUnresolvedOnce",
+            "_warnHerokuConflictOnce",
+            "_warnIdentityNameTooLongOnce",
+            "_warnRqtUnresolvedOnce"
+          ]
+        },
+        "properties": {
+          "public": ["http", "jobQueues", "logger"],
+          "private": [
+            "_alwaysOnCpu",
+            "_alwaysOnHttp",
+            "_bareWebDynoWarned",
+            "_buffer",
+            "_cpuUnresolvedWarned",
+            "_dispatcher",
+            "_herokuConflictWarned",
+            "_httpActive",
+            "_identityNameTooLongWarned",
+            "_rqtUnresolvedWarned",
+            "_sourcesByName",
+            "_token"
+          ]
+        }
+      },
+      "onlyInCode": [],
+      "onlyInTypes": ["Logger"]
+    },
+    "./middleware/connect": {
+      "code": "./src/middleware/connect.js",
+      "types": "./types/middleware/connect.d.ts",
+      "exports": {
+        "kind": "function",
+        "name": "HireFireMiddlewareConnect",
+        "arity": 3
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./middleware/express": {
+      "code": "./src/middleware/express.js",
+      "types": "./types/middleware/express.d.ts",
+      "exports": {
+        "kind": "function",
+        "name": "HireFireMiddlewareExpress",
+        "arity": 3
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./middleware/koa": {
+      "code": "./src/middleware/koa.js",
+      "types": "./types/middleware/koa.d.ts",
+      "exports": {
+        "kind": "function",
+        "name": "HireFireMiddlewareKoa",
+        "arity": 2
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./middleware/fastify": {
+      "code": "./src/middleware/fastify.js",
+      "types": "./types/middleware/fastify.d.ts",
+      "exports": {
+        "kind": "function",
+        "name": "HireFireMiddlewareFastify",
+        "arity": 2
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./middleware/next": {
+      "code": "./src/middleware/next.js",
+      "types": "./types/middleware/next.d.ts",
+      "exports": {
+        "kind": "object",
+        "names": {
+          "middleware": {
+            "kind": "function",
+            "name": "middleware",
+            "arity": 1
+          },
+          "withHireFire": {
+            "kind": "function",
+            "name": "withHireFire",
+            "arity": 1
+          }
+        }
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./macro/bull": {
+      "code": "./src/macro/bull.js",
+      "types": "./types/macro/bull.d.ts",
+      "exports": {
+        "kind": "object",
+        "names": {
+          "JobQueueLatencyUnsupportedError": {
+            "kind": "class",
+            "name": "JobQueueLatencyUnsupportedError",
+            "arity": 1,
+            "statics": { "public": [], "private": [] },
+            "members": { "public": [], "private": [] }
+          },
+          "afterSampleJobQueues": {
+            "kind": "function",
+            "name": "afterSampleJobQueues",
+            "arity": 1
+          },
+          "beforeSampleJobQueues": {
+            "kind": "function",
+            "name": "beforeSampleJobQueues",
+            "arity": 0
+          },
+          "jobQueueLatency": {
+            "kind": "function",
+            "name": "jobQueueLatency",
+            "arity": 0
+          },
+          "jobQueueSize": {
+            "kind": "function",
+            "name": "jobQueueSize",
+            "arity": 0
+          },
+          "jobQueueWorking": {
+            "kind": "function",
+            "name": "jobQueueWorking",
+            "arity": 0
+          },
+          "planConnectionOptions": {
+            "kind": "function",
+            "name": "planConnectionOptions",
+            "arity": 0
+          },
+          "planOptions": {
+            "kind": "function",
+            "name": "planOptions",
+            "arity": 2
+          },
+          "queuesRequired": {
+            "kind": "function",
+            "name": "queuesRequired",
+            "arity": 0
+          },
+          "reinitAfterFork": {
+            "kind": "function",
+            "name": "reinitAfterFork",
+            "arity": 0
+          },
+          "supportsPlanStrategy": {
+            "kind": "function",
+            "name": "supportsPlanStrategy",
+            "arity": 1
+          }
+        }
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./macro/bullmq": {
+      "code": "./src/macro/bullmq.js",
+      "types": "./types/macro/bullmq.d.ts",
+      "exports": {
+        "kind": "object",
+        "names": {
+          "JobQueueLatencyUnsupportedError": {
+            "kind": "class",
+            "name": "JobQueueLatencyUnsupportedError",
+            "arity": 1,
+            "statics": { "public": [], "private": [] },
+            "members": { "public": [], "private": [] }
+          },
+          "afterSampleJobQueues": {
+            "kind": "function",
+            "name": "afterSampleJobQueues",
+            "arity": 1
+          },
+          "beforeSampleJobQueues": {
+            "kind": "function",
+            "name": "beforeSampleJobQueues",
+            "arity": 0
+          },
+          "jobQueueLatency": {
+            "kind": "function",
+            "name": "jobQueueLatency",
+            "arity": 0
+          },
+          "jobQueueSize": {
+            "kind": "function",
+            "name": "jobQueueSize",
+            "arity": 0
+          },
+          "jobQueueWorking": {
+            "kind": "function",
+            "name": "jobQueueWorking",
+            "arity": 0
+          },
+          "planConnectionOptions": {
+            "kind": "function",
+            "name": "planConnectionOptions",
+            "arity": 0
+          },
+          "planOptions": {
+            "kind": "function",
+            "name": "planOptions",
+            "arity": 2
+          },
+          "queuesRequired": {
+            "kind": "function",
+            "name": "queuesRequired",
+            "arity": 0
+          },
+          "reinitAfterFork": {
+            "kind": "function",
+            "name": "reinitAfterFork",
+            "arity": 0
+          },
+          "supportsPlanStrategy": {
+            "kind": "function",
+            "name": "supportsPlanStrategy",
+            "arity": 1
+          }
+        }
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./macro/pg-boss": {
+      "code": "./src/macro/pg_boss.js",
+      "types": "./types/macro/pg_boss.d.ts",
+      "exports": {
+        "kind": "object",
+        "names": {
+          "afterSampleJobQueues": {
+            "kind": "function",
+            "name": "afterSampleJobQueues",
+            "arity": 1
+          },
+          "beforeSampleJobQueues": {
+            "kind": "function",
+            "name": "beforeSampleJobQueues",
+            "arity": 0
+          },
+          "jobQueueLatency": {
+            "kind": "function",
+            "name": "jobQueueLatency",
+            "arity": 0
+          },
+          "jobQueueSize": {
+            "kind": "function",
+            "name": "jobQueueSize",
+            "arity": 0
+          },
+          "jobQueueWorking": {
+            "kind": "function",
+            "name": "jobQueueWorking",
+            "arity": 0
+          },
+          "planConnectionOptions": {
+            "kind": "function",
+            "name": "planConnectionOptions",
+            "arity": 0
+          },
+          "planOptions": {
+            "kind": "function",
+            "name": "planOptions",
+            "arity": 2
+          },
+          "queuesRequired": {
+            "kind": "function",
+            "name": "queuesRequired",
+            "arity": 0
+          },
+          "reinitAfterFork": {
+            "kind": "function",
+            "name": "reinitAfterFork",
+            "arity": 0
+          },
+          "supportsPlanStrategy": {
+            "kind": "function",
+            "name": "supportsPlanStrategy",
+            "arity": 1
+          }
+        }
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./macro/pg_boss": {
+      "code": "./src/macro/pg_boss.js",
+      "types": "./types/macro/pg_boss.d.ts",
+      "exports": {
+        "kind": "object",
+        "names": {
+          "afterSampleJobQueues": {
+            "kind": "function",
+            "name": "afterSampleJobQueues",
+            "arity": 1
+          },
+          "beforeSampleJobQueues": {
+            "kind": "function",
+            "name": "beforeSampleJobQueues",
+            "arity": 0
+          },
+          "jobQueueLatency": {
+            "kind": "function",
+            "name": "jobQueueLatency",
+            "arity": 0
+          },
+          "jobQueueSize": {
+            "kind": "function",
+            "name": "jobQueueSize",
+            "arity": 0
+          },
+          "jobQueueWorking": {
+            "kind": "function",
+            "name": "jobQueueWorking",
+            "arity": 0
+          },
+          "planConnectionOptions": {
+            "kind": "function",
+            "name": "planConnectionOptions",
+            "arity": 0
+          },
+          "planOptions": {
+            "kind": "function",
+            "name": "planOptions",
+            "arity": 2
+          },
+          "queuesRequired": {
+            "kind": "function",
+            "name": "queuesRequired",
+            "arity": 0
+          },
+          "reinitAfterFork": {
+            "kind": "function",
+            "name": "reinitAfterFork",
+            "arity": 0
+          },
+          "supportsPlanStrategy": {
+            "kind": "function",
+            "name": "supportsPlanStrategy",
+            "arity": 1
+          }
+        }
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    },
+    "./errors": {
+      "code": "./src/errors.js",
+      "types": "./types/errors.d.ts",
+      "exports": {
+        "kind": "object",
+        "names": {
+          "JobQueueLatencyUnsupportedError": {
+            "kind": "class",
+            "name": "JobQueueLatencyUnsupportedError",
+            "arity": 1,
+            "statics": { "public": [], "private": [] },
+            "members": { "public": [], "private": [] }
+          },
+          "MissingQueueError": {
+            "kind": "class",
+            "name": "MissingQueueError",
+            "arity": 0,
+            "statics": { "public": [], "private": [] },
+            "members": { "public": [], "private": [] },
+            "properties": {
+              "public": ["message", "name", "stack"],
+              "private": []
+            }
+          },
+          "jobQueueLatencyUnsupported": {
+            "kind": "function",
+            "name": "jobQueueLatencyUnsupported",
+            "arity": 1
+          }
+        }
+      },
+      "onlyInCode": [],
+      "onlyInTypes": []
+    }
+  },
+  "typeFiles": {
+    "types/buffer.d.ts": {
+      "entry": false,
+      "exportEquals": "Buffer",
+      "any": 0,
+      "names": {
+        "Buffer": {
+          "kinds": ["class", "namespace"],
+          "exported": false,
+          "statics": [],
+          "members": ["discardInherited", "flush", "repopulate", "sample"],
+          "namespace": ["Leaf", "Series", "Snapshot"]
+        }
+      }
+    },
+    "types/configuration.d.ts": {
+      "entry": true,
+      "exportEquals": "Configuration",
+      "any": 0,
+      "names": {
+        "Configuration": {
+          "kinds": ["class", "namespace"],
+          "exported": false,
+          "statics": ["MAX_NAME_BYTES"],
+          "members": [
+            "activeCpuSources",
+            "buffer",
+            "dispatcher",
+            "dyno",
+            "http",
+            "httpName",
+            "httpSource",
+            "jobQueues",
+            "logger",
+            "markHttpActive",
+            "rqtEnabled",
+            "rqtLiveness",
+            "token"
+          ],
+          "namespace": ["DuplicateDynoError", "Logger", "MissingSamplerError"]
+        },
+        "MissingSamplerError": {
+          "kinds": ["class"],
+          "exported": false,
+          "statics": [],
+          "members": []
+        },
+        "DuplicateDynoError": {
+          "kinds": ["class"],
+          "exported": false,
+          "statics": [],
+          "members": []
+        },
+        "Logger": { "kinds": ["type"], "exported": false },
+        "Buffer": { "kinds": ["import"] },
+        "Dispatcher": { "kinds": ["import"] },
+        "HTTP": { "kinds": ["import"] },
+        "CPU": { "kinds": ["import"] },
+        "JobQueues": { "kinds": ["import"] }
+      }
+    },
+    "types/dispatcher.d.ts": {
+      "entry": false,
+      "exportEquals": "Dispatcher",
+      "any": 0,
+      "names": {
+        "Dispatcher": {
+          "kinds": ["class"],
+          "exported": false,
+          "statics": [],
+          "members": ["ensureJobQueueLoop", "running", "start", "stop"]
+        }
+      }
+    },
+    "types/errors.d.ts": {
+      "entry": true,
+      "exportEquals": null,
+      "any": 0,
+      "names": {
+        "MissingQueueError": {
+          "kinds": ["class"],
+          "exported": true,
+          "statics": [],
+          "members": []
+        },
+        "JobQueueLatencyUnsupportedError": {
+          "kinds": ["class"],
+          "exported": true,
+          "statics": [],
+          "members": []
+        },
+        "jobQueueLatencyUnsupported": {
+          "kinds": ["function"],
+          "exported": true
+        }
+      }
+    },
+    "types/hirefire.d.ts": {
+      "entry": false,
+      "exportEquals": "HireFire",
+      "any": 0,
+      "names": {
+        "HireFire": {
+          "kinds": ["class"],
+          "exported": false,
+          "statics": [],
+          "members": ["boot", "configuration", "configure", "reset"]
+        },
+        "Configuration": { "kinds": ["import"] }
+      }
+    },
+    "types/index.d.ts": {
+      "entry": true,
+      "exportEquals": "_exports",
+      "any": 0,
+      "names": {
+        "HireFire": { "kinds": ["import"] },
+        "_exports": { "kinds": ["const"], "exported": false }
+      }
+    },
+    "types/macro/bull.d.ts": {
+      "entry": true,
+      "exportEquals": null,
+      "any": 2,
+      "names": {
+        "BullOptions": { "kinds": ["type"], "exported": true },
+        "BullSizeOptions": { "kinds": ["type"], "exported": true },
+        "jobQueueLatency": {
+          "kinds": ["function", "function"],
+          "exported": true
+        },
+        "jobQueueSize": { "kinds": ["function", "function"], "exported": true },
+        "jobQueueWorking": {
+          "kinds": ["function", "function"],
+          "exported": true
+        },
+        "planOptions": { "kinds": ["function"], "exported": true },
+        "planConnectionOptions": { "kinds": ["function"], "exported": true },
+        "supportsPlanStrategy": { "kinds": ["function"], "exported": true },
+        "queuesRequired": { "kinds": ["function"], "exported": true },
+        "beforeSampleJobQueues": { "kinds": ["function"], "exported": true },
+        "afterSampleJobQueues": { "kinds": ["function"], "exported": true },
+        "reinitAfterFork": { "kinds": ["function"], "exported": true },
+        "JobQueueLatencyUnsupportedError": {
+          "kinds": ["reexport"],
+          "exported": true
+        }
+      }
+    },
+    "types/macro/bullmq.d.ts": {
+      "entry": true,
+      "exportEquals": null,
+      "any": 2,
+      "names": {
+        "BullMQOptions": { "kinds": ["type"], "exported": true },
+        "BullMQSizeOptions": { "kinds": ["type"], "exported": true },
+        "jobQueueLatency": {
+          "kinds": ["function", "function"],
+          "exported": true
+        },
+        "jobQueueSize": { "kinds": ["function", "function"], "exported": true },
+        "jobQueueWorking": {
+          "kinds": ["function", "function"],
+          "exported": true
+        },
+        "planOptions": { "kinds": ["function"], "exported": true },
+        "planConnectionOptions": { "kinds": ["function"], "exported": true },
+        "supportsPlanStrategy": { "kinds": ["function"], "exported": true },
+        "queuesRequired": { "kinds": ["function"], "exported": true },
+        "beforeSampleJobQueues": { "kinds": ["function"], "exported": true },
+        "afterSampleJobQueues": { "kinds": ["function"], "exported": true },
+        "reinitAfterFork": { "kinds": ["function"], "exported": true },
+        "JobQueueLatencyUnsupportedError": {
+          "kinds": ["reexport"],
+          "exported": true
+        }
+      }
+    },
+    "types/macro/pg_boss.d.ts": {
+      "entry": true,
+      "exportEquals": null,
+      "any": 6,
+      "names": {
+        "Queryable": { "kinds": ["type"], "exported": true },
+        "PgBossOptions": { "kinds": ["type"], "exported": true },
+        "PgBossSizeOptions": { "kinds": ["type"], "exported": true },
+        "jobQueueLatency": {
+          "kinds": ["function", "function"],
+          "exported": true
+        },
+        "jobQueueSize": { "kinds": ["function", "function"], "exported": true },
+        "jobQueueWorking": {
+          "kinds": ["function", "function"],
+          "exported": true
+        },
+        "planOptions": { "kinds": ["function"], "exported": true },
+        "planConnectionOptions": { "kinds": ["function"], "exported": true },
+        "supportsPlanStrategy": { "kinds": ["function"], "exported": true },
+        "queuesRequired": { "kinds": ["function"], "exported": true },
+        "beforeSampleJobQueues": { "kinds": ["function"], "exported": true },
+        "afterSampleJobQueues": { "kinds": ["function"], "exported": true },
+        "reinitAfterFork": { "kinds": ["function"], "exported": true }
+      }
+    },
+    "types/middleware/connect.d.ts": {
+      "entry": true,
+      "exportEquals": "HireFireMiddlewareConnect",
+      "any": 2,
+      "names": {
+        "HireFireMiddlewareConnect": {
+          "kinds": ["function"],
+          "exported": false
+        }
+      }
+    },
+    "types/middleware/express.d.ts": {
+      "entry": true,
+      "exportEquals": "HireFireMiddlewareExpress",
+      "any": 2,
+      "names": {
+        "HireFireMiddlewareExpress": {
+          "kinds": ["function"],
+          "exported": false
+        }
+      }
+    },
+    "types/middleware/fastify.d.ts": {
+      "entry": true,
+      "exportEquals": "HireFireMiddlewareFastify",
+      "any": 2,
+      "names": {
+        "HireFireMiddlewareFastify": {
+          "kinds": ["function"],
+          "exported": false
+        }
+      }
+    },
+    "types/middleware/koa.d.ts": {
+      "entry": true,
+      "exportEquals": "HireFireMiddlewareKoa",
+      "any": 1,
+      "names": {
+        "HireFireMiddlewareKoa": { "kinds": ["function"], "exported": false }
+      }
+    },
+    "types/middleware/next.d.ts": {
+      "entry": true,
+      "exportEquals": null,
+      "any": 5,
+      "names": {
+        "NextMiddleware": { "kinds": ["type"], "exported": true },
+        "middleware": { "kinds": ["function"], "exported": true },
+        "withHireFire": { "kinds": ["function"], "exported": true }
+      }
+    },
+    "types/source/cpu.d.ts": {
+      "entry": false,
+      "exportEquals": "CPU",
+      "any": 0,
+      "names": {
+        "CPU": {
+          "kinds": ["class"],
+          "exported": false,
+          "statics": [],
+          "members": ["name", "sample"]
+        }
+      }
+    },
+    "types/source/http.d.ts": {
+      "entry": false,
+      "exportEquals": "HTTP",
+      "any": 0,
+      "names": {
+        "HTTP": {
+          "kinds": ["class"],
+          "exported": false,
+          "statics": [],
+          "members": ["name", "sample"]
+        }
+      }
+    },
+    "types/source/jobQueue.d.ts": {
+      "entry": false,
+      "exportEquals": "JobQueue",
+      "any": 0,
+      "names": {
+        "JobQueue": {
+          "kinds": ["class"],
+          "exported": false,
+          "statics": [],
+          "members": ["name", "sample"]
+        }
+      }
+    },
+    "types/source/jobQueues.d.ts": {
+      "entry": false,
+      "exportEquals": "JobQueues",
+      "any": 1,
+      "names": {
+        "JobQueues": {
+          "kinds": ["class"],
+          "exported": false,
+          "statics": [],
+          "members": [
+            "[Symbol.iterator]",
+            "add",
+            "any",
+            "findByName",
+            "sampleJobQueue"
+          ]
+        },
+        "JobQueue": { "kinds": ["import"] }
+      }
+    }
+  }
+}
