@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/../.." && pwd -P)"
+seconds="${1:-1800}"
+run="${2:-soak}"
+schema="tools_soak"
+
+cell="$("$root/tools/bin/cell-sandbox" stress 7 bullmq@6 ioredis pg-boss@12 pg | tail -1)"
+cd "$cell"
+set -a
+. ./.env
+set +a
+
+node tools/lib/pg_boss_seed.mjs "$DATABASE_URL" "$schema" default=20
+node -e '
+const IORedis = require("ioredis")
+const redis = new IORedis(process.env.REDIS_URL)
+;(async () => {
+  await redis.flushdb()
+  const pipeline = redis.pipeline()
+  for (let index = 0; index < 200; index += 1) pipeline.lpush("bull:default:wait", String(index))
+  for (let index = 0; index < 50; index += 1) pipeline.lpush("bull:mailers:wait", String(index))
+  for (let index = 0; index < 600; index += 1) {
+    const queue = ["default", "mailers", "other"][index % 3]
+    const at = Date.now() + (index < 300 ? -60000 : 3600000)
+    pipeline.zadd(`bull:${queue}:delayed`, at * 0x1000 + index, `d${index}`)
+  }
+  await pipeline.exec()
+  await redis.quit()
+})()
+'
+
+mkdir -p "$root/tools/results/$run"
+HIREFIRE_BULLMQ_URL="$REDIS_URL" \
+HIREFIRE_PG_BOSS_URL="$DATABASE_URL" \
+HIREFIRE_PG_BOSS_SCHEMA="$schema" \
+PGSSLMODE=disable \
+TOOLS_LIBRARY="$cell" \
+  node --expose-gc tools/lib/soak_run.js "$seconds" "$root/tools/results/$run" \
+  > "$root/tools/results/$run/console.txt" 2>&1
