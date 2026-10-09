@@ -1,0 +1,190 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { root } = require("../lib/paths")
+
+const directory = process.argv[2]
+if (!directory) {
+  console.error("usage: tools/bin/check-audit <audit directory of the canon>")
+  process.exit(64)
+}
+
+const LENSES = {
+  Logic: 10,
+  "Concurrency and fork": 12,
+  "Host safety": 8,
+  "Contract and integrator experience": 7,
+  Adapters: 7,
+  Architecture: 4,
+  "Code quality": 3,
+  Performance: 7,
+  Security: 7,
+  Tests: 7,
+  "Packaging and docs": 8,
+}
+const SEVERITIES = ["defect", "risk", "test gap", "design", "cleanup", "docs"]
+const FIELDS = [
+  "Location",
+  "Lens",
+  "Severity",
+  "Evidence",
+  "Ruby counterpart",
+  "Proposed fix",
+  "Behavior change",
+]
+const problems = []
+const read = (file) => fs.readFileSync(path.join(directory, file), "utf8")
+
+function sourceFiles(dir, extension) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) return sourceFiles(full, extension)
+    return entry.name.endsWith(extension) ? [path.relative(root, full)] : []
+  })
+}
+
+const expected = [
+  ...sourceFiles(path.join(root, "src"), ".js"),
+  ...sourceFiles(path.join(root, "types"), ".d.ts"),
+].sort()
+const mapped = new Set()
+for (const line of read("map.md").split("\n")) {
+  const lead = line.match(/^- \*\*(.+?):\*\*/)
+  if (!lead) continue
+  for (const match of lead[1].matchAll(/`((?:src|types)\/[^`]+)`/g)) {
+    mapped.add(match[1])
+  }
+}
+for (const file of expected) {
+  if (!mapped.has(file)) problems.push(`map.md has no entry for ${file}`)
+}
+for (const file of mapped) {
+  if (!expected.includes(file))
+    problems.push(`map.md names ${file}, which does not exist`)
+}
+console.log(`map: ${mapped.size} files, source tree: ${expected.length} files`)
+
+const findings = []
+for (const file of ["findings.md", "findings-design.md"]) {
+  const blocks = read(file).split(/^### /m).slice(1)
+  for (const block of blocks) {
+    const [heading, ...rest] = block.split("\n")
+    const id = heading.split(":")[0]
+    const body = rest.join("\n").split(/^## /m)[0]
+    const found = [...body.matchAll(/^- \*\*([^:*]+):\*\* *(.*)$/gm)]
+    const names = found.map((match) => match[1])
+    if (names.join("|") !== FIELDS.join("|")) {
+      problems.push(`${id}: fields are ${names.join(", ")}`)
+    }
+    const field = (name) =>
+      (found.find((match) => match[1] === name) || [])[2] || ""
+    for (const name of FIELDS) {
+      if (!field(name).trim()) problems.push(`${id}: ${name} is empty`)
+    }
+    if (!/^N-\d\d$/.test(id)) problems.push(`${id}: not a finding number`)
+    if (!(field("Lens") in LENSES))
+      problems.push(`${id}: unknown lens ${field("Lens")}`)
+    if (!SEVERITIES.includes(field("Severity"))) {
+      problems.push(`${id}: unknown severity ${field("Severity")}`)
+    }
+    if (!/^(yes|no|only|a |one |fewer)/i.test(field("Behavior change"))) {
+      problems.push(`${id}: behavior change does not start with an answer`)
+    }
+    findings.push({
+      id,
+      title: heading.slice(heading.indexOf(":") + 2),
+      severity: field("Severity"),
+      ruby: field("Ruby counterpart"),
+    })
+  }
+}
+findings.forEach((finding, index) => {
+  const number = `N-${String(index + 1).padStart(2, "0")}`
+  if (finding.id !== number)
+    problems.push(`${finding.id}: expected ${number} here`)
+  if (
+    index > 0 &&
+    SEVERITIES.indexOf(finding.severity) <
+      SEVERITIES.indexOf(findings[index - 1].severity)
+  ) {
+    problems.push(`${finding.id}: out of severity order`)
+  }
+})
+const bySeverity = {}
+for (const finding of findings) {
+  bySeverity[finding.severity] = (bySeverity[finding.severity] || 0) + 1
+}
+console.log(
+  `findings: ${findings.length} (${SEVERITIES.map(
+    (severity) => `${bySeverity[severity] || 0} ${severity}`,
+  ).join(", ")})`,
+)
+console.log(
+  `findings without a Ruby counterpart: ${findings
+    .filter((finding) => finding.ruby.startsWith("none"))
+    .map((finding) => finding.id)
+    .join(", ")}`,
+)
+
+const comparison = read("ruby-comparison.md")
+const rows = [
+  ...comparison.matchAll(
+    /^\| (F-\d\d|C-\d\d|`fork_safe` mark|Prefork wait) +\| (.*)\|$/gm,
+  ),
+]
+const ids = new Set(findings.map((finding) => finding.id))
+const verdicts = {}
+for (const row of rows) {
+  const cells = row[2].split("|").map((cell) => cell.trim())
+  const verdict = cells[1]
+  verdicts[verdict] = (verdicts[verdict] || 0) + 1
+  if (!["applies", "already correct", "not applicable"].includes(verdict)) {
+    problems.push(`row ${row[1]}: verdict "${verdict}"`)
+  }
+  if (!cells[2]) problems.push(`row ${row[1]}: no evidence`)
+  if (verdict === "applies") {
+    const named = [...cells[2].matchAll(/N-\d\d/g)].map((match) => match[0])
+    if (named.length === 0)
+      problems.push(`row ${row[1]}: applies without a finding`)
+    for (const id of named) {
+      if (!ids.has(id)) problems.push(`row ${row[1]}: ${id} is not a finding`)
+    }
+  }
+}
+if (rows.length !== 68)
+  problems.push(`comparison table has ${rows.length} rows, not 68`)
+console.log(
+  `comparison: ${rows.length} rows (${Object.entries(verdicts)
+    .map(([verdict, count]) => `${count} ${verdict}`)
+    .join(", ")})`,
+)
+
+const lensText = ["lenses.md", "lenses-2.md"]
+  .filter((file) => fs.existsSync(path.join(directory, file)))
+  .map(read)
+  .join("\n")
+for (const [lens, points] of Object.entries(LENSES)) {
+  const section = lensText
+    .split(/^## /m)
+    .find((part) => part.startsWith(`${lens}\n`))
+  if (!section) {
+    problems.push(`no lens section "${lens}"`)
+    continue
+  }
+  const answered = [...section.matchAll(/^- \*\*[^*]+:\*\*/gm)].length
+  if (answered < points) {
+    problems.push(`lens "${lens}" answers ${answered} of ${points} Node points`)
+  }
+  for (const part of ["**Examined:**", "**How:**", "**Found:**"]) {
+    if (!section.includes(part)) problems.push(`lens "${lens}" lacks ${part}`)
+  }
+}
+console.log(`lenses: ${Object.keys(LENSES).length} sections expected`)
+
+if (problems.length > 0) {
+  console.log(`\n${problems.length} problems:\n${problems.join("\n")}`)
+  process.exit(1)
+}
+console.log("audit documents pass")

@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+
+const directory = process.argv[2]
+if (!directory) {
+  console.error(
+    "usage: tools/bin/number-findings <audit directory of the canon>",
+  )
+  process.exit(64)
+}
+
+const numbers = {}
+let next = 0
+for (const file of ["findings.md", "findings-design.md"]) {
+  const text = fs.readFileSync(path.join(directory, file), "utf8")
+  for (const match of text.matchAll(/^### N:([a-z0-9-]+):/gm)) {
+    next += 1
+    if (numbers[match[1]]) throw new Error(`slug ${match[1]} is used twice`)
+    numbers[match[1]] = `N-${String(next).padStart(2, "0")}`
+  }
+}
+
+const unknown = new Set()
+for (const file of fs.readdirSync(directory)) {
+  if (!file.endsWith(".md")) continue
+  const full = path.join(directory, file)
+  const text = fs.readFileSync(full, "utf8")
+  const replaced = text.replace(/\[?N:([a-z0-9-]+)\]?/g, (whole, slug) => {
+    if (!numbers[slug]) {
+      unknown.add(`${file}: ${slug}`)
+      return whole
+    }
+    return numbers[slug]
+  })
+  if (replaced !== text) fs.writeFileSync(full, replaced)
+}
+if (unknown.size > 0) {
+  console.error(`unknown slugs:\n${[...unknown].join("\n")}`)
+  process.exit(1)
+}
+fs.mkdirSync(path.join(directory, "results"), { recursive: true })
+fs.writeFileSync(
+  path.join(directory, "results", "finding-numbers.json"),
+  JSON.stringify(numbers, null, 2) + "\n",
+)
+console.log(`numbered ${next} findings`)
