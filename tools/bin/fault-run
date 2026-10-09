@@ -1,0 +1,113 @@
+#!/usr/bin/env node
+"use strict"
+
+const { spawn } = require("child_process")
+const fs = require("fs")
+const path = require("path")
+const { root, runDirectory } = require("../lib/paths")
+
+const SCENARIOS = [
+  "healthy",
+  "stall",
+  "reset",
+  "close",
+  "garbage",
+  "drip",
+  "slow_200",
+  "status_302",
+  "status_401",
+  "status_413",
+  "status_429",
+  "status_500",
+  "status_503",
+  "lease_bad_json",
+  "lease_wrong_shape",
+  "lease_huge_body",
+  "lease_bad_headers",
+  "lease_binary_body",
+  "refused",
+  "unresolvable",
+  "tls_to_plain",
+]
+
+function option(name, fallback) {
+  const found = process.argv.find((entry) => entry.startsWith(`--${name}=`))
+  return found ? found.split("=")[1] : fallback
+}
+
+const fault = Number(option("fault", 20))
+const heal = Number(option("heal", 12))
+const parallel = Number(option("parallel", 5))
+const only = option("only", null)
+const run = option("run", "faults")
+const scenarios = only ? only.split(",") : SCENARIOS
+const directory = runDirectory(run)
+
+function one(scenario) {
+  return new Promise((resolve) => {
+    const output = path.join(directory, `${scenario}.json`)
+    fs.rmSync(output, { force: true })
+    const log = fs.openSync(path.join(directory, `${scenario}.log`), "w")
+    const child = spawn(
+      process.execPath,
+      [
+        path.join(root, "tools", "lib", "fault_run.js"),
+        scenario,
+        String(fault),
+        String(heal),
+        output,
+      ],
+      { cwd: root, stdio: ["ignore", log, log] },
+    )
+    child.on("close", () => {
+      fs.closeSync(log)
+      resolve(
+        fs.existsSync(output)
+          ? JSON.parse(fs.readFileSync(output, "utf8"))
+          : { scenario, crashed: true },
+      )
+    })
+  })
+}
+
+async function main() {
+  const results = []
+  for (let index = 0; index < scenarios.length; index += parallel) {
+    const group = scenarios.slice(index, index + parallel)
+    results.push(...(await Promise.all(group.map(one))))
+  }
+  fs.writeFileSync(
+    path.join(directory, "results.json"),
+    JSON.stringify(results, null, 2) + "\n",
+  )
+  const lines = [
+    "scenario            escaped  mw max ms  eld max ms  ingest  lease  log/min  running  sockets  recover s  stop s",
+  ]
+  for (const result of results) {
+    if (result.crashed) {
+      lines.push(`${result.scenario.padEnd(19)} harness crashed`)
+      continue
+    }
+    lines.push(
+      [
+        result.scenario.padEnd(19),
+        String(result.escaped.length).padStart(7),
+        result.middleware_max_ms.toFixed(2).padStart(10),
+        result.event_loop_delay_max_ms.toFixed(2).padStart(11),
+        String(result.ingest_requests).padStart(7),
+        String(result.lease_requests).padStart(6),
+        String(result.log_lines_per_minute).padStart(8),
+        ` ${String(result.dispatcher_running_after_fault).padEnd(7)}`,
+        `${result.sockets_start}>${result.sockets_after_fault}>${result.sockets_after_stop}`.padStart(
+          8,
+        ),
+        String(result.recovered_after_seconds ?? "n/a").padStart(10),
+        result.stop_seconds_under_fault.toFixed(2).padStart(7),
+      ].join(" "),
+    )
+  }
+  fs.writeFileSync(path.join(directory, "console.txt"), lines.join("\n") + "\n")
+  console.log(lines.join("\n"))
+}
+
+main()

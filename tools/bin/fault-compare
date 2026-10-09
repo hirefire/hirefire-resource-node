@@ -1,0 +1,58 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { results } = require("../lib/paths")
+
+const [rubyAudit, rubyFixes, ...runs] = process.argv.slice(2)
+if (!rubyAudit || !rubyFixes) {
+  console.error(
+    "usage: tools/bin/fault-compare <Ruby audit results.json> <Ruby fix pass results.json> [run...]",
+  )
+  process.exit(64)
+}
+
+function load(file) {
+  const byScenario = {}
+  for (const entry of JSON.parse(fs.readFileSync(file, "utf8"))) {
+    byScenario[entry.scenario] = entry
+  }
+  return byScenario
+}
+
+const columns = [
+  ["Ruby audit", load(rubyAudit)],
+  ["Ruby fixed", load(rubyFixes)],
+]
+for (const run of runs.length ? runs : ["faults", "faults-2"]) {
+  columns.push([`Node ${run}`, load(path.join(results, run, "results.json"))])
+}
+
+const fields = [
+  ["ingest requests", "ingest_requests"],
+  ["lease requests", "lease_requests"],
+  ["log lines per minute", "log_lines_per_minute"],
+  ["recovered after (s)", "recovered_after_seconds"],
+  ["stop under fault (s)", "stop_seconds_under_fault"],
+  ["middleware max (ms)", "middleware_max_ms"],
+  ["escaped errors", "escaped"],
+]
+
+const lines = [
+  `| Fault | Measure | ${columns.map(([label]) => label).join(" | ")} |`,
+  `| --- | --- | ${columns.map(() => "---").join(" | ")} |`,
+]
+for (const scenario of Object.keys(columns[columns.length - 1][1])) {
+  for (const [label, key] of fields) {
+    const cells = columns.map(([, data]) => {
+      const entry = data[scenario]
+      if (!entry || entry.crashed) return "n/a"
+      const value = entry[key]
+      if (Array.isArray(value)) return String(value.length)
+      return value === null || value === undefined ? "n/a" : String(value)
+    })
+    lines.push(`| \`${scenario}\` | ${label} | ${cells.join(" | ")} |`)
+  }
+}
+console.log(lines.join("\n"))
