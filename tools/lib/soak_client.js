@@ -27,7 +27,14 @@ function start(role) {
     state.escaped.push(`unhandledRejection: ${error && error.message}`)
   })
   process.on("uncaughtException", (error) => {
-    state.escaped.push(`uncaughtException: ${error && error.message}`)
+    const where = String((error && error.stack) || "")
+      .split("\n")
+      .slice(1, 4)
+      .map((line) => line.trim().replace(library, ""))
+      .join(" <- ")
+    state.escaped.push(
+      `uncaughtException: ${error && error.message} (${where})`,
+    )
   })
   const capture = (level) => (message) => {
     state.logLines += 1

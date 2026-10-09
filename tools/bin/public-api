@@ -144,7 +144,7 @@ function declared(file) {
       add(node.name.getText(source), "import")
     }
   }
-  const anyCount = (text.match(/\bany\b/g) || []).length
+  const anyCount = (text.match(/\bany\b(?!\()/g) || []).length
   return { exportEquals, names, any: anyCount }
 }
 
