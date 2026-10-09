@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+
+project="$(bin/worktree compose-project)"
+context="tools/results/hosts-context"
+rm -rf "$context"
+mkdir -p "$context/lib" "tools/results/${HOST_RUN:-hosts}"
+cp -R tools/hosts/. "$context/"
+cp tools/lib/fake_server.js tools/lib/server_process.js "$context/lib/"
+npm pack --silent --pack-destination "$context" >/dev/null
+mv "$context"/hirefire-resource-*.tgz "$context/hirefire-resource.tgz"
+
+compose() {
+  docker compose -p "$project" -f docker-compose.yml -f tools/docker-compose.yml \
+    --profile hosts "$@"
+}
+
+compose build --build-arg "NEXT_EXTRA=${NEXT_EXTRA:-}" hosts > "tools/results/${HOST_RUN:-hosts}/build.log" 2>&1
+compose run --rm \
+  -e "REDIS_URL=redis://${project}-redis-9:6379/0" \
+  -e "HOST_ONLY=${HOST_ONLY:-}" \
+  -v "$PWD/tools/results/${HOST_RUN:-hosts}:/out" \
+  hosts > "tools/results/${HOST_RUN:-hosts}/run.log" 2>&1

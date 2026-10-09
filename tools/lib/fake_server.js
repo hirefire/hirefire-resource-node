@@ -176,7 +176,14 @@ class FakeServer {
           .subarray(end + 4, end + 4 + length)
           .toString("utf8")
         pending = pending.subarray(end + 4 + length)
-        this.handle(socket, { at: Date.now(), verb, path, headers, body })
+        this.handle(socket, {
+          at: Date.now(),
+          verb,
+          path,
+          headers,
+          body,
+          port: socket.remotePort,
+        })
       }
     })
   }
@@ -263,7 +270,9 @@ if (require.main === module) {
       reply({
         requests: server.requests
           .filter((request) => request.at >= since)
-          .map(({ at, path }) => ({ at, path })),
+          .map((request) =>
+            message.full ? request : { at: request.at, path: request.path },
+          ),
       })
     } else if (message.cmd === "stop") {
       server.stop().then(() => {

@@ -1,0 +1,13 @@
+{
+  "name": "hirefire-resource-hosts",
+  "private": true,
+  "dependencies": {
+    "bullmq": "^6",
+    "connect": "^3",
+    "express": "^5",
+    "fastify": "^5",
+    "ioredis": "^5",
+    "koa": "^3",
+    "pm2": "^6"
+  }
+}

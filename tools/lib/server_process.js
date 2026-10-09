@@ -56,8 +56,8 @@ class ServerProcess {
     return this.call("snapshot")
   }
 
-  async requests(since) {
-    return (await this.call("requests", { since })).requests
+  async requests(since, full = false) {
+    return (await this.call("requests", { since, full })).requests
   }
 
   async stop() {

@@ -25,3 +25,10 @@ services:
       - "127.0.0.1::6379"
     volumes:
       - ./tools/results/tls:/tls:ro
+
+  hosts:
+    profiles: ["hosts"]
+    build:
+      context: ./tools/results/hosts-context
+    volumes:
+      - ./tools/results/hosts:/out
