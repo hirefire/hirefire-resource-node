@@ -1,0 +1,322 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { verdictFor } = require("../lib/mutation/verdicts")
+require("../lib/mutation/rules")
+
+const [first, second] = process.argv.slice(2)
+if (!first || !second) {
+  console.error(
+    "usage: tools/bin/compare-passes <results of the first pass> <results of the second pass>",
+  )
+  process.exit(64)
+}
+const passes = [first, second]
+const out = []
+
+function read(directory, file) {
+  const full = path.join(directory, file)
+  return fs.existsSync(full) ? fs.readFileSync(full, "utf8") : null
+}
+
+function jsonl(directory, file) {
+  const text = read(directory, file)
+  if (text === null) return []
+  return text
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+}
+
+function json(directory, file) {
+  const text = read(directory, file)
+  return text === null ? null : JSON.parse(text)
+}
+
+function row(label, values) {
+  const [a, b] = values.map((value) =>
+    value === null || value === undefined ? "none" : String(value),
+  )
+  out.push(`${a === b ? "same" : "DIFF"} | ${label} | ${a} | ${b}`)
+}
+
+function section(title) {
+  out.push("", `## ${title}`, "", "result | measure | first pass | second pass")
+}
+
+function field(text, name) {
+  const match = (text || "").match(new RegExp(`^${name}: (.*)$`, "m"))
+  return match ? match[1] : null
+}
+
+section("Matrix at the named commit")
+const summaries = passes.map((pass) => read(pass, "baseline/summary.txt"))
+for (const name of ["commit", "cells", "passed", "failed", "tests run"]) {
+  row(
+    name,
+    summaries.map((text) => field(text, name)),
+  )
+}
+const coverage = passes.map((pass) => read(pass, "baseline/coverage.txt") || "")
+row(
+  "coverage total",
+  coverage.map((text) => text.split("\n").find((l) => l.startsWith("TOTAL"))),
+)
+const perFile = coverage.map((text) =>
+  text.split("\n").filter((line) => line.startsWith("src/")),
+)
+const differing = perFile[1].filter((line) => !perFile[0].includes(line))
+row("coverage rows per file", [
+  `${perFile[0].length} rows`,
+  `${perFile[1].length} rows${
+    differing.length ? `, ${differing.length} of them different` : ""
+  }`,
+])
+
+section("Ten seeded runs")
+const failing = [new Map(), new Map()]
+for (let run = 1; run <= 10; run += 1) {
+  const name = `matrix-${String(run).padStart(2, "0")}`
+  row(
+    `${name} passed of 86`,
+    passes.map((pass) => field(read(pass, `${name}/summary.txt`), "passed")),
+  )
+  passes.forEach((pass, index) => {
+    for (const cell of jsonl(pass, `${name}/cells.jsonl`)) {
+      for (const entry of cell.failed) {
+        const key = `${entry.file}: ${entry.test}`
+        const where = failing[index].get(key) || []
+        where.push(`${cell.id} run ${run}`)
+        failing[index].set(key, where)
+      }
+    }
+  })
+}
+for (const key of new Set([...failing[0].keys(), ...failing[1].keys()])) {
+  row(
+    `failures of ${key}`,
+    failing.map((map) => {
+      const where = map.get(key) || []
+      return where.length > 4
+        ? where.length
+        : `${where.length} (${where.join(", ")})`
+    }),
+  )
+}
+
+section("Reruns of failed tests")
+const reruns = passes.map((pass) => jsonl(pass, "alone/reruns.jsonl"))
+const rerunKey = (line) =>
+  `${line.test} (${line.alone ? "alone" : `cell with seed ${line.seed}`})`
+for (const key of new Set(reruns.flat().map(rerunKey))) {
+  row(
+    key,
+    reruns.map((lines) =>
+      lines
+        .filter((line) => rerunKey(line) === key)
+        .map((line) => `${line.passed} of ${line.runs} in ${line.cell}`)
+        .join(", "),
+    ),
+  )
+}
+
+section("Mutation run")
+const mutants = passes.map((pass) => jsonl(pass, "mutation/mutants.jsonl"))
+const caught = (status) => (status === "survived" ? "survived" : "caught")
+for (const status of ["killed", "timeout", "survived"]) {
+  row(
+    status,
+    mutants.map((list) => list.filter((m) => m.status === status).length),
+  )
+}
+row(
+  "changes",
+  mutants.map((list) => list.length),
+)
+row(
+  "score",
+  mutants.map((list) =>
+    list.length
+      ? `${(
+          (list.filter((m) => m.status !== "survived").length / list.length) *
+          100
+        ).toFixed(1)}%`
+      : null,
+  ),
+)
+row(
+  "survivors without a verdict",
+  mutants.map(
+    (list) =>
+      list.filter((m) => caught(m.status) === "survived" && !verdictFor(m))
+        .length,
+  ),
+)
+const byId = new Map(mutants[0].map((mutant) => [mutant.id, mutant]))
+const changed = mutants[1].filter(
+  (mutant) =>
+    byId.has(mutant.id) &&
+    caught(byId.get(mutant.id).status) !== caught(mutant.status),
+)
+out.push(
+  "",
+  `changes that ended differently (caught against survived): ${changed.length}`,
+)
+for (const mutant of changed) {
+  out.push(
+    `  ${mutant.file}:${mutant.line} ${mutant.mutator} ${JSON.stringify(
+      mutant.original,
+    )} -> ${JSON.stringify(mutant.replacement)}: ${
+      byId.get(mutant.id).status
+    }, then ${mutant.status}`,
+  )
+}
+const groups = mutants.map((list) => {
+  const counts = new Map()
+  for (const mutant of list) {
+    if (mutant.status !== "survived") continue
+    const verdict = verdictFor(mutant)
+    const key = verdict ? `${verdict.verdict}: ${verdict.reason}` : "no verdict"
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return counts
+})
+out.push("", "result | verdict group | first pass | second pass")
+for (const key of new Set([...groups[0].keys(), ...groups[1].keys()])) {
+  row(
+    key,
+    groups.map((map) => map.get(key) || 0),
+  )
+}
+
+section("Soak")
+const soak = passes.map((pass) => json(pass, "soak/summary.json"))
+const top = [
+  "seconds",
+  "requests_sent_to_app",
+  "requests_failed_to_app",
+  "worker_restarts",
+  "restart_ready_ms_median",
+  "restart_ready_ms_max",
+  "server_open_sockets_at_end",
+]
+for (const name of top) {
+  row(
+    name,
+    soak.map((summary) => summary && summary[name]),
+  )
+}
+row(
+  "server requests",
+  soak.map((summary) => summary && JSON.stringify(summary.server_requests)),
+)
+for (const name of ["escaped_worker_a", "escaped_primary"]) {
+  row(
+    `${name}, count`,
+    soak.map((summary) => summary && summary[name].length),
+  )
+}
+const span = (value) =>
+  value && typeof value === "object"
+    ? `first ${value.first}, last ${value.last}, min ${value.min}, max ${value.max}`
+    : value
+for (const role of ["worker-a", "primary"]) {
+  for (const name of [
+    "middleware_calls",
+    "middleware_max_ms",
+    "middleware_calls_over_1_ms",
+    "heap_used_kb_after_gc",
+    "rss_kb",
+    "handles",
+    "sockets",
+    "timers",
+    "listeners",
+    "event_loop_delay_p99_ms_worst",
+    "event_loop_delay_max_ms",
+    "log_lines",
+    "log_lines_per_minute",
+  ]) {
+    row(
+      `${role} ${name}`,
+      soak.map((summary) => summary && span(summary.roles[role][name])),
+    )
+  }
+}
+function curve(pass, column) {
+  const text = read(pass, "soak/soak.csv")
+  if (text === null) return null
+  const [header, ...lines] = text.trim().split("\n")
+  const names = header.split(",")
+  const rows = lines
+    .map((line) => line.split(","))
+    .filter((cells) => cells[names.indexOf("role")] === "worker-a")
+  const at = (seconds) => {
+    let best = rows[0]
+    for (const cells of rows) {
+      if (
+        Math.abs(Number(cells[0]) - seconds) <
+        Math.abs(Number(best[0]) - seconds)
+      ) {
+        best = cells
+      }
+    }
+    return Number(best[names.indexOf(column)])
+  }
+  return [0, 300, 600, 900, 1200, 1500, 1800].map(at)
+}
+row(
+  "worker-a heap in kB at minute 0, 5, 10, 15, 20, 25, 30",
+  passes.map((pass) => (curve(pass, "heap_used_kb") || []).join(", ")),
+)
+row(
+  "worker-a resident memory in kB at the same minutes",
+  passes.map((pass) => (curve(pass, "rss_kb") || []).join(", ")),
+)
+
+section("Hosts")
+const hostFiles = [
+  "hosts.json",
+  "hosts-next-with-drivers.json",
+  "hosts-next16-with-drivers.json",
+]
+const hosts = passes.map((pass) => {
+  const map = new Map()
+  for (const file of hostFiles) {
+    for (const host of json(pass, file) || []) {
+      map.set(`${file.replace(".json", "")}: ${host.name}`, host)
+    }
+  }
+  return map
+})
+function describe(host) {
+  if (!host) return null
+  if (host.loads) {
+    const loads = Object.values(host.loads)
+    return `${
+      loads.filter((load) => load.require === "ok" && load.import === "ok")
+        .length
+    } of ${loads.length} subpaths load both ways`
+  }
+  if (host.sending_connections) {
+    return `${host.sending_connections.length} senders, ${
+      host.warnings.length
+    } warnings, signal ends it: ${host.sigterm && host.sigterm.exited}, ${
+      host.sigterm && host.sigterm.ingest_requests_after_signal
+    } requests after the signal`
+  }
+  return `exit ${host.exit_code}${
+    host.exits_by_itself === undefined
+      ? ""
+      : `, exits by itself: ${host.exits_by_itself}`
+  }${host.lines && host.lines[0] ? `, ${host.lines[0]}` : ""}`
+}
+for (const key of new Set([...hosts[0].keys(), ...hosts[1].keys()])) {
+  row(
+    key,
+    hosts.map((map) => describe(map.get(key))),
+  )
+}
+
+console.log(out.join("\n").trim())

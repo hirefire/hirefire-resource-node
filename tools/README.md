@@ -19,6 +19,7 @@ Run every script from the repository root with the first Node.js of `.tool-versi
 | `bin/soak`              | Runs a `cluster` app for a long time with faults and worker restarts                                                                  |
 | `bin/host-run`          | Boots the packed tarball in a Linux container under each framework, `cluster`, PM2, `worker_threads`, and Next.js                     |
 | `bin/long-runs`         | Runs the matrix, the reruns, the mutation run, the soak, and the hosts in order, and writes each exit code to `results/long-runs.txt` |
+| `bin/compare-passes`    | Prints what differs between the results of two passes of the long runs                                                                |
 | `bin/public-api`        | Writes the names the code exports and the type files declare, or checks them with `--check`                                           |
 | `bin/wire-goldens`      | Captures the ingest and lease requests, or checks them with `--check`. `bin/wire-compare` compares them with Ruby                     |
 | `baseline/`             | The golden copies of the public names and the wire requests, with the Ruby wire requests beside them                                  |
