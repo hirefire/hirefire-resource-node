@@ -96,30 +96,42 @@ section(
 section("The comparison table", null, [
   [`tools/bin/check-audit ${audit} | grep '^comparison'`],
 ])
-section("The five wire scenarios", null, [
-  ["tools/bin/wire-goldens --check"],
-  ["tools/bin/wire-compare | grep -E '^##|differences'"],
-])
-section("Mutation score per file", null, [["tools/bin/mutation-verdicts"]])
-section("Faults, matrix runs, soak, hosts", null, [
-  ["cat tools/results/faults/console.txt"],
+section(
+  "The five wire scenarios",
+  "The golden copies are stable, and the 64 differences from the Ruby golden copies are nine kinds, each explained in [ruby-comparison.md](./ruby-comparison.md#wire): the identity of the runtime, defaults of the HTTP library, the spelling of a whole number, and the adapter of the scenario.",
   [
-    "for run in tools/results/matrix-*/; do grep -E '^(run|seed|passed|failed):' $run/summary.txt | tr '\\n' ' '; echo; done",
+    ["tools/bin/wire-goldens --check"],
+    ["tools/bin/wire-compare | grep -E '^##|differences'"],
   ],
-  ["cat tools/results/alone/reruns.jsonl"],
+)
+section(
+  "Mutation score per file",
+  "Every surviving change has a verdict. A finding is named by the working name it had during the run, which [results/finding-numbers.json](./results/finding-numbers.json) maps to its number. The same table with numbers is in [stress.md](./stress.md#mutation-testing).",
+  [["tools/bin/mutation-verdicts"]],
+)
+section(
+  "Faults, matrix runs, soak, hosts",
+  "The result per fault type beside the Ruby numbers is in [results/fault-compare.md](./results/fault-compare.md) and read in [stress.md](./stress.md#faults). The flaky tests of the 10 matrix runs are named in [stress.md](./stress.md#matrix): three tests, each rerun alone, and four tests of one file that depend on the order. The blocks below are the first fault run, the 10 matrix runs, the reruns, the soak, and the hosts.",
   [
-    "jq -c '{seconds, requests_sent_to_app, requests_failed_to_app, worker_restarts, server_requests, escaped_worker_a}' tools/results/soak/summary.json",
+    ["cat tools/results/faults/console.txt"],
+    [
+      "for run in tools/results/matrix-*/; do grep -E '^(run|seed|passed|failed):' $run/summary.txt | tr '\\n' ' '; echo; done",
+    ],
+    ["cat tools/results/alone/reruns.jsonl"],
+    [
+      "jq -c '{seconds, requests_sent_to_app, requests_failed_to_app, worker_restarts, server_requests, escaped_worker_a}' tools/results/soak/summary.json",
+    ],
+    [
+      "jq -c '.roles[\"worker-a\"] | {rss_kb, heap_used_kb_after_gc, handles, sockets, listeners, event_loop_delay_p99_ms_worst, event_loop_delay_max_ms, middleware_calls, middleware_max_ms, log_lines_per_minute}' tools/results/soak/summary.json",
+    ],
+    [
+      "jq -r '.[] | select(.sending_connections) | \"\\(.name): \\(.sending_connections|length) senders, \\(.warnings|length) warnings, SIGTERM \\(.sigterm.exit_after_ms) ms, \\(.sigterm.ingest_requests_after_signal) requests after it\"' tools/results/hosts.json",
+    ],
+    [
+      'jq -r \'.[] | select(.name|test("build|idle|one-off")) | "\\(.name): exit \\(.exit_code) \\(.exits_by_itself // "") \\((.lines // [])[0:2] | join(" / "))"\' tools/results/hosts.json tools/results/hosts-next16-with-drivers.json tools/results/hosts-next-with-drivers.json',
+    ],
   ],
-  [
-    "jq -c '.roles[\"worker-a\"] | {rss_kb, heap_used_kb_after_gc, handles, sockets, listeners, event_loop_delay_p99_ms_worst, event_loop_delay_max_ms, middleware_calls, middleware_max_ms, log_lines_per_minute}' tools/results/soak/summary.json",
-  ],
-  [
-    "jq -r '.[] | select(.sending_connections) | \"\\(.name): \\(.sending_connections|length) senders, \\(.warnings|length) warnings, SIGTERM \\(.sigterm.exit_after_ms) ms, \\(.sigterm.ingest_requests_after_signal) requests after it\"' tools/results/hosts.json",
-  ],
-  [
-    'jq -r \'.[] | select(.name|test("build|idle|one-off")) | "\\(.name): exit \\(.exit_code) \\(.exits_by_itself // "") \\((.lines // [])[0:2] | join(" / "))"\' tools/results/hosts.json tools/results/hosts-next16-with-drivers.json tools/results/hosts-next-with-drivers.json',
-  ],
-])
+)
 section("Every finding has all fields", null, [
   [`tools/bin/check-audit ${audit}`],
 ])
