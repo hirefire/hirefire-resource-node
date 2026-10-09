@@ -4,9 +4,10 @@ cd "$(dirname "$0")/../.."
 
 count="${1:-10}"
 base="${2:-4100}"
+prefix="${3:-matrix}"
 status=0
 for index in $(seq 1 "$count"); do
-  run="$(printf 'matrix-%02d' "$index")"
+  run="$(printf '%s-%02d' "$prefix" "$index")"
   seed=$((base + index))
   if ! tools/bin/matrix-run "$run" "--seed=${seed}" > "tools/results/${run}.out" 2>&1; then
     status=1
