@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { results } = require("../lib/paths")
+const { verdictFor } = require("../lib/mutation/verdicts")
+require("../lib/mutation/rules")
+
+const directory = path.join(results, process.env.TOOLS_RUN || "mutation")
+const mutants = fs
+  .readFileSync(path.join(directory, "mutants.jsonl"), "utf8")
+  .split("\n")
+  .filter(Boolean)
+  .map((line) => JSON.parse(line))
+
+const files = {}
+const groups = {}
+const open = []
+for (const mutant of mutants) {
+  const file = (files[mutant.file] = files[mutant.file] || {
+    total: 0,
+    killed: 0,
+    timeout: 0,
+    survived: 0,
+    equivalent: 0,
+    finding: 0,
+  })
+  file.total += 1
+  if (mutant.status === "killed") file.killed += 1
+  else if (mutant.status === "timeout") file.timeout += 1
+  else {
+    file.survived += 1
+    const verdict = verdictFor(mutant)
+    if (!verdict) {
+      open.push(mutant)
+      continue
+    }
+    if (verdict.verdict === "equivalent") file.equivalent += 1
+    else file.finding += 1
+    const key = `${verdict.verdict}\t${verdict.reason}`
+    groups[key] = groups[key] || { count: 0, files: new Set() }
+    groups[key].count += 1
+    groups[key].files.add(mutant.file)
+  }
+}
+
+const lines = [
+  "file | changes | caught | timed out | survived | equivalent | tied to a finding | score",
+]
+const totals = {
+  total: 0,
+  killed: 0,
+  timeout: 0,
+  survived: 0,
+  equivalent: 0,
+  finding: 0,
+}
+for (const [name, file] of Object.entries(files).sort()) {
+  for (const key of Object.keys(totals)) totals[key] += file[key]
+  const score = (((file.killed + file.timeout) / file.total) * 100).toFixed(1)
+  lines.push(
+    `${name} | ${file.total} | ${file.killed} | ${file.timeout} | ${file.survived} | ${file.equivalent} | ${file.finding} | ${score}%`,
+  )
+}
+lines.push(
+  `TOTAL | ${totals.total} | ${totals.killed} | ${totals.timeout} | ${
+    totals.survived
+  } | ${totals.equivalent} | ${totals.finding} | ${(
+    ((totals.killed + totals.timeout) / totals.total) *
+    100
+  ).toFixed(1)}%`,
+)
+lines.push("")
+lines.push("verdict | changes | files | reason")
+for (const [key, group] of Object.entries(groups).sort(
+  (a, b) => b[1].count - a[1].count,
+)) {
+  const [verdict, reason] = key.split("\t")
+  lines.push(
+    `${verdict} | ${group.count} | ${[...group.files]
+      .map((file) => file.replace("src/", ""))
+      .join(", ")} | ${reason}`,
+  )
+}
+lines.push("")
+lines.push(`surviving changes without a verdict: ${open.length}`)
+for (const mutant of open) {
+  lines.push(
+    `  ${mutant.file}:${mutant.line} ${mutant.mutator} ${JSON.stringify(
+      mutant.original,
+    )} -> ${JSON.stringify(mutant.replacement)}`,
+  )
+}
+fs.writeFileSync(path.join(directory, "verdicts.txt"), lines.join("\n") + "\n")
+console.log(lines.join("\n"))
+process.exit(open.length === 0 ? 0 : 1)

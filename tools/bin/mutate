@@ -13,7 +13,9 @@ const NODE_MAJOR = "26"
 const CORE_TREES = Number(process.env.TOOLS_CORE_TREES || 6)
 const IN_FLIGHT = Number(process.env.TOOLS_MUTANTS_IN_FLIGHT || 10)
 const CORE_TIMEOUT_MS = 90_000
-const CELL_TIMEOUT_MS = 150_000
+const CELL_TIMEOUT_MS = 60_000
+const MUTANT_TIMEOUT_FLOOR_MS = 15_000
+const MUTANT_TIMEOUT_FACTOR = 8
 const SLOTS = {
   "bullmq-4": 2,
   "bullmq-5": 3,
@@ -245,7 +247,7 @@ async function coverage() {
 }
 
 function plan(mutant, core, cellCoverage) {
-  const lines = []
+  const lines = [mutant.statementLine]
   for (let line = mutant.line; line <= mutant.endLine; line += 1)
     lines.push(line)
   const steps = []
@@ -253,6 +255,9 @@ function plan(mutant, core, cellCoverage) {
     .filter(([, covered]) => lines.some((line) => covered.includes(line)))
     .map(([test]) => test)
     .sort((a, b) => core.seconds[a] - core.seconds[b])
+  const loading = Object.keys(core.byFile[mutant.file] || {}).sort(
+    (a, b) => core.seconds[a] - core.seconds[b],
+  )
   if (coreTests.length > 0) steps.push({ pool: "core", tests: coreTests })
   for (const cell of packageCells()) {
     const from =
@@ -264,6 +269,15 @@ function plan(mutant, core, cellCoverage) {
     ]
     if (!covered || !lines.some((line) => covered.includes(line))) continue
     steps.push({ cell })
+  }
+  if (steps.length === 0) {
+    if (loading.length > 0) steps.push({ pool: "core", tests: loading })
+    for (const cell of packageCells()) {
+      if ((cellCoverage[mutant.file] || {})[`node${NODE_MAJOR}-${cell.key}`]) {
+        steps.push({ cell })
+      }
+    }
+    for (const step of steps) step.unrun = true
   }
   return steps
 }
@@ -345,16 +359,21 @@ async function run() {
     delete outcome.start
     delete outcome.end
     if (steps.length === 0) outcome.status = "uncovered"
+    if (steps.some((step) => step.unrun)) outcome.unrun = true
     for (const step of steps) {
       let result
       if (step.pool === "core") {
         const name = await takeCore()
         try {
+          const usual = step.tests.reduce(
+            (sum, test) => sum + core.seconds[test] * 1000,
+            0,
+          )
           result = await inTree(
             name,
             mutant,
             ["--runInBand", "--bail", ...step.tests],
-            CORE_TIMEOUT_MS,
+            Math.max(MUTANT_TIMEOUT_FLOOR_MS, usual * MUTANT_TIMEOUT_FACTOR),
           )
         } finally {
           giveCore(name)

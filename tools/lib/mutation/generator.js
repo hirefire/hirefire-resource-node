@@ -26,6 +26,7 @@ function isText(node) {
 function generate(file, source) {
   const ast = parser.parse(source, { sourceType: "script", ranges: true })
   const mutants = []
+  let current = null
   const add = (mutator, node, start, end, replacement) => {
     const original = source.slice(start, end)
     if (original === replacement) return
@@ -34,9 +35,14 @@ function generate(file, source) {
       .update(`${file}\0${start}\0${end}\0${replacement}`)
       .digest("hex")
       .slice(0, 10)
+    const statement = current && current.getStatementParent()
     mutants.push({
       id,
       file,
+      statementLine:
+        statement && mutator !== "body"
+          ? statement.node.loc.start.line
+          : node.loc.start.line,
       line: node.loc.start.line,
       endLine: node.loc.end.line,
       mutator,
@@ -65,6 +71,9 @@ function generate(file, source) {
   }
 
   traverse(ast, {
+    enter(path) {
+      current = path
+    },
     BinaryExpression(path) {
       const node = path.node
       operator(path, BOUNDARY, "boundary")
