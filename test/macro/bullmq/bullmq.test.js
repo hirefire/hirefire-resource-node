@@ -356,6 +356,24 @@ describe("BullMQ", () => {
     expect(count).toBe(1)
   })
 
+  test("jobQueueSize reads the Redis of an ioredis client that is passed as the connection", async () => {
+    await redis.lpush("bull:default:wait", "1", "2", "3")
+    const app = new IORedis(redisURL, {
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: false,
+    })
+    try {
+      await app.ping().catch(() => {})
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(await jobQueueSize("default", { connection: app })).toBe(3)
+      expect(await jobQueueSize({ connection: app })).toBe(3)
+      expect(app.status).toBe("ready")
+    } finally {
+      app.disconnect()
+    }
+  })
+
   test("jobQueueSize drops blank and whitespace-only queue names", async () => {
     await defaultQueue.add("liveJob", {})
     await mailerQueue.add("liveJob", {})

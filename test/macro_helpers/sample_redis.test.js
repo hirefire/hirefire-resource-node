@@ -88,6 +88,7 @@ describe("the Redis sample helper", () => {
       maxRetriesPerRequest: 1,
       connectTimeout: 5000,
       commandTimeout: 5000,
+      enableOfflineQueue: true,
       retryStrategy: expect.any(Function),
     })
     expect([1, 2, 3, 4].map(options.retryStrategy)).toEqual([
@@ -128,12 +129,51 @@ describe("the Redis sample helper", () => {
         maxRetriesPerRequest: 1,
         connectTimeout: 100,
         commandTimeout: 5000,
+        enableOfflineQueue: true,
         retryStrategy: expect.any(Function),
         host: "10.0.0.5",
         port: 6380,
         db: 3,
       },
     ])
+  })
+
+  test("a client of the app is duplicated with the limits of a sample, and is not closed", async () => {
+    const copies = []
+    const app = {
+      options: { host: "10.0.0.5", port: 6380, enableOfflineQueue: false },
+      quit: jest.fn(),
+      disconnect: jest.fn(),
+      duplicate: jest.fn((overrides) => {
+        copies.push(client({ ...app.options, ...overrides }))
+        return copies.at(-1)
+      }),
+    }
+    process.env.DYNO = "worker.1"
+    replies = [[null, 6]]
+
+    const total = await waiting([
+      "default",
+      { connection: app, connectionOptions: { db: 3 } },
+    ])
+
+    expect(total).toBe(6)
+    expect(IORedis).not.toHaveBeenCalled()
+    expect(app.duplicate.mock.calls).toEqual([
+      [
+        {
+          maxRetriesPerRequest: 1,
+          connectTimeout: 5000,
+          commandTimeout: 5000,
+          enableOfflineQueue: true,
+          retryStrategy: expect.any(Function),
+          db: 3,
+        },
+      ],
+    ])
+    expect(copies[0].quit).toHaveBeenCalledTimes(1)
+    expect(app.quit).not.toHaveBeenCalled()
+    expect(app.disconnect).not.toHaveBeenCalled()
   })
 
   test("without a connection the first variable of the ladder that is set is used", async () => {

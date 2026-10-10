@@ -7,6 +7,7 @@ const SAMPLE_REDIS_OPTIONS = {
   maxRetriesPerRequest: 1,
   connectTimeout: 5000,
   commandTimeout: 5000,
+  enableOfflineQueue: true,
   retryStrategy(times) {
     return times > 2 ? null : times * 50
   },
@@ -48,7 +49,6 @@ async function sample(args, states, commands, count) {
 }
 
 function connect({ connection, connectionOptions }) {
-  const IORedis = require("ioredis")
   const target =
     connection ||
     process.env.REDIS_TLS_URL ||
@@ -58,6 +58,11 @@ function connect({ connection, connectionOptions }) {
     process.env.OPENREDIS_URL ||
     "redis://localhost:6379/0"
 
+  if (typeof target.duplicate === "function") {
+    return target.duplicate({ ...SAMPLE_REDIS_OPTIONS, ...connectionOptions })
+  }
+
+  const IORedis = require("ioredis")
   return typeof target === "object"
     ? new IORedis({ ...SAMPLE_REDIS_OPTIONS, ...target, ...connectionOptions })
     : new IORedis(target, {

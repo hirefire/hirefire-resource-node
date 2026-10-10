@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - HTTP requests to HireFire time out within five seconds even when DNS never completes.
 - BullMQ samples fail within five seconds when Redis does not respond.
 - BullMQ samples with no queue names use Redis `SCAN` instead of `KEYS`.
+- An ioredis client passed as `connection` to a BullMQ sample reads the Redis of that client. 1.x read `localhost:6379`.
 
 ## [1.2.0] - 2026-02-03
 
