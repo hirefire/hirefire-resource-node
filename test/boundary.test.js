@@ -366,6 +366,36 @@ describe("the client at its boundary", () => {
     })
   })
 
+  describe("a process with a data URL of its own", () => {
+    beforeEach(() => {
+      process.env.DYNO = "worker.1"
+    })
+
+    test("warns once when the URL sends the token in clear text", async () => {
+      process.env.HIREFIRE_DATA_URL = "http://metrics.example"
+      configure((config) => config.dyno("worker", () => 1))
+      await pass(3)
+
+      expect(logged("W")).toEqual([
+        "W [HireFire] HIREFIRE_DATA_URL uses http, so the HireFire token is sent to metrics.example in clear text. Use an https URL.",
+      ])
+    })
+
+    test("names the variable when the URL cannot be used", async () => {
+      process.env.HIREFIRE_DATA_URL = "data.example.com"
+      configure((config) => config.dyno("worker", () => 1))
+      await pass(1)
+
+      expect(new Set(logged("E"))).toEqual(
+        new Set([
+          "E [HireFire] RequestError: HIREFIRE_DATA_URL must be an http or https URL with a host.",
+          "E [HireFire] Dispatch error: RequestError: HIREFIRE_DATA_URL must be an http or https URL with a host.",
+        ]),
+      )
+      expect(requests).toEqual([])
+    })
+  })
+
   describe("a Heroku one-off dyno", () => {
     test.each(["run.4821", "release.1234"])(
       "named %s sends nothing and logs nothing",

@@ -268,7 +268,50 @@ describe("Client", () => {
     await expect(new Client({ token: "t" }).close()).resolves.toBeUndefined()
   })
 
+  test.each(["data.example.com", "ftp://data.example.com", "http://", "//x"])(
+    "a data url of %j fails the request with an error that names the variable",
+    async (value) => {
+      process.env.HIREFIRE_DATA_URL = value
+      const promise = client.submitSamples(BODY)
+      await expect(promise).rejects.toBeInstanceOf(RequestError)
+      await expect(promise).rejects.toThrow(
+        "HIREFIRE_DATA_URL must be an http or https URL with a host.",
+      )
+    },
+  )
+
+  test("warns about a data url that sends the token in clear text", async () => {
+    const warnPlainHttpDataUrlOnce = jest.fn()
+    const client = new Client({
+      token: "t",
+      _warnPlainHttpDataUrlOnce: warnPlainHttpDataUrlOnce,
+    })
+    nock("http://metrics.example:8080").post("/metrics/ingest").reply(200)
+    process.env.HIREFIRE_DATA_URL = "http://metrics.example:8080"
+    await client.submitSamples(BODY)
+
+    expect(warnPlainHttpDataUrlOnce.mock.calls).toEqual([["metrics.example"]])
+  })
+
+  test.each([
+    "https://metrics.example",
+    "http://localhost:9999",
+    "http://127.0.0.1:9999",
+    "http://[::1]:9999",
+  ])("does not warn about a data url of %j", async (value) => {
+    const warnPlainHttpDataUrlOnce = jest.fn()
+    const client = new Client({
+      token: "t",
+      _warnPlainHttpDataUrlOnce: warnPlainHttpDataUrlOnce,
+    })
+    process.env.HIREFIRE_DATA_URL = value
+    await client.submitSamples(BODY).catch(() => {})
+
+    expect(warnPlainHttpDataUrlOnce).not.toHaveBeenCalled()
+  })
+
   test("rebuilds the keep alive agent when the base url scheme changes", async () => {
+    client = new Client({ token: "t", _warnPlainHttpDataUrlOnce() {} })
     nock("http://metrics.example").post("/metrics/ingest").reply(200)
     process.env.HIREFIRE_DATA_URL = "http://metrics.example"
     await client.submitSamples(BODY)

@@ -3,6 +3,8 @@ const https = require("https")
 const VERSION = require("./version")
 
 const STALE_CONNECTION_CODES = new Set(["ECONNRESET", "ECONNABORTED", "EPIPE"])
+const DEFAULT_URL = "https://data.hirefire.io"
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
 
 function isStaleConnectionCode(code) {
   return (
@@ -283,10 +285,20 @@ class Client {
   }
 
   _baseUrl() {
-    const raw = process.env.HIREFIRE_DATA_URL || "https://data.hirefire.io"
-    let stripped = String(raw).trim().replace(/\/+$/, "")
-    if (stripped === "") stripped = "https://data.hirefire.io"
-    return stripped
+    const url =
+      String(process.env.HIREFIRE_DATA_URL ?? "")
+        .trim()
+        .replace(/\/+$/, "") || DEFAULT_URL
+    const uri = URL.canParse(url) ? new URL(url) : null
+    if (!uri || !["http:", "https:"].includes(uri.protocol) || !uri.hostname) {
+      throw new RequestError(
+        "HIREFIRE_DATA_URL must be an http or https URL with a host.",
+      )
+    }
+    if (uri.protocol === "http:" && !LOCAL_HOSTS.includes(uri.hostname)) {
+      this._configuration._warnPlainHttpDataUrlOnce(uri.hostname)
+    }
+    return url
   }
 
   _token() {

@@ -3,6 +3,19 @@ const Dispatcher = require("../src/dispatcher")
 const Buffer = require("../src/buffer")
 
 describe("Configuration", () => {
+  test("warns once about a data url that sends the token in clear text", () => {
+    const config = new Configuration()
+    config.logger = { warn: jest.fn() }
+    config._warnPlainHttpDataUrlOnce("metrics.example")
+    config._warnPlainHttpDataUrlOnce("metrics.example")
+
+    expect(config.logger.warn.mock.calls).toEqual([
+      [
+        "[HireFire] HIREFIRE_DATA_URL uses http, so the HireFire token is sent to metrics.example in clear text. Use an https URL.",
+      ],
+    ])
+  })
+
   test("a token set in code does not show when the client is inspected", () => {
     const util = require("util")
     const HireFire = require("../src")

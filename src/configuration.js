@@ -41,6 +41,7 @@ class Configuration {
     this._rqtUnresolvedWarned = false
     this._identityNameTooLongWarned = false
     this._bareWebDynoWarned = false
+    this._plainHttpDataUrlWarned = false
   }
 
   get token() {
@@ -148,6 +149,17 @@ class Configuration {
       this._alwaysOnCpu = new CPU(identity, this)
     }
     return [this._alwaysOnCpu]
+  }
+
+  _warnPlainHttpDataUrlOnce(host) {
+    if (this._plainHttpDataUrlWarned) return
+    this._plainHttpDataUrlWarned = true
+    safeLog(
+      this.logger,
+      "warn",
+      "[HireFire] HIREFIRE_DATA_URL uses http, so the HireFire token " +
+        `is sent to ${host} in clear text. Use an https URL.`,
+    )
   }
 
   _register(name, source, sampler) {
