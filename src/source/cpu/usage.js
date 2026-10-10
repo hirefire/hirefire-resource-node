@@ -148,15 +148,7 @@ const Usage = {
   },
 
   processorCount() {
-    try {
-      if (typeof os.availableParallelism === "function") {
-        return os.availableParallelism()
-      }
-      const count = os.cpus().length
-      return count > 0 ? count : 1
-    } catch {
-      return 1
-    }
+    return os.availableParallelism()
   },
 
   number(value) {

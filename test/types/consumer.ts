@@ -40,8 +40,3 @@ for (const cpu of configuration.activeCpuSources()) {
   void cpu.name
   cpu.sample()
 }
-
-if (configuration.http) {
-  void configuration.http.name
-  configuration.http.sample(1)
-}

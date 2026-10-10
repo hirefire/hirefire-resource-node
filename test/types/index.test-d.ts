@@ -16,7 +16,7 @@ const configuration = HireFire.configuration
 
 expectType<string | null>(configuration.token)
 expectType<string | null>(configuration.httpName)
-expectType<string | undefined>(configuration.http?.name)
+expectError(configuration.http)
 expectType<number>(Configuration.MAX_NAME_BYTES)
 configuration.token = "token"
 configuration.token = null
@@ -45,7 +45,7 @@ expectType<Promise<boolean>>(configuration.dispatcher.stop())
 expectType<Promise<boolean>>(configuration.dispatcher.stop({ flush: false }))
 expectType<void>(configuration.markHttpActive())
 expectType<boolean>(configuration.rqtEnabled)
-expectType<boolean>(configuration.rqtLiveness)
+expectError(configuration.rqtLiveness)
 
 expectType<void>(configuration.buffer.sample("web", "rqt", 1))
 expectType<{

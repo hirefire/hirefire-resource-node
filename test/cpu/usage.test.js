@@ -135,39 +135,10 @@ describe("CPU.Usage", () => {
   })
 
   describe("processorCount", () => {
-    test("falls back to os cpus when available parallelism is unavailable", () => {
-      const original = os.availableParallelism
-      os.availableParallelism = undefined
-      try {
-        jest.spyOn(os, "cpus").mockReturnValue([{}, {}, {}])
-        expect(Usage.processorCount()).toBe(3)
-      } finally {
-        os.availableParallelism = original
-      }
-    })
+    test("is the available parallelism of the machine", () => {
+      jest.spyOn(os, "availableParallelism").mockReturnValue(6)
 
-    test("returns at least 1 when no cpu information is available", () => {
-      const original = os.availableParallelism
-      os.availableParallelism = undefined
-      try {
-        jest.spyOn(os, "cpus").mockReturnValue([])
-        expect(Usage.processorCount()).toBe(1)
-      } finally {
-        os.availableParallelism = original
-      }
-    })
-
-    test("falls back to 1 when the os query throws", () => {
-      const original = os.availableParallelism
-      os.availableParallelism = undefined
-      try {
-        jest.spyOn(os, "cpus").mockImplementation(() => {
-          throw new Error("os unavailable")
-        })
-        expect(Usage.processorCount()).toBe(1)
-      } finally {
-        os.availableParallelism = original
-      }
+      expect(Usage.processorCount()).toBe(6)
     })
   })
 

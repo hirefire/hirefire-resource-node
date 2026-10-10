@@ -49,24 +49,18 @@ describe("Configuration", () => {
     expect(config.logger).toBe(custom)
   })
 
-  test("web default to null", () => {
-    expect(config.http).toBeNull()
-  })
-
   test("job queues default to empty", () => {
     expect(config.jobQueues.any()).toBe(false)
   })
 
   test("dyno bare web is noop", () => {
     config.dyno("web")
-    expect(config.http).toBeNull()
     expect(config.rqtEnabled).toBe(false)
     expect(config.jobQueues.any()).toBe(false)
   })
 
   test("dyno bare web is case insensitive noop", () => {
     config.dyno("Web")
-    expect(config.http).toBeNull()
     expect(config.rqtEnabled).toBe(false)
   })
 
@@ -166,7 +160,6 @@ describe("Configuration", () => {
   test("bare web then job queue under web", () => {
     config.dyno("web")
     config.dyno("web", () => 1)
-    expect(config.http).toBeNull()
     expect([...config.jobQueues].map((w) => w.name)).toEqual(["web"])
   })
 
@@ -251,22 +244,6 @@ describe("Configuration", () => {
     expect(config.token).toBe("abc")
   })
 
-  test("rqt liveness when enabled and identity present", () => {
-    process.env.DYNO = "web.1"
-    expect(config.rqtLiveness).toBe(true)
-  })
-
-  test("rqt liveness denied when identity unresolved", () => {
-    config.markHttpActive()
-    expect(config.rqtLiveness).toBe(false)
-  })
-
-  test("rqt liveness when identity and traffic match", () => {
-    process.env.DYNO = "worker.1"
-    config.markHttpActive()
-    expect(config.rqtLiveness).toBe(true)
-  })
-
   test("rqt enabled for heroku web process without explicit web", () => {
     process.env.DYNO = "web.1"
     expect(config.rqtEnabled).toBe(true)
@@ -339,7 +316,7 @@ describe("Configuration", () => {
 
     config.dyno("web")
     config.activeCpuSources()
-    config.rqtLiveness
+    config.httpName
 
     expect(
       warn.mock.calls.filter((c) => String(c[0]).includes("app-wide")).length,
@@ -370,10 +347,10 @@ describe("Configuration", () => {
     expect(config.token).toBe("from-env")
   })
 
-  test("rqt liveness false when armed but identity unresolved", () => {
+  test("no http name and no http source when armed but identity unresolved", () => {
     config.markHttpActive()
     expect(config.rqtEnabled).toBe(true)
-    expect(config.rqtLiveness).toBe(false)
+    expect(config.httpName).toBeNull()
     expect(config.httpSource).toBeNull()
   })
 
@@ -397,7 +374,6 @@ describe("Configuration", () => {
     process.env.RENDER_SERVICE_NAME = "api"
     process.env.RENDER_SERVICE_TYPE = "web"
     expect(config.rqtEnabled).toBe(true)
-    expect(config.rqtLiveness).toBe(true)
     expect(config.httpName).toBe("api")
   })
 
@@ -407,9 +383,8 @@ describe("Configuration", () => {
     expect(config.rqtEnabled).toBe(false)
   })
 
-  test("rqt liveness false for non http identity without explicit web", () => {
+  test("rqt not enabled for non http identity without explicit web", () => {
     process.env.HIREFIRE_SERVICE_NAME = "clock"
     expect(config.rqtEnabled).toBe(false)
-    expect(config.rqtLiveness).toBe(false)
   })
 })

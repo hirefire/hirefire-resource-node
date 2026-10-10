@@ -3,7 +3,6 @@ declare class Configuration {
   static MAX_NAME_BYTES: number
   logger: Logger | null
   forceStart: boolean
-  http: HTTP | null
   jobQueues: JobQueues
   set token(value: string | null | undefined)
   get token(): string | null
@@ -15,7 +14,6 @@ declare class Configuration {
   get httpSource(): HTTP | null
   markHttpActive(): void
   get rqtEnabled(): boolean
-  get rqtLiveness(): boolean
   activeCpuSources(): CPU[]
 }
 declare namespace Configuration {

@@ -27,11 +27,9 @@ class Configuration {
   #token = null
 
   constructor() {
-    this.http = null
     this.jobQueues = new JobQueues()
     this.logger = console
     this.forceStart = false
-    this._sourcesByName = new Map()
     this._buffer = null
     this._dispatcher = null
     this._alwaysOnCpu = null
@@ -68,7 +66,7 @@ class Configuration {
     name = coerceName(name)
 
     if (typeof sampler === "function") {
-      this._register(name, "job_queue", sampler)
+      this._register(name, sampler)
       return
     }
 
@@ -127,10 +125,6 @@ class Configuration {
     return this._alwaysOnHttp
   }
 
-  get rqtLiveness() {
-    return this.rqtEnabled && this._softIdentity() != null
-  }
-
   activeCpuSources() {
     const identity = this._softIdentity()
     if (identity == null) {
@@ -157,22 +151,14 @@ class Configuration {
     )
   }
 
-  _register(name, source, sampler) {
-    const key = name.toLowerCase()
-    const kinds = this._sourcesByName.get(key) || []
-
-    if (kinds.includes(source)) {
+  _register(name, sampler) {
+    if (this.jobQueues.findByName(name)) {
       throw new DuplicateDynoError(
-        `Duplicate declaration for "${name}". ` +
-          `Each dyno name maps to at most one source of each kind.`,
+        `Duplicate declaration for "${name}". Each dyno name takes one sampler.`,
       )
     }
 
-    if (source === "job_queue") {
-      this.jobQueues.add(new JobQueue(name, sampler))
-    }
-
-    this._sourcesByName.set(key, kinds.concat(source))
+    this.jobQueues.add(new JobQueue(name, sampler))
   }
 
   _softIdentity() {

@@ -101,8 +101,7 @@ class Client {
       await Promise.race([
         Promise.allSettled(pending),
         new Promise((resolve) => {
-          const timer = setTimeout(resolve, 5000)
-          if (timer.unref) timer.unref()
+          setTimeout(resolve, 5000).unref()
         }),
       ])
     }
@@ -130,8 +129,7 @@ class Client {
     const transport = uri.protocol === "https:" ? https : http
     const deadlineMs = this._timeout * 1000
     const controller = new AbortController()
-    const deadline = setTimeout(() => controller.abort(), deadlineMs)
-    if (deadline.unref) deadline.unref()
+    const deadline = setTimeout(() => controller.abort(), deadlineMs).unref()
     const requestOptions = {
       method: "POST",
       hostname: uri.hostname,

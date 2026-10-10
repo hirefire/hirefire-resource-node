@@ -336,9 +336,6 @@ describe("Configuration nested collector types", () => {
       dtsMembers(httpType),
     )
 
-    const httpFieldType = unwrapNullish(typeOfProperty(instType, "http"))[0]
-    assertSameNames("http", dtsMembers(httpFieldType), dtsMembers(httpType))
-
     const cpu = config.activeCpuSources()[0]
     expect(cpu).toBeDefined()
     const cpuType = unwrapNullish(
