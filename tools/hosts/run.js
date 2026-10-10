@@ -232,6 +232,14 @@ async function main() {
     boot: 8000,
   })
   specs.push({
+    name: "watt-job-worker",
+    command: ["/app/node_modules/.bin/wattpm", "start"],
+    cwd: "/app/watt-worker",
+    env: { DYNO: "worker.1" },
+    plan: { job_queues: [{ name: "worker", strategy: "jqs" }] },
+    boot: 8000,
+  })
+  specs.push({
     name: "worker-threads",
     command: ["node", "apps/threads.js"],
     env: { DYNO: "worker.1" },

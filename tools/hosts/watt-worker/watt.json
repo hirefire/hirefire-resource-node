@@ -1,0 +1,5 @@
+{
+  "$schema": "https://schemas.platformatic.dev/@platformatic/node/3.72.0.json",
+  "node": { "hasServer": false },
+  "runtime": { "logger": { "level": "info" } }
+}
