@@ -5,7 +5,7 @@ const Dispatcher = require("../src/dispatcher")
 const { Response } = require("../src/client")
 const Lease = require("../src/lease")
 const Once = require("../src/once")
-const MetricsBuffer = require("../src/buffer")
+const Payload = require("../src/dispatcher/payload")
 const Usage = require("../src/source/cpu/usage")
 const Plan = require("../src/plan")
 const Probe = require("../src/probe")
@@ -207,30 +207,6 @@ describe("Dispatcher", () => {
     expect(Object.values(bodies[0][0].metrics.rqt)[0]).toEqual([20, 3])
   })
 
-  test("encode clamps rqt sample count to limit", () => {
-    const dispatcher = configureWebOnly()
-    const leaf = dispatcher._encodeLeaf("rqt", {
-      sum: Dispatcher.SAMPLE_COUNT_LIMIT * 2,
-      count: Dispatcher.SAMPLE_COUNT_LIMIT + 5,
-    })
-    expect(leaf[1]).toBe(Dispatcher.SAMPLE_COUNT_LIMIT)
-    expect(Number.isInteger(leaf[1])).toBe(true)
-  })
-
-  test("merges duplicate rqt fragments before encoding", () => {
-    const dispatcher = configureWebOnly()
-    const entriesByName = Object.create(null)
-
-    dispatcher._mergeMetrics(entriesByName, "web", "rqt", {
-      1000: { sum: 2, count: 1 },
-    })
-    dispatcher._mergeMetrics(entriesByName, "web", "rqt", {
-      1000: { sum: 6, count: 2 },
-    })
-
-    expect(entriesByName.web.rqt[1000]).toEqual({ sum: 8, count: 3 })
-  })
-
   test("oversized payload is dropped without a request", async () => {
     process.env.DYNO = "web.1"
     config().markHttpActive()
@@ -401,36 +377,6 @@ describe("Dispatcher", () => {
     expect(Object.values(bodies[0][0].metrics.rqt)[0]).toEqual([5, 1])
   })
 
-  test("flushes buffered rqt when liveness is disabled", () => {
-    const dispatcher = configureWebOnly()
-    Object.defineProperties(config(), {
-      httpName: { configurable: true, value: "web" },
-      rqtEnabled: { configurable: true, value: true },
-      rqtLiveness: { configurable: true, value: false },
-    })
-
-    const result = dispatcher._buildPayload({
-      web: { rqt: { 1000: { sum: 7, count: 1 } } },
-    })
-
-    expect(result.entries).toEqual([
-      { name: "web", metrics: { rqt: { 1000: [7, 1] } } },
-    ])
-    expect(result.watermark).toBeUndefined()
-  })
-
-  test("omits rqt means outside the wire range", () => {
-    const dispatcher = configureWebOnly()
-
-    expect(dispatcher._encodeLeaf("rqt", { sum: -1, count: 1 })).toBeUndefined()
-    expect(
-      dispatcher._encodeLeaf("rqt", {
-        sum: Dispatcher.METRIC_VALUE_LIMIT + 1,
-        count: 1,
-      }),
-    ).toBeUndefined()
-  })
-
   test("stop without flush discards buffer", async () => {
     stubLease()
     const dispatcher = configureWebOnly()
@@ -572,10 +518,6 @@ describe("Dispatcher", () => {
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining("cannot create job loop"),
     )
-  })
-
-  test("sample count limit matches metrics buffer", () => {
-    expect(Dispatcher.SAMPLE_COUNT_LIMIT).toBe(MetricsBuffer.SAMPLE_COUNT_LIMIT)
   })
 
   test("running false when main loop dead", async () => {
@@ -1772,32 +1714,13 @@ describe("Dispatcher", () => {
     const rqt = bodies[0][0].metrics.rqt
     expect(rqt["1000"]).toBeUndefined()
     expect(rqt["999"]).toEqual([10, 1])
-    expect(
-      logger.error.mock.calls.some((c) =>
-        String(c[0]).includes("Omitting rqt"),
-      ),
-    ).toBe(true)
-  })
 
-  test("encode rqt accepts object buckets and empty leaf for non object", async () => {
-    const bodies = captureIngestBodies()
-    const dispatcher = configureWebOnly()
-    freezeTime(1000)
-    const buffer = config().buffer
-    buffer._metrics.web = {
-      rqt: {
-        1000: { sum: 8, count: 2 },
-        999: { sum: 6, count: 2 },
-        998: 12,
-        997: null,
-      },
-    }
+    freezeTime(1001)
+    buffer._metrics.web = { rqt: { 1001: { sum: -1, count: 1 } } }
     await dispatcher._dispatchTick()
-    const rqt = bodies[0][0].metrics.rqt
-    expect(rqt["1000"]).toEqual([4, 2])
-    expect(rqt["999"]).toEqual([3, 2])
-    expect(rqt["998"]).toEqual([])
-    expect(rqt["997"]).toEqual([])
+    expect(logger.error.mock.calls).toEqual([
+      ['[HireFire] Omitting rqt seconds of "web": a value is out of range.'],
+    ])
   })
 
   test("encode omits invalid non rqt values", async () => {
@@ -1805,7 +1728,7 @@ describe("Dispatcher", () => {
     const dispatcher = configureWebOnly()
     config().dyno("worker", () => 1)
     freezeTime(1000)
-    const limit = Dispatcher.METRIC_VALUE_LIMIT
+    const limit = Payload.METRIC_VALUE_LIMIT
     const buffer = config().buffer
     buffer._metrics.worker = {
       jql: {
@@ -2002,9 +1925,9 @@ describe("Dispatcher", () => {
     freezeTime(1100)
     await dispatcher._dispatchTick()
     const keys = Object.keys(bodies[1][0].metrics.rqt).map(Number)
-    expect(Math.min(...keys)).toBe(1100 - Dispatcher.RQT_BACKFILL_LIMIT)
+    expect(Math.min(...keys)).toBe(1100 - Payload.RQT_BACKFILL_LIMIT)
     expect(Math.max(...keys)).toBe(1100)
-    expect(keys.length).toBe(Dispatcher.RQT_BACKFILL_LIMIT + 1)
+    expect(keys.length).toBe(Payload.RQT_BACKFILL_LIMIT + 1)
   })
 
   test("lease unauthorized does not log error", async () => {

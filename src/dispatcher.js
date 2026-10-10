@@ -1,19 +1,15 @@
 const { Client } = require("./client")
 const Lease = require("./lease")
 const Once = require("./once")
-const MetricsBuffer = require("./buffer")
 const Plan = require("./plan")
 const Probe = require("./probe")
+const Payload = require("./dispatcher/payload")
 const safeLog = require("./log")
 const { formatError } = safeLog
-const { rqtParts } = MetricsBuffer
-const { RQT, rqt } = require("./strategy")
+const { RQT } = require("./strategy")
 
 class Dispatcher {
-  static RQT_BACKFILL_LIMIT = 60
   static PAYLOAD_SIZE_LIMIT = 131072
-  static SAMPLE_COUNT_LIMIT = MetricsBuffer.SAMPLE_COUNT_LIMIT
-  static METRIC_VALUE_LIMIT = 1e15
   static DEFAULT_DISPATCH_FREQUENCY = 1
   static MAX_DISPATCH_FREQUENCY = 30
   static JOIN_TIMEOUT = 5
@@ -509,9 +505,10 @@ class Dispatcher {
       let body = JSON.stringify(payload)
       if (
         Buffer.byteLength(body) > Dispatcher.PAYLOAD_SIZE_LIMIT &&
-        this._payloadHasSampleTrace(payload)
+        Payload.traced(payload)
       ) {
-        payload = this._stripSampleTrace(payload)
+        this._pendingSampleTrace = null
+        payload = Payload.withoutTrace(payload)
         body = JSON.stringify(payload)
       }
       if (Buffer.byteLength(body) > Dispatcher.PAYLOAD_SIZE_LIMIT) {
@@ -544,7 +541,7 @@ class Dispatcher {
       if (response.tooLarge) {
         return this._dropOversizedPayload(body, watermark, true)
       }
-      if (watermark !== undefined) this._lastRqtSecond = watermark
+      if (watermark !== null) this._lastRqtSecond = watermark
       this._pendingSampleTrace = null
     } catch (error) {
       if (
@@ -584,7 +581,7 @@ class Dispatcher {
 
   _dropOversizedPayload(body, watermark, server = false) {
     this._pendingSampleTrace = null
-    if (watermark !== undefined) this._lastRqtSecond = watermark
+    if (watermark !== null) this._lastRqtSecond = watermark
     const source = server
       ? "server rejected (413)"
       : `exceeds the ${Dispatcher.PAYLOAD_SIZE_LIMIT}-byte limit`
@@ -596,167 +593,24 @@ class Dispatcher {
   }
 
   _buildPayload(data) {
-    const entriesByName = Object.create(null)
-    const httpName = this._configuration.httpName
-    const watermark = this._appendHttpRqt(entriesByName, data, httpName)
+    const liveness = this._configuration.rqtEnabled
+      ? this._configuration.httpName
+      : null
+    const trace = this._lease.trace() ? this._pendingSampleTrace : null
 
-    for (const [name, strategies] of Object.entries(data)) {
-      for (const [strategy, series] of Object.entries(strategies || {})) {
-        if (!series || Object.keys(series).length === 0) continue
-        if (rqt(strategy) && name === httpName) continue
-        this._mergeMetrics(entriesByName, name, strategy, series)
-      }
-    }
-
-    const entries = []
-    for (const [name, metrics] of Object.entries(entriesByName)) {
-      const encoded = Object.create(null)
-      for (const [strategy, series] of Object.entries(metrics)) {
-        const leafSeries = Object.create(null)
-        for (const [second, bucket] of Object.entries(series)) {
-          const leaf = this._encodeLeaf(strategy, bucket)
-          if (leaf === undefined) continue
-          leafSeries[String(second)] = leaf
-        }
-        if (Object.keys(leafSeries).length > 0) encoded[strategy] = leafSeries
-      }
-      if (Object.keys(encoded).length > 0) {
-        entries.push({ name, metrics: encoded })
-      }
-    }
-
-    this._attachSampleTrace(entries)
-    return { entries, watermark }
-  }
-
-  _payloadHasSampleTrace(payload) {
-    return Boolean(
-      payload[0] &&
-        typeof payload[0] === "object" &&
-        Object.prototype.hasOwnProperty.call(payload[0], "sample_trace"),
+    return Payload.build(
+      data,
+      { liveness, since: this._lastRqtSecond, trace },
+      (name, strategy) =>
+        this._once.log(
+          "error",
+          "out_of_range",
+          `${name}\0${strategy}`,
+          `[HireFire] Omitting ${strategy} seconds of ${JSON.stringify(
+            name,
+          )}: a value is out of range.`,
+        ),
     )
-  }
-
-  _stripSampleTrace(payload) {
-    this._pendingSampleTrace = null
-    return payload.map((entry) => {
-      if (
-        entry &&
-        typeof entry === "object" &&
-        Object.prototype.hasOwnProperty.call(entry, "sample_trace")
-      ) {
-        const copy = { ...entry }
-        delete copy.sample_trace
-        return copy
-      }
-      return entry
-    })
-  }
-
-  _attachSampleTrace(entries) {
-    if (
-      this._pendingSampleTrace == null ||
-      entries.length === 0 ||
-      !this._lease.trace()
-    ) {
-      return
-    }
-    entries[0].sample_trace = this._pendingSampleTrace
-  }
-
-  _appendHttpRqt(entriesByName, data, httpName) {
-    if (!httpName) return undefined
-
-    const rqtBuckets = (data[httpName] && data[httpName][RQT]) || {}
-    if (this._configuration.rqtEnabled && this._configuration.rqtLiveness) {
-      const payloadRqt = this._backfillRqtSeconds(rqtBuckets)
-      this._mergeMetrics(entriesByName, httpName, RQT, payloadRqt)
-      const keys = Object.keys(payloadRqt).map(Number)
-      if (keys.length > 0) return Math.max(...keys)
-      return undefined
-    }
-    if (Object.keys(rqtBuckets).length > 0) {
-      this._mergeMetrics(entriesByName, httpName, RQT, rqtBuckets)
-    }
-    return undefined
-  }
-
-  _mergeMetrics(entriesByName, name, strategy, seriesBuckets) {
-    if (!entriesByName[name]) entriesByName[name] = Object.create(null)
-    if (!entriesByName[name][strategy])
-      entriesByName[name][strategy] = Object.create(null)
-    const dest = entriesByName[name][strategy]
-
-    for (const [secondKey, bucket] of Object.entries(seriesBuckets)) {
-      const second = parseInt(secondKey, 10)
-      if (rqt(strategy)) {
-        const { sum, count } = rqtParts(bucket)
-        const existing = dest[second]
-        if (!existing) {
-          dest[second] = { sum, count }
-        } else {
-          dest[second] = {
-            sum: existing.sum + sum,
-            count: existing.count + count,
-          }
-        }
-      } else {
-        dest[second] = bucket
-      }
-    }
-  }
-
-  _encodeLeaf(strategy, bucket) {
-    if (rqt(strategy)) {
-      const { sum, count } = rqtParts(bucket)
-      if (count === 0) return []
-      const mean = sum / count
-      if (
-        !Number.isFinite(mean) ||
-        mean < 0 ||
-        mean > Dispatcher.METRIC_VALUE_LIMIT
-      ) {
-        this._logger().error(
-          "[HireFire] Omitting rqt second: non-finite or out-of-range mean.",
-        )
-        return undefined
-      }
-      const n =
-        count > Dispatcher.SAMPLE_COUNT_LIMIT
-          ? Dispatcher.SAMPLE_COUNT_LIMIT
-          : Math.trunc(count)
-      return [mean, n]
-    }
-    if (
-      typeof bucket !== "number" ||
-      !Number.isFinite(bucket) ||
-      bucket < 0 ||
-      bucket > Dispatcher.METRIC_VALUE_LIMIT
-    ) {
-      this._logger().error(
-        `[HireFire] Omitting ${strategy} second: non-finite or out-of-range value.`,
-      )
-      return undefined
-    }
-    return bucket
-  }
-
-  _backfillRqtSeconds(buckets) {
-    const now = Math.floor(Date.now() / 1000)
-    let from = this._lastRqtSecond !== null ? this._lastRqtSecond + 1 : now
-    if (from < now - Dispatcher.RQT_BACKFILL_LIMIT)
-      from = now - Dispatcher.RQT_BACKFILL_LIMIT
-    if (from > now) from = now
-
-    const payload = Object.create(null)
-    for (const [secondKey, bucket] of Object.entries(buckets)) {
-      const { sum, count } = rqtParts(bucket)
-      payload[parseInt(secondKey, 10)] = { sum, count }
-    }
-    for (let second = from; second <= now; second++) {
-      if (payload[second] === undefined) payload[second] = { sum: 0, count: 0 }
-    }
-    return payload
   }
 
   _buffer() {
