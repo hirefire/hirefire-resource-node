@@ -151,13 +151,13 @@ expectType<Promise<never>>(
 )
 expectError(bullmq.jobQueueLatency(1))
 expectError(bullmq.jobQueueLatency("default", { skipWorking: true }))
-expectType<boolean>(bullmq.queuesRequired())
-expectType<boolean>(bullmq.supportsPlanStrategy("jqs"))
-expectType<object>(bullmq.planOptions("jqs", {}))
-expectType<object>(bullmq.planConnectionOptions())
-expectType<true>(bullmq.beforeSampleJobQueues())
-expectType<void>(bullmq.afterSampleJobQueues())
-expectType<void>(bullmq.reinitAfterFork())
+expectError(bullmq.queuesRequired())
+expectError(bullmq.supportsPlanStrategy("jqs"))
+expectError(bullmq.planOptions("jqs", {}))
+expectError(bullmq.planConnectionOptions())
+expectError(bullmq.beforeSampleJobQueues())
+expectError(bullmq.afterSampleJobQueues())
+expectError(bullmq.reinitAfterFork())
 expectType<typeof bullmq.JobQueueLatencyUnsupportedError>(
   bullmq.JobQueueLatencyUnsupportedError,
 )
@@ -180,7 +180,7 @@ expectType<Promise<never>>(
 )
 expectError(bull.jobQueueLatency(1))
 expectError(bull.jobQueueLatency("default", { skipWorking: true }))
-expectType<boolean>(bull.queuesRequired())
+expectError(bull.queuesRequired())
 expectType<typeof bull.JobQueueLatencyUnsupportedError>(
   bull.JobQueueLatencyUnsupportedError,
 )
@@ -216,7 +216,7 @@ expectError(
   pgBoss.jobQueueSize("default", { connection: { host: "127.0.0.1" } }),
 )
 expectError(pgBoss.jobQueueSize("default", { pool: { host: "127.0.0.1" } }))
-expectType<boolean>(pgBoss.queuesRequired())
+expectError(pgBoss.queuesRequired())
 
 expectError(bullmq.jobQueueSize(1))
 expectError(bull.jobQueueSize({ not: "a-queue" }))

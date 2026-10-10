@@ -1,6 +1,4 @@
 const Adapter = require("./plan/adapter")
-const safeLog = require("./log")
-const { formatError } = safeLog
 const { JQL, JQS } = require("./strategy")
 
 const Plan = {
@@ -40,37 +38,6 @@ const Plan = {
       adapter.libraryLoaded(),
     )
   },
-
-  async aroundJobQueueSample(logger, fn) {
-    const tokens = new Map()
-    await eachHook(logger, "beforeSampleJobQueues", async (name, hook) => {
-      tokens.set(name, await hook())
-    })
-
-    try {
-      return await fn()
-    } finally {
-      await eachHook(logger, "afterSampleJobQueues", async (name, hook) => {
-        if (tokens.has(name)) await hook(tokens.get(name))
-      })
-    }
-  },
-}
-
-async function eachHook(logger, hook, fn) {
-  for (const [name, adapter] of Object.entries(Plan.ADAPTERS)) {
-    try {
-      const macro = adapter.macro
-      if (typeof macro[hook] === "function") await fn(name, macro[hook])
-    } catch (error) {
-      safeLog(
-        logger,
-        "error",
-        `[HireFire] ${hook} for ${JSON.stringify(name)} raised ` +
-          formatError(error),
-      )
-    }
-  }
 }
 
 module.exports = Plan

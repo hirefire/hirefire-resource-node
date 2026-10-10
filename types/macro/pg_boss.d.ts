@@ -22,10 +22,3 @@ export function jobQueueWorking(...queues: string[]): Promise<number>
 export function jobQueueWorking(
   ...queuesAndOptions: (string | PgBossOptions)[]
 ): Promise<number>
-export function planOptions(strategy: string, options: any): object
-export function planConnectionOptions(): object
-export function supportsPlanStrategy(strategy: string | symbol): boolean
-export function queuesRequired(): boolean
-export function beforeSampleJobQueues(): any | null | Promise<any | null>
-export function afterSampleJobQueues(_token?: any): void | Promise<void>
-export function reinitAfterFork(): void | Promise<void>

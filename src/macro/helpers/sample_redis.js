@@ -1,63 +1,34 @@
+const sampleRound = require("../../sample_round")
 const { unpack, normalizeQueues } = require("../../utility")
 
+const WALK_PAGE = 100
 const SAMPLE_REDIS_OPTIONS = {
   maxRetriesPerRequest: 1,
   connectTimeout: 5000,
   commandTimeout: 5000,
   retryStrategy(times) {
-    if (times > 2) return null
-    return Math.min(times * 50, 200)
+    return times > 2 ? null : times * 50
   },
 }
 
-function loadIORedis() {
-  return require("ioredis")
-}
-
-function connectionEnumKey(connection, userConnectionOptions) {
-  try {
-    return JSON.stringify({ connection, userConnectionOptions })
-  } catch {
-    return "object"
-  }
-}
-
-async function withSampleRedis(args, resolveQueueNames, fn) {
-  const IORedis = loadIORedis()
-  let { queues, options } = unpack(args)
-  queues = normalizeQueues(queues, { allowEmpty: true })
-
-  const connection =
-    options.connection ||
-    process.env.REDIS_TLS_URL ||
-    process.env.REDIS_URL ||
-    process.env.REDISTOGO_URL ||
-    process.env.REDISCLOUD_URL ||
-    process.env.OPENREDIS_URL ||
-    "redis://localhost:6379/0"
-
-  const userConnectionOptions = options.connectionOptions || {}
-  const redis =
-    typeof connection === "object" && connection !== null
-      ? new IORedis({
-          ...SAMPLE_REDIS_OPTIONS,
-          ...connection,
-          ...userConnectionOptions,
-        })
-      : new IORedis(connection, {
-          ...SAMPLE_REDIS_OPTIONS,
-          ...userConnectionOptions,
-        })
-
+async function sample(args, states, commands, count) {
+  const { queues: given, options } = unpack(args)
+  const named = normalizeQueues(given, { allowEmpty: true })
+  const redis = connect(options)
   redis.on("error", () => {})
 
   try {
-    queues = await resolveQueueNames(
-      redis,
-      queues,
-      connectionEnumKey(connection, userConnectionOptions),
-    )
-    return await fn(redis, queues)
+    const queues = named.length > 0 ? named : await discover(redis, states)
+    const pipeline = redis.pipeline()
+    for (const queue of queues) commands(pipeline, `bull:${queue}:`)
+
+    const replies = (await pipeline.exec()).map(reply)
+    const width = replies.length / queues.length
+    let total = 0
+    queues.forEach((_queue, index) => {
+      total += count(replies.slice(index * width, (index + 1) * width))
+    })
+    return Math.max(0, total)
   } finally {
     try {
       await redis.quit()
@@ -67,4 +38,58 @@ async function withSampleRedis(args, resolveQueueNames, fn) {
   }
 }
 
-module.exports = { withSampleRedis }
+function connect({ connection, connectionOptions }) {
+  const IORedis = require("ioredis")
+  const target =
+    connection ||
+    process.env.REDIS_TLS_URL ||
+    process.env.REDIS_URL ||
+    process.env.REDISTOGO_URL ||
+    process.env.REDISCLOUD_URL ||
+    process.env.OPENREDIS_URL ||
+    "redis://localhost:6379/0"
+
+  return typeof target === "object"
+    ? new IORedis({ ...SAMPLE_REDIS_OPTIONS, ...target, ...connectionOptions })
+    : new IORedis(target, { ...SAMPLE_REDIS_OPTIONS, ...connectionOptions })
+}
+
+function discover(redis, states) {
+  const round = sampleRound.getStore()
+  if (!round) return walk(redis, states)
+
+  const { host, port, path, db } = redis.options
+  const key = [states, host, port, path, db].join("\0")
+  if (!round.has(key)) round.set(key, walk(redis, states))
+  return round.get(key)
+}
+
+async function walk(redis, states) {
+  const queue = new RegExp(`^bull:(.*):(${states.join("|")})$`)
+  const names = new Set()
+  let cursor = "0"
+
+  do {
+    const [next, keys] = await redis.scan(
+      cursor,
+      "MATCH",
+      "bull:*",
+      "COUNT",
+      WALK_PAGE,
+    )
+    cursor = next
+    for (const key of keys) {
+      const match = queue.exec(key)
+      if (match) names.add(match[1])
+    }
+  } while (cursor !== "0")
+
+  return Array.from(names)
+}
+
+function reply([error, value]) {
+  if (error) throw error
+  return value
+}
+
+module.exports = { sample }

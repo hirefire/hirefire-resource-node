@@ -5,12 +5,13 @@ const { reset } = require("../src/macro/pg_boss/blocked_column")
 
 describe("first-party adapter published surface", () => {
   test.each([
-    ["bull", bull],
-    ["bullmq", bullmq],
-    ["pg_boss", pgBoss],
-  ])("%s queuesRequired is a function that returns false", (_name, macro) => {
-    expect(typeof macro.queuesRequired).toBe("function")
-    expect(macro.queuesRequired()).toBe(false)
+    ["bull", bull, ["JobQueueLatencyUnsupportedError"]],
+    ["bullmq", bullmq, ["JobQueueLatencyUnsupportedError"]],
+    ["pg_boss", pgBoss, []],
+  ])("%s exports its three macros and no plan hook", (_name, macro, errors) => {
+    expect(Object.keys(macro).sort()).toEqual(
+      [...errors, "jobQueueLatency", "jobQueueSize", "jobQueueWorking"].sort(),
+    )
   })
 
   test("pg-boss published export omits the blocked-column test reset", () => {

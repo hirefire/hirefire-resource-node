@@ -2,6 +2,7 @@ const Once = require("./once")
 const Plan = require("./plan")
 const Entry = require("./plan/entry")
 const Probe = require("./probe")
+const sampleRound = require("./sample_round")
 const safeLog = require("./log")
 const { formatError, verbose } = safeLog
 const { validSample, formatSampleValue } = require("./sample")
@@ -22,7 +23,7 @@ class Sampler {
 
   async round(plan, live) {
     const probe = Probe.start()
-    await Plan.aroundJobQueueSample(this._configuration.logger, async () => {
+    await sampleRound.run(new Map(), async () => {
       for (const raw of plan) {
         if (!live()) break
 

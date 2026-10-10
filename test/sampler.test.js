@@ -3,6 +3,7 @@ const HireFire = require("../src")
 const Configuration = require("../src/configuration")
 const Plan = require("../src/plan")
 const Sampler = require("../src/sampler")
+const sampleRound = require("../src/sample_round")
 
 describe("Sampler", () => {
   let lines
@@ -514,17 +515,19 @@ describe("Sampler", () => {
     )
   })
 
-  test("the hooks of every adapter run around the round", async () => {
-    const events = []
-    for (const name of Object.keys(Plan.ADAPTERS)) delete Plan.ADAPTERS[name]
-    Plan.ADAPTERS.fake = planAdapter({
-      jobQueueSize: async () => events.push("sample"),
-      beforeSampleJobQueues: () => events.push("before"),
-      afterSampleJobQueues: () => events.push("after"),
-    })
+  test("the samplers of a round share one store, and the next round gets a new one", async () => {
+    const stores = []
+    config().dyno("worker", () => stores.push(sampleRound.getStore()))
+    config().dyno("mailer", () => stores.push(sampleRound.getStore()))
 
-    await samplePlan([planned("worker")])
+    await samplePlan([local("worker"), local("mailer")])
+    await samplePlan([local("worker")])
 
-    expect(events).toEqual(["before", "sample", "after"])
+    expect(stores).toHaveLength(3)
+    expect(stores[0]).toBeInstanceOf(Map)
+    expect(stores[1]).toBe(stores[0])
+    expect(stores[2]).toBeInstanceOf(Map)
+    expect(stores[2]).not.toBe(stores[0])
+    expect(sampleRound.getStore()).toBeUndefined()
   })
 })

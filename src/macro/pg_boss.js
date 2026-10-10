@@ -1,9 +1,6 @@
 const { unpack, normalizeQueues } = require("../utility")
-const Hooks = require("../plan/hooks")
-const { jobQueue } = require("../strategy")
 const blockedColumn = require("./pg_boss/blocked_column")
 
-const PLAN_OPTION_SCHEMA = { jqs: { skip_working: "boolean" } }
 const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://postgres:postgres@127.0.0.1:5432/postgres"
 const SCHEMA_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -73,30 +70,6 @@ async function jobQueueWorking(...args) {
     },
     { detectBlocked: false },
   )
-}
-
-function planOptions(strategy, options) {
-  const { skip_working: skipWorking } = Hooks.extractPlanOptions(
-    strategy,
-    options,
-    PLAN_OPTION_SCHEMA,
-  )
-  return skipWorking === undefined ? {} : { skipWorking }
-}
-
-function planConnectionOptions() {
-  const out = {}
-  const urlRaw = process.env.HIREFIRE_PG_BOSS_URL
-  if (urlRaw != null) {
-    const url = String(urlRaw).trim()
-    if (url) out.connection = url
-  }
-  const schemaRaw = process.env.HIREFIRE_PG_BOSS_SCHEMA
-  if (schemaRaw != null) {
-    const schema = String(schemaRaw).trim()
-    if (schema) out.schema = schema
-  }
-  return out
 }
 
 async function withConnection(args, fn, { detectBlocked = true } = {}) {
@@ -270,11 +243,4 @@ module.exports = {
   jobQueueLatency,
   jobQueueSize,
   jobQueueWorking,
-  planOptions,
-  planConnectionOptions,
-  supportsPlanStrategy: jobQueue,
-  queuesRequired: Hooks.queuesRequired,
-  beforeSampleJobQueues: Hooks.beforeSampleJobQueues,
-  afterSampleJobQueues: Hooks.afterSampleJobQueues,
-  reinitAfterFork: Hooks.reinitAfterFork,
 }

@@ -3,11 +3,10 @@ const {
   jobQueueLatency,
   jobQueueSize,
   jobQueueWorking,
-  beforeSampleJobQueues,
-  afterSampleJobQueues,
 } = require("../../../src/macro/bull")
 const { JobQueueLatencyUnsupportedError } = require("../../../src/errors")
 const Plan = require("../../../src/plan")
+const sampleRound = require("../../../src/sample_round")
 const Sampler = require("../../../src/sampler")
 const Configuration = require("../../../src/configuration")
 const IORedis = require("ioredis")
@@ -81,14 +80,13 @@ describe("Bull", () => {
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(0)
   })
 
-  test("all-queues wave cache does not reuse names across connectionOptions", async () => {
+  test("a sample round does not reuse the queue names of another database", async () => {
     await defaultQueue.add({})
     const alt = new IORedis(redisURL, { db: 1 })
     try {
       await alt.flushdb()
       await alt.rpush("bull:altq:wait", "1")
-      beforeSampleJobQueues()
-      try {
+      await sampleRound.run(new Map(), async () => {
         expect(await jobQueueSize({ connection: redisURL })).toBe(1)
         expect(
           await jobQueueSize({
@@ -96,9 +94,7 @@ describe("Bull", () => {
             connectionOptions: { db: 1 },
           }),
         ).toBe(1)
-      } finally {
-        afterSampleJobQueues()
-      }
+      })
     } finally {
       await alt.flushdb()
       await alt.quit()
