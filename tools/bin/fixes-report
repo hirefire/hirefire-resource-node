@@ -74,11 +74,18 @@ const soakRole =
 
 section("1. The status table", [
   [`tools/bin/check-fixes ${audit}/fixes.md`],
+  [`grep -E '^- \\[.\\] ' ${audit}/fixes.md | cut -c1-60`],
   [`grep -E '^\\| N-[0-9]+ ' ${audit}/fixes.md | cut -d'|' -f2,5,6`],
 ])
 section("2. The matrix, three times in random order", [
   [
     "for run in tools/results/matrix-0[123]/; do grep -E '^(run|commit|seed|cells|passed|failed|tests run):' $run/summary.txt | tr '\\n' ' '; echo; done",
+  ],
+  [
+    "echo 'seven more seeds'; for run in tools/results/seeds-0[1-7]/; do grep -E '^(run|commit|seed|cells|passed|failed|tests run):' $run/summary.txt | tr '\\n' ' '; echo; done",
+  ],
+  [
+    "echo 'the run of the first closing pass that failed, before the fix'; grep -E '^(run|commit|seed|cells|passed|failed|tests run|FAILED|  test)' tools/results/first-matrix-03/summary.txt",
   ],
   [
     'cat tools/results/matrix-0[123]/cells.jsonl | jq -r \'select(.status != "pass") | .failed[] | "\\(.file): \\(.test)"\' | sort | uniq -c | sort -rn',
@@ -94,7 +101,9 @@ section("3. Coverage over all cells", [
 ])
 section("4. Mutation testing", [["tools/bin/mutation-verdicts"]])
 section("5. Faults, soak, and hosts", [
-  ["cat tools/results/long-runs.txt"],
+  [
+    "echo 'first closing pass'; cat tools/results/long-runs.txt; echo 'repeat of the measures that depend on test/'; cat tools/results/long-runs-repeat.txt",
+  ],
   [
     `tools/bin/fault-compare "Audit"=${audit}/results/faults/results.json "Audit 2"=${audit}/results/faults-2/results.json faults faults-2`,
   ],
@@ -121,12 +130,14 @@ section("6. The checks", [
   [
     "npm run check > tools/results/check.out 2>&1; echo \"npm run check: exit $?\"; grep -c 'No problems found' tools/results/check.out; grep 'All matched files' tools/results/check.out",
   ],
-  ["bin/verify-package 2>&1 | grep -E 'pack ok|No problems|problems'"],
+  [
+    "bin/verify-package > tools/results/verify-package.out 2>&1; echo \"bin/verify-package: exit $?\"; grep -E 'pack ok|No problems found' tools/results/verify-package.out | sort | uniq -c",
+  ],
   [`cd ${tree} && uv run --with tiktoken bin/canon-check`, { cwd: canon }],
 ])
 section("7. Evidence scripts, public names, wire, and size", [
   [
-    "for script in dispatch_cadence idle_timers proxy_env_ignored redis_commands_per_sample request_path_cost; do node tools/evidence/$script.js 2>&1 | grep -E '^(CHECK|RESULT)'; done",
+    "set -a; . ./.env; set +a; for script in dispatch_cadence idle_timers proxy_env_ignored redis_commands_per_sample request_path_cost; do node tools/evidence/$script.js > tools/results/evidence-$script.out 2>&1; echo \"$script: exit $?\"; grep -E '^(CHECK|RESULT)' tools/results/evidence-$script.out; done",
   ],
   ["tools/bin/public-api --check"],
   [`tools/bin/public-api-diff ${tools} | grep -v 'typeFiles\\|private'`],
@@ -142,6 +153,9 @@ section("7. Evidence scripts, public names, wire, and size", [
 ])
 section("8. Both trees are clean beside this report, and nothing was pushed", [
   ["git rev-parse --abbrev-ref HEAD && git status --short | wc -l"],
+  [
+    "echo 'the last commits that touch src, types, or test'; git log --format='%h %s' -2 -- src types test",
+  ],
   [
     "git for-each-ref --format='%(refname)' refs/remotes | grep -c node-fixes; git config --get branch.node-fixes.remote || echo 'node-fixes has no upstream'",
   ],
