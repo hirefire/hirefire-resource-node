@@ -5,7 +5,7 @@ const {
 const { sample, activity } = require("./helpers/sample_redis")
 const { unpack } = require("../utility")
 
-const STATES = ["wait", "paused", "active", "delayed", "priority"]
+const STATES = ["wait", "paused", "active", "delayed"]
 
 async function jobQueueLatency(...args) {
   jobQueueLatencyUnsupported("Bull")

@@ -96,7 +96,7 @@ function discover(redis, states) {
   if (!round) return walk(redis, states)
 
   const { host, port, path, db } = redis.options
-  const key = [states, host, port, path, db].join("\0")
+  const key = JSON.stringify([states, host, port, path, db])
   if (!round.has(key)) round.set(key, walk(redis, states))
   return round.get(key)
 }

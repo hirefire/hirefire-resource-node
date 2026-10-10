@@ -76,6 +76,9 @@ describe("Bull", () => {
     expect(threwSync).toBe(false)
     expect(pending).toBeInstanceOf(Promise)
     await expect(pending).rejects.toThrow(JobQueueLatencyUnsupportedError)
+    await expect(jobQueueLatency()).rejects.toThrow(
+      "Bull currently does not support job queue latency measurements.",
+    )
   })
 
   test("jobQueueSize without jobs", async () => {
@@ -410,6 +413,14 @@ describe("Bull", () => {
         else process.env[k] = saved[k]
       }
     }
+  })
+
+  test("all-queues discovery includes queues that hold only delayed or only paused jobs", async () => {
+    await redis.zadd("bull:delayed-only:delayed", 4096, "job-delayed-1")
+    expect(await jobQueueSize({ connection: redisURL })).toBe(1)
+
+    await redis.rpush("bull:paused-only:paused", "job-paused-1")
+    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
   })
 
   test("all-queues discovery counts a queue that has only active jobs", async () => {

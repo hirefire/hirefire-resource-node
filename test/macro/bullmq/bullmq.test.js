@@ -81,6 +81,9 @@ describe("BullMQ", () => {
     await expect(jobQueueLatency()).rejects.toThrow(
       JobQueueLatencyUnsupportedError,
     )
+    await expect(jobQueueLatency()).rejects.toThrow(
+      "BullMQ currently does not support job queue latency measurements.",
+    )
   })
 
   test("jobQueueSize without jobs", async () => {
@@ -285,6 +288,14 @@ describe("BullMQ", () => {
         skipWorking: true,
       }),
     ).toBe(1)
+  })
+
+  test("all-queues discovery includes queues that hold only delayed or only paused jobs", async () => {
+    await redis.zadd("bull:delayed-only:delayed", 4096, "job-delayed-1")
+    expect(await jobQueueSize({ connection: redisURL })).toBe(1)
+
+    await redis.rpush("bull:paused-only:paused", "job-paused-1")
+    expect(await jobQueueSize({ connection: redisURL })).toBe(2)
   })
 
   test("all-queues discovery includes active-only and prioritized-only queues", async () => {

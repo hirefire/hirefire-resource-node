@@ -47,10 +47,7 @@ async function jobQueueLatency(...args) {
     `
     const values = queues.length ? [queues] : []
     const { rows } = await client.query(sql, values)
-    if (!rows[0] || rows[0].latency == null) return 0
-    const latency = Number(rows[0].latency)
-    if (!Number.isFinite(latency)) return 0
-    return Math.max(0, latency)
+    return Number(rows[0]?.latency ?? 0)
   })
 }
 
@@ -97,7 +94,7 @@ async function withConnection(args, fn) {
   const connectionString = String(connection)
   const pool = new Pool({
     ...SAMPLE_POOL_OPTIONS,
-    ...herokuSslDefault(connectionString, userOpts),
+    ...herokuSslDefault(connectionString),
     ...userOpts,
     connectionString,
   })
@@ -132,12 +129,12 @@ function resolveConnection(options) {
   )
 }
 
-function herokuSslDefault(connectionString, userOpts) {
-  if (!process.env.DYNO) return {}
-  if (userOpts.ssl !== undefined) return {}
-  if (process.env.PGSSLMODE) return {}
-  if (URL_SSL_RE.test(connectionString)) return {}
-  return { ssl: { rejectUnauthorized: false } }
+function herokuSslDefault(connectionString) {
+  const applies =
+    process.env.DYNO &&
+    !process.env.PGSSLMODE &&
+    !URL_SSL_RE.test(connectionString)
+  return applies ? { ssl: { rejectUnauthorized: false } } : {}
 }
 
 function isQueryable(value) {
