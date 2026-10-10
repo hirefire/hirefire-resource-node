@@ -11,12 +11,7 @@ declare class Configuration {
 declare namespace Configuration {
   export { MissingSamplerError, DuplicateDynoError, Logger }
 }
-declare class MissingSamplerError extends Error {
-  constructor(message: string)
-}
-declare class DuplicateDynoError extends Error {
-  constructor(message: string)
-}
+import { MissingSamplerError, DuplicateDynoError } from "./errors"
 type Logger = {
   error?: (message: string) => void
   warn?: (message: string) => void

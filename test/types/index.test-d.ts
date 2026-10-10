@@ -61,9 +61,10 @@ expectType<errors.JobQueueLatencyUnsupportedError>(
   new errors.JobQueueLatencyUnsupportedError("BullMQ"),
 )
 
-expectType<typeof Configuration.MissingSamplerError>(
-  Configuration.MissingSamplerError,
-)
+expectType<typeof errors.MissingSamplerError>(Configuration.MissingSamplerError)
+expectType<typeof errors.DuplicateDynoError>(Configuration.DuplicateDynoError)
+expectType<errors.MissingSamplerError>(new errors.MissingSamplerError("x"))
+expectType<errors.DuplicateDynoError>(new errors.DuplicateDynoError("x"))
 expectType<typeof Configuration.DuplicateDynoError>(
   Configuration.DuplicateDynoError,
 )

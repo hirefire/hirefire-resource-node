@@ -30,7 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Official Node.js support is 20+.
 - Next.js support starts at 15.5, on the Node.js middleware runtime. The middleware does not run on the Edge runtime, which is the only middleware runtime of Next.js 14.
 - Process names may be any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone. An invalid name throws `TypeError` (1.x threw `InvalidDynoNameError`).
-- `config.dyno` without a sampler raises `MissingSamplerError` except when the name is `"web"` (1.x raised `MissingDynoFnError`). Duplicate dyno names raise `DuplicateDynoError`.
+- `config.dyno` without a sampler raises `MissingSamplerError` except when the name is `"web"` (1.x raised `MissingDynoFnError`). Duplicate dyno names raise `DuplicateDynoError`. Both classes are exported from `hirefire-resource/errors` and as statics of the configuration class.
 - `HireFire.configure` callbacks must be synchronous.
 - On Heroku, BullMQ samples over `rediss://` connect to Redis without certificate verification, as Heroku Key-Value Store requires. `connectionOptions.tls` sets it otherwise. 1.x needed that option on every sample.
 - A BullMQ sample without queue names fails when listing the queues takes more than 2 seconds, and the error asks for queue names. 1.x had no limit.

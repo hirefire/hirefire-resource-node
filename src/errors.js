@@ -14,6 +14,20 @@ class JobQueueLatencyUnsupportedError extends Error {
   }
 }
 
+class MissingSamplerError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = "MissingSamplerError"
+  }
+}
+
+class DuplicateDynoError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = "DuplicateDynoError"
+  }
+}
+
 function jobQueueLatencyUnsupported(name) {
   throw new JobQueueLatencyUnsupportedError(name)
 }
@@ -21,5 +35,7 @@ function jobQueueLatencyUnsupported(name) {
 module.exports = {
   MissingQueueError,
   JobQueueLatencyUnsupportedError,
+  MissingSamplerError,
+  DuplicateDynoError,
   jobQueueLatencyUnsupported,
 }

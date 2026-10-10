@@ -6,20 +6,7 @@ const MetricsBuffer = require("./buffer")
 const Dispatcher = require("./dispatcher")
 const Identity = require("./identity")
 const Once = require("./once")
-
-class MissingSamplerError extends Error {
-  constructor(message) {
-    super(message)
-    this.name = "MissingSamplerError"
-  }
-}
-
-class DuplicateDynoError extends Error {
-  constructor(message) {
-    super(message)
-    this.name = "DuplicateDynoError"
-  }
-}
+const { MissingSamplerError, DuplicateDynoError } = require("./errors")
 
 const { MAX_NAME_BYTES } = Identity
 
