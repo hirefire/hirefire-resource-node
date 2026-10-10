@@ -67,6 +67,27 @@ describe("Client", () => {
     expect(result.unauthorized).toBe(false)
   })
 
+  test.each([
+    ["15", 15],
+    [" 15 ", 15],
+    ["1", 1],
+    ["0", null],
+    ["-5", null],
+    ["1.5", null],
+    ["15abc", null],
+    ["soon", null],
+    ["", null],
+    ["1e2", null],
+    ["0x10", null],
+    [undefined, null],
+  ])("reads the header value %j as %j", async (value, expected) => {
+    const headers =
+      value === undefined ? {} : { "HireFire-Dispatch-Frequency": value }
+    nock(BASE).post("/metrics/ingest").reply(200, "", headers)
+    const response = await client.submitSamples(BODY)
+    expect(response.integer("HireFire-Dispatch-Frequency")).toBe(expected)
+  })
+
   test("submit samples raises on timeout", async () => {
     const slowClient = new Client(
       { token: "test-token-value" },
@@ -276,6 +297,7 @@ describe("Client", () => {
   test("lease response body error is mapped to a request error", async () => {
     const client = new Client({ token: "t" })
     const response = new EventEmitter()
+    response.headers = {}
     response.resume = jest.fn()
     const request = new EventEmitter()
     request.reusedSocket = false
@@ -295,7 +317,6 @@ describe("Client", () => {
     await expect(
       client._attempt(transport, { method: "POST" }, undefined, {
         readBody: true,
-        maxBodyBytes: 10,
       }),
     ).rejects.toBeInstanceOf(RequestError)
   })
@@ -476,6 +497,50 @@ describe("Client (persistent connection)", () => {
     const client = new Client({ token: "t" })
     const response = await client.requestLease("pid-1")
     expect(response.body).toBe('{"version":1,"job_queues":[]}')
+    await client.close()
+  })
+
+  test("a lease response over the bound fails the request and frees the connection", async () => {
+    let requests = 0
+    await listen((req, res) => {
+      requests += 1
+      req.resume().on("end", () => {
+        res.end(requests === 1 ? "x".repeat(Client.MAX_BODY_BYTES + 1) : "{}")
+      })
+    })
+    const client = new Client({ token: "t" })
+
+    await expect(client.requestLease("pid-1")).rejects.toThrow(
+      "Response body exceeded 131072 bytes (status 200).",
+    )
+    expect((await client.requestLease("pid-1")).body).toBe("{}")
+    await client.close()
+  })
+
+  test("a lease response of exactly the bound is read", async () => {
+    await listen((req, res) => {
+      req.resume().on("end", () => res.end("x".repeat(Client.MAX_BODY_BYTES)))
+    })
+    const client = new Client({ token: "t" })
+
+    const response = await client.requestLease("pid-1")
+    expect(response.body).toHaveLength(Client.MAX_BODY_BYTES)
+    await client.close()
+  })
+
+  test("a lease response that is sent in pieces fails once it passes the bound", async () => {
+    await listen((req, res) => {
+      req.resume().on("end", () => {
+        res.write("x".repeat(Client.MAX_BODY_BYTES))
+        res.write("x")
+        setTimeout(() => res.end(), 50)
+      })
+    })
+    const client = new Client({ token: "t" })
+
+    await expect(client.requestLease("pid-1")).rejects.toThrow(
+      "Response body exceeded 131072 bytes (status 200).",
+    )
     await client.close()
   })
 

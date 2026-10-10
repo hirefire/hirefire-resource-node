@@ -582,8 +582,8 @@ class Dispatcher {
   }
 
   _applyDispatchFrequency(response) {
-    const value = parseInt(response.headers["hirefire-dispatch-frequency"], 10)
-    if (!Number.isFinite(value) || value <= 0) return
+    const value = response.integer("HireFire-Dispatch-Frequency")
+    if (value === null) return
 
     this._dispatchFrequency = Math.max(
       Dispatcher.DEFAULT_DISPATCH_FREQUENCY,

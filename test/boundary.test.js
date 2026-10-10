@@ -399,6 +399,44 @@ describe("the client at its boundary", () => {
       expect(at("lease")).toEqual([0, 5, 10])
     })
 
+    test("keeps its pace when the server sends a pace that is not a positive whole number", async () => {
+      const sampler = jest.fn(() => 1)
+      answers.lease = () =>
+        granted([{ name: "worker", strategy: "jqs" }], {
+          "HireFire-Lease-TTL": "abc",
+          "HireFire-Sample-Frequency": "soon",
+        })
+      configure((config) => config.dyno("worker", sampler))
+      await pass(16)
+
+      expect(at("lease")).toEqual([0, 15])
+      expect(sampler).toHaveBeenCalledTimes(2)
+    })
+
+    test("keeps its dispatch pace when the server sends one that is not a positive whole number", async () => {
+      answers.ingest = () => [200, "", { "HireFire-Dispatch-Frequency": "5s" }]
+      configure((config) => config.dyno("worker", () => 1))
+      await pass(3)
+
+      expect(at("ingest")).toEqual([1, 2, 3])
+    })
+
+    test("takes no lease from a response that is too large to read", async () => {
+      const sampler = jest.fn(() => 1)
+      answers.lease = () => [
+        200,
+        "x".repeat(131073),
+        { "HireFire-Lease-Granted": "true" },
+      ]
+      configure((config) => config.dyno("worker", sampler))
+      await pass(1)
+
+      expect(sampler).not.toHaveBeenCalled()
+      expect(logged("E")).toEqual([
+        "E [HireFire] RequestError: Response body exceeded 131072 bytes (status 200).",
+      ])
+    })
+
     test("keeps one identity for its lease requests", async () => {
       configure((config) => config.dyno("worker", () => 7))
       await pass(15)

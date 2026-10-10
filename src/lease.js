@@ -5,7 +5,6 @@ const safeLog = require("./log")
 class Lease {
   static SAMPLE_FREQUENCY_BOUNDS = [1, 3600]
   static TTL_BOUNDS = [5, 3600]
-  static MAX_BODY_BYTES = 131072
   static MAX_JOB_QUEUES = 256
   static MAX_NAME_BYTES = 128
 
@@ -90,12 +89,10 @@ class Lease {
     let nextSampleFrequency = this._sampleFrequency
     let nextSampleAt = this._nextSampleAt
 
-    if (headers["hirefire-sample-frequency"] !== undefined) {
+    const frequency = response.integer("HireFire-Sample-Frequency")
+    if (frequency !== null) {
       const previousFrequency = this._sampleFrequency
-      nextSampleFrequency = clamp(
-        toInteger(headers["hirefire-sample-frequency"]),
-        Lease.SAMPLE_FREQUENCY_BOUNDS,
-      )
+      nextSampleFrequency = clamp(frequency, Lease.SAMPLE_FREQUENCY_BOUNDS)
       if (nextSampleFrequency < previousFrequency) {
         const sooner = performance.now() + nextSampleFrequency * 1000
         if (nextSampleAt > sooner) nextSampleAt = sooner
@@ -104,11 +101,9 @@ class Lease {
 
     let nextTtl = this._ttl
     let nextExpiresAt = this._expiresAt
-    if (headers["hirefire-lease-ttl"] !== undefined) {
-      nextTtl = clamp(
-        toInteger(headers["hirefire-lease-ttl"]),
-        Lease.TTL_BOUNDS,
-      )
+    const ttl = response.integer("HireFire-Lease-TTL")
+    if (ttl !== null) {
+      nextTtl = clamp(ttl, Lease.TTL_BOUNDS)
       nextExpiresAt = performance.now() + nextTtl * 1000
     }
 
@@ -154,15 +149,6 @@ class Lease {
 
   _parseGrantBody(body) {
     if (body == null || body === "") return emptyGrantBody()
-
-    if (Buffer.byteLength(body) > Lease.MAX_BODY_BYTES) {
-      safeLog(
-        this._configuration.logger,
-        "error",
-        `[HireFire] Lease grant body exceeded ${Lease.MAX_BODY_BYTES} bytes. Plan ignored.`,
-      )
-      return emptyGrantBody()
-    }
 
     let payload
     try {
@@ -256,11 +242,6 @@ class Lease {
 
 function emptyGrantBody(trace = false) {
   return { job_queues: [], trace }
-}
-
-function toInteger(value) {
-  const parsed = parseInt(value, 10)
-  return Number.isFinite(parsed) ? parsed : 0
 }
 
 function clamp(value, [min, max]) {

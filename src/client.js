@@ -3,7 +3,6 @@ const https = require("https")
 const VERSION = require("./version")
 
 const STALE_CONNECTION_CODES = new Set(["ECONNRESET", "ECONNABORTED", "EPIPE"])
-const MAX_LEASE_BODY_BYTES = 131072
 
 function isStaleConnectionCode(code) {
   return (
@@ -37,9 +36,18 @@ class Response {
   get tooLarge() {
     return this.status === 413
   }
+
+  integer(name) {
+    const text = String(this.headers[name.toLowerCase()] ?? "").trim()
+    if (!/^\d+$/.test(text)) return null
+    const value = Number(text)
+    return value > 0 ? value : null
+  }
 }
 
 class Client {
+  static MAX_BODY_BYTES = 131072
+
   constructor(configuration, { timeout = 5 } = {}) {
     this._configuration = configuration
     this._timeout = timeout
@@ -81,7 +89,7 @@ class Client {
         "HireFire-Process-ID": processId,
       },
       undefined,
-      { readBody: true, maxBodyBytes: MAX_LEASE_BODY_BYTES },
+      { readBody: true },
     )
   }
 
@@ -165,7 +173,7 @@ class Client {
 
       const request = transport.request(options, (response) => {
         if (readOptions.readBody) {
-          this._readBody(response, readOptions.maxBodyBytes)
+          this._readBody(response)
             .then((bodyText) => {
               settle(
                 resolve,
@@ -203,32 +211,30 @@ class Client {
     })
   }
 
-  _readBody(response, maxBodyBytes) {
+  _readBody(response) {
     return new Promise((resolve, reject) => {
       const chunks = []
       let size = 0
-      let exceeded = false
+      const oversized = () => {
+        response.destroy()
+        reject(
+          new RequestError(
+            `Response body exceeded ${Client.MAX_BODY_BYTES} bytes (status ${response.statusCode}).`,
+          ),
+        )
+      }
+
+      if (Number(response.headers["content-length"]) > Client.MAX_BODY_BYTES) {
+        oversized()
+        return
+      }
 
       response.on("data", (chunk) => {
-        if (exceeded) return
         size += chunk.length
-        if (size > maxBodyBytes) {
-          exceeded = true
-          chunks.length = 0
-          response.resume()
-          return
-        }
-        chunks.push(chunk)
+        if (size > Client.MAX_BODY_BYTES) oversized()
+        else chunks.push(chunk)
       })
-
-      response.on("end", () => {
-        if (exceeded) {
-          resolve("x".repeat(maxBodyBytes + 1))
-          return
-        }
-        resolve(Buffer.concat(chunks).toString("utf8"))
-      })
-
+      response.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")))
       response.on("error", reject)
     })
   }
@@ -259,6 +265,7 @@ class Client {
   }
 
   _transportError(error, reusedSocket = false) {
+    if (error instanceof RequestError) return error
     if (
       error.code === "ETIMEDOUT" ||
       error.code === "ESOCKETTIMEDOUT" ||

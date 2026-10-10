@@ -1,7 +1,7 @@
 const { freezeTime } = require("./support")
 const nock = require("nock")
 const Lease = require("../src/lease")
-const { RequestError, Response } = require("../src/client")
+const { Client, RequestError, Response } = require("../src/client")
 
 const BASE = "https://data.hirefire.io"
 const CONFIG = {
@@ -278,27 +278,22 @@ describe("Lease", () => {
     expect(lease.trace()).toBe(false)
   })
 
-  test("ignores oversized grant body", async () => {
-    const error = jest.fn()
-    lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
-    const huge = "x".repeat(Lease.MAX_BODY_BYTES + 1)
+  test("a grant body over the bound fails the request", async () => {
     grant(
       {
         "HireFire-Lease-Granted": "true",
         "HireFire-Sample-Frequency": "15",
       },
-      huge,
+      "x".repeat(Client.MAX_BODY_BYTES + 1),
     )
-    await lease.requestIfDue({ hold: holdTrue })
-    expect(lease.granted()).toBe(true)
-    expect(lease.jobQueues).toEqual([])
-    expect(
-      error.mock.calls.map((call) => String(call[0])).join("\n"),
-    ).toContain("exceeded")
+    await expect(lease.requestIfDue({ hold: holdTrue })).rejects.toThrow(
+      "Response body exceeded 131072 bytes (status 200).",
+    )
+    expect(lease.granted()).toBe(false)
   })
 
   test("accepts grant body of exactly max body bytes", async () => {
-    expect(Lease.MAX_BODY_BYTES).toBe(131072)
+    expect(Client.MAX_BODY_BYTES).toBe(131072)
     const error = jest.fn()
     lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
     let body = JSON.stringify({
@@ -313,7 +308,7 @@ describe("Lease", () => {
         },
       ],
     })
-    body += " ".repeat(Lease.MAX_BODY_BYTES - Buffer.byteLength(body))
+    body += " ".repeat(Client.MAX_BODY_BYTES - Buffer.byteLength(body))
     grant(
       {
         "HireFire-Lease-Granted": "true",
@@ -538,13 +533,34 @@ describe("Lease", () => {
     expect(lease.granted()).toBe(false)
   })
 
-  test("clamps a garbled sample frequency to a sane floor", async () => {
+  test.each(["0", "soon", "15abc", "1.5", "-5", "", "0x10", "1e2"])(
+    "ignores a sample frequency of %j",
+    async (value) => {
+      grant({
+        "HireFire-Lease-Granted": "true",
+        "HireFire-Sample-Frequency": value,
+      })
+      await lease.requestIfDue({ hold: holdTrue })
+      expect(lease.sampleFrequency).toBe(15)
+    },
+  )
+
+  test("reads a sample frequency with spaces around it", async () => {
     grant({
       "HireFire-Lease-Granted": "true",
-      "HireFire-Sample-Frequency": "0",
+      "HireFire-Sample-Frequency": " 20 ",
     })
     await lease.requestIfDue({ hold: holdTrue })
-    expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[0])
+    expect(lease.sampleFrequency).toBe(20)
+  })
+
+  test("takes the lowest sample frequency as it is", async () => {
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "1",
+    })
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.sampleFrequency).toBe(1)
   })
 
   test("clamps an over large sample frequency to the ceiling", async () => {
@@ -556,13 +572,31 @@ describe("Lease", () => {
     expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[1])
   })
 
-  test("clamps a garbled ttl to a sane floor", async () => {
-    grant({
-      "HireFire-Lease-Granted": "true",
-      "HireFire-Lease-TTL": "0",
-    })
+  test.each(["0", "abc", "15abc", "1.5", "-5"])(
+    "ignores a ttl of %j",
+    async (value) => {
+      grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": value })
+      await lease.requestIfDue({ hold: holdTrue })
+      freezeTime(1014)
+      await lease.requestIfDue({ hold: holdTrue })
+      expect(nock.pendingMocks()).toEqual([])
+      grant()
+      freezeTime(1015)
+      await lease.requestIfDue({ hold: holdTrue })
+      expect(nock.isDone()).toBe(true)
+    },
+  )
+
+  test("raises a ttl below the floor to the floor", async () => {
+    grant({ "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "1" })
     await lease.requestIfDue({ hold: holdTrue })
-    expect(lease._ttl).toBe(Lease.TTL_BOUNDS[0])
+    grant()
+    freezeTime(1004)
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(nock.isDone()).toBe(false)
+    freezeTime(1005)
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(nock.isDone()).toBe(true)
   })
 
   test("clamps an over large ttl to the ceiling", async () => {
@@ -865,14 +899,5 @@ describe("Lease", () => {
       queues: ["a"],
       options: { x: 1 },
     })
-  })
-
-  test("clamps a non numeric sample frequency to a sane floor", async () => {
-    grant({
-      "HireFire-Lease-Granted": "true",
-      "HireFire-Sample-Frequency": "not-a-number",
-    })
-    await lease.requestIfDue({ hold: holdTrue })
-    expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[0])
   })
 })
