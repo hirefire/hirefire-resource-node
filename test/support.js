@@ -2,6 +2,7 @@ const http = require("http")
 const HireFire = require("../src")
 const nock = require("nock")
 const Plan = require("../src/plan")
+const Adapter = require("../src/plan/adapter")
 
 nock.disableNetConnect()
 nock.enableNetConnect(/^127\.0\.0\.1(:|$)/)
@@ -20,6 +21,25 @@ const ADAPTERS = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
 function restoreAdapters() {
   for (const key of Reflect.ownKeys(Plan.ADAPTERS)) delete Plan.ADAPTERS[key]
   Object.defineProperties(Plan.ADAPTERS, ADAPTERS)
+}
+
+function planAdapter(macro, fields = {}) {
+  return new Adapter({
+    macro: () => macro,
+    packages: [],
+    strategies: ["jql", "jqs"],
+    ...fields,
+  })
+}
+
+function capture(configuration = HireFire.configuration) {
+  const lines = []
+  configuration.logger = {
+    info: (message) => lines.push(["info", message]),
+    warn: (message) => lines.push(["warn", message]),
+    error: (message) => lines.push(["error", message]),
+  }
+  return lines
 }
 
 const servers = new Set()
@@ -93,4 +113,4 @@ afterEach(async () => {
   await resetState()
 })
 
-module.exports = { silentLogger, freezeTime, local }
+module.exports = { silentLogger, freezeTime, local, planAdapter, capture }

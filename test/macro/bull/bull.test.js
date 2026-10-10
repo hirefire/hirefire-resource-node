@@ -8,6 +8,7 @@ const {
 } = require("../../../src/macro/bull")
 const { JobQueueLatencyUnsupportedError } = require("../../../src/errors")
 const Plan = require("../../../src/plan")
+const Sampler = require("../../../src/sampler")
 const Configuration = require("../../../src/configuration")
 const IORedis = require("ioredis")
 const { expectIntegerCount } = require("../numericTypes")
@@ -56,9 +57,8 @@ describe("Bull", () => {
   })
 
   test("libraryLoaded is true when the bull package is imported", () => {
-    expect(Plan.libraryLoaded("bull")).toBe(true)
-    expect(Plan.executable("bull")).toBe(true)
-    expect(Plan.anyAllowlistedJobQueueLibraryLoaded()).toBe(true)
+    expect(Plan.ADAPTERS.bull.libraryLoaded()).toBe(true)
+    expect(Plan.anyLibraryLoaded()).toBe(true)
   })
 
   test("jobQueueLatency is unsupported (async reject, not sync throw)", async () => {
@@ -492,14 +492,16 @@ describe("Bull", () => {
     const prev = process.env.HIREFIRE_BULL_URL
     process.env.HIREFIRE_BULL_URL = redisURL
     try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bull",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
+      await new Sampler(configuration).round(
+        [
+          {
+            name: "worker",
+            adapter: "bull",
+            strategy: "jqs",
+            queues: ["default"],
+          },
+        ],
+        () => true,
       )
       const flushed = configuration.buffer.flush()
       expect(flushed.worker.jqs).toBeDefined()
@@ -523,15 +525,17 @@ describe("Bull", () => {
     const prev = process.env.HIREFIRE_BULL_URL
     process.env.HIREFIRE_BULL_URL = redisURL
     try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bull",
-          strategy: "jqs",
-          queues: ["default"],
-          options: { skip_working: true },
-        },
-        configuration,
+      await new Sampler(configuration).round(
+        [
+          {
+            name: "worker",
+            adapter: "bull",
+            strategy: "jqs",
+            queues: ["default"],
+            options: { skip_working: true },
+          },
+        ],
+        () => true,
       )
       const flushed = configuration.buffer.flush()
       expect(Object.values(flushed.worker.jqs)[0]).toBe(1)
@@ -552,15 +556,17 @@ describe("Bull", () => {
     const prev = process.env.HIREFIRE_BULL_URL
     process.env.HIREFIRE_BULL_URL = redisURL
     try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bull",
-          strategy: "jqs",
-          queues: [],
-          options: { skip_working: true },
-        },
-        configuration,
+      await new Sampler(configuration).round(
+        [
+          {
+            name: "worker",
+            adapter: "bull",
+            strategy: "jqs",
+            queues: [],
+            options: { skip_working: true },
+          },
+        ],
+        () => true,
       )
       const flushed = configuration.buffer.flush()
       const wrk = Object.values(flushed.worker.wrk)[0]

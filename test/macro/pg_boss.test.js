@@ -10,6 +10,7 @@ const {
   reset: resetBlockedColumnCacheForTests,
 } = require("../../src/macro/pg_boss/blocked_column")
 const Plan = require("../../src/plan")
+const Sampler = require("../../src/sampler")
 const Configuration = require("../../src/configuration")
 const { expectIntegerCount, expectLatencyNumber } = require("./numericTypes")
 
@@ -180,9 +181,8 @@ describe("pg-boss", () => {
   })
 
   test("libraryLoaded is true when the pg-boss package is imported", () => {
-    expect(Plan.libraryLoaded("pg_boss")).toBe(true)
-    expect(Plan.executable("pg_boss")).toBe(true)
-    expect(Plan.anyAllowlistedJobQueueLibraryLoaded()).toBe(true)
+    expect(Plan.ADAPTERS.pg_boss.libraryLoaded()).toBe(true)
+    expect(Plan.anyLibraryLoaded()).toBe(true)
   })
 
   test("empty queues report size 0 and latency 0", async () => {
@@ -648,23 +648,27 @@ describe("pg-boss", () => {
         HIREFIRE_PG_BOSS_SCHEMA: SCHEMA,
       },
       async () => {
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "pg_boss",
-            strategy: "jqs",
-            queues: ["email", "sms"],
-          },
-          configuration,
+        await new Sampler(configuration).round(
+          [
+            {
+              name: "worker",
+              adapter: "pg_boss",
+              strategy: "jqs",
+              queues: ["email", "sms"],
+            },
+          ],
+          () => true,
         )
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "pg_boss",
-            strategy: "jql",
-            queues: ["sms"],
-          },
-          configuration,
+        await new Sampler(configuration).round(
+          [
+            {
+              name: "worker",
+              adapter: "pg_boss",
+              strategy: "jql",
+              queues: ["sms"],
+            },
+          ],
+          () => true,
         )
 
         const flushed = configuration.buffer.flush()
@@ -717,28 +721,32 @@ describe("pg-boss", () => {
         HIREFIRE_PG_BOSS_SCHEMA: SCHEMA,
       },
       async () => {
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "pg_boss",
-            strategy: "jqs",
-            queues: ["email"],
-          },
-          configuration,
+        await new Sampler(configuration).round(
+          [
+            {
+              name: "worker",
+              adapter: "pg_boss",
+              strategy: "jqs",
+              queues: ["email"],
+            },
+          ],
+          () => true,
         )
         let flushed = configuration.buffer.flush()
         expect(Object.values(flushed.worker.jqs)[0]).toBe(2)
         expect(flushed.worker.wrk).toBeUndefined()
         expect(await jobQueueWorking("email", sampleOpts)).toBe(1)
 
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "pg_boss",
-            strategy: "jql",
-            queues: [],
-          },
-          configuration,
+        await new Sampler(configuration).round(
+          [
+            {
+              name: "worker",
+              adapter: "pg_boss",
+              strategy: "jql",
+              queues: [],
+            },
+          ],
+          () => true,
         )
         flushed = configuration.buffer.flush()
         expect(flushed.worker.jql).toBeDefined()
@@ -765,29 +773,33 @@ describe("pg-boss", () => {
         HIREFIRE_PG_BOSS_SCHEMA: SCHEMA,
       },
       async () => {
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "pg_boss",
-            strategy: "jqs",
-            queues: ["email"],
-            options: { skip_working: true },
-          },
-          configuration,
+        await new Sampler(configuration).round(
+          [
+            {
+              name: "worker",
+              adapter: "pg_boss",
+              strategy: "jqs",
+              queues: ["email"],
+              options: { skip_working: true },
+            },
+          ],
+          () => true,
         )
         let flushed = configuration.buffer.flush()
         expect(Object.values(flushed.worker.jqs)[0]).toBe(1)
         expect(Object.values(flushed.worker.wrk)[0]).toBe(2)
 
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "pg_boss",
-            strategy: "jql",
-            queues: ["email"],
-            options: { skip_working: true },
-          },
-          configuration,
+        await new Sampler(configuration).round(
+          [
+            {
+              name: "worker",
+              adapter: "pg_boss",
+              strategy: "jql",
+              queues: ["email"],
+              options: { skip_working: true },
+            },
+          ],
+          () => true,
         )
         flushed = configuration.buffer.flush()
         expect(Object.values(flushed.worker.jql)[0]).toBeGreaterThanOrEqual(15)

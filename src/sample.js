@@ -2,10 +2,6 @@ function validSample(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
 }
 
-function coerceSample(value) {
-  return Number(value)
-}
-
 function formatSampleValue(value) {
   try {
     const text = value === null ? "null" : typeof value
@@ -19,4 +15,4 @@ function formatSampleValue(value) {
   }
 }
 
-module.exports = { validSample, coerceSample, formatSampleValue }
+module.exports = { validSample, formatSampleValue }

@@ -28,7 +28,7 @@ class Configuration {
 
   constructor() {
     this.http = null
-    this.jobQueues = new JobQueues(this)
+    this.jobQueues = new JobQueues()
     this.logger = console
     this._sourcesByName = new Map()
     this._buffer = null

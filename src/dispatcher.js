@@ -2,10 +2,10 @@ const { Client } = require("./client")
 const Lease = require("./lease")
 const Once = require("./once")
 const Plan = require("./plan")
-const Probe = require("./probe")
+const Sampler = require("./sampler")
 const Payload = require("./dispatcher/payload")
 const safeLog = require("./log")
-const { formatError } = safeLog
+const { formatError, verbose } = safeLog
 const { RQT } = require("./strategy")
 
 class Dispatcher {
@@ -32,6 +32,7 @@ class Dispatcher {
     this._retiredLoops = new Set()
     this._stopJoinTimeoutMs = Dispatcher.JOIN_TIMEOUT * 1000
     this._once = new Once(configuration)
+    this._sampler = new Sampler(configuration)
   }
 
   start() {
@@ -285,7 +286,9 @@ class Dispatcher {
     if (!live()) return
 
     await this._guard(() =>
-      this._lease.requestIfDue({ hold: (plan) => this._holdLease(plan) }),
+      this._lease.requestIfDue({
+        hold: (plan) => this._sampler.canSample(plan),
+      }),
     )
     if (!live()) return
 
@@ -300,173 +303,18 @@ class Dispatcher {
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
     this._pendingSampleTrace = null
     this._once = new Once(this._configuration)
+    this._sampler = new Sampler(this._configuration)
   }
 
   _enterRace() {
-    return (
-      this._configuration.jobQueues.any() ||
-      Plan.anyAllowlistedJobQueueLibraryLoaded()
+    return this._configuration.jobQueues.any() || Plan.anyLibraryLoaded()
+  }
+
+  async _sampleJobQueues(live = () => true) {
+    this._pendingSampleTrace = await this._sampler.round(
+      this._lease.jobQueues,
+      live,
     )
-  }
-
-  _holdLease(planJobQueues) {
-    if (this._configuration.jobQueues.any()) return true
-
-    return planJobQueues.some((entry) => {
-      return this._adapterPresent(entry) && Plan.sampleableEntry(entry)
-    })
-  }
-
-  async _sampleJobQueues(live) {
-    const probe = Probe.start()
-    await Plan.aroundJobQueueSample(async () => {
-      const localJobQueues = this._configuration.jobQueues
-
-      for (const entry of this._lease.jobQueues) {
-        if (live && !live()) break
-        await probe.measure(entry, async () => {
-          if (live && !live()) return
-          if (this._adapterPresent(entry)) {
-            await this._samplePlanAdapter(entry, localJobQueues, live)
-          } else {
-            await this._sampleStrategyOnly(entry, localJobQueues, live)
-          }
-        })
-      }
-    }, this._configuration)
-    const payload = probe.finish()
-    if (this._verbose()) probe.logTo(this._logger())
-    if (this._lease.trace()) this._pendingSampleTrace = payload
-  }
-
-  _verbose() {
-    const value = process.env.HIREFIRE_VERBOSE
-    if (value == null || value === "") return false
-    const lower = String(value).toLowerCase()
-    return lower !== "0" && lower !== "false" && lower !== "no"
-  }
-
-  async _samplePlanAdapter(entry, localJobQueues, live) {
-    if (live && !live()) return
-
-    const name = String(entry.name ?? "")
-    const adapter = entry.adapter
-    const strategy = entry.strategy
-
-    if (Plan.executable(adapter)) {
-      if (!Plan.supportsStrategy(adapter, strategy)) {
-        this._warnUnsupportedStrategyOnce(name, adapter, strategy)
-        return
-      }
-
-      if (Plan.queuesRequired(adapter) && !Plan.namedPlanQueues(entry.queues)) {
-        this._warnEmptyQueuesOnce(name, adapter)
-        return
-      }
-
-      if (localJobQueues.findByName(name)) {
-        this._warnPlanOverrideOnce(name)
-      }
-      if (live && !live()) return
-      await Plan.execute(entry, this._configuration, live)
-    } else if (Plan.knownAdapter(adapter)) {
-      this._warnUnloadedAdapterOnce(name, adapter)
-    } else {
-      this._warnUnknownAdapterOnce(name, adapter)
-    }
-  }
-
-  async _sampleStrategyOnly(entry, localJobQueues, live) {
-    if (live && !live()) return
-
-    const name = String(entry.name ?? "")
-    const strategy = String(entry.strategy ?? "")
-
-    if (!Plan.knownStrategy(strategy)) {
-      this._warnUnknownStrategyOnce(name, strategy)
-      return
-    }
-
-    const jobQueue = localJobQueues.findByName(name)
-    if (jobQueue) {
-      await localJobQueues.sampleJobQueue(jobQueue, strategy, {
-        live,
-        name: name.trim(),
-      })
-    }
-  }
-
-  _warnUnloadedAdapterOnce(name, adapter) {
-    this._once.log(
-      "error",
-      "unloaded_adapter",
-      name,
-      `[HireFire] Plan adapter ${JSON.stringify(adapter)} for ${JSON.stringify(
-        name,
-      )} ` + `is not loaded in this process. Entry skipped.`,
-    )
-  }
-
-  _warnPlanOverrideOnce(name) {
-    this._once.log(
-      "warn",
-      "plan_override",
-      name,
-      `[HireFire] A HireFire UI adapter is configured for ` +
-        `${JSON.stringify(name)}, so config.dyno(${JSON.stringify(
-          name,
-        )}) with a local sampler is ignored. ` +
-        `You can remove that local configuration. The UI adapter is used instead.`,
-    )
-  }
-
-  _warnUnknownAdapterOnce(name, adapter) {
-    this._once.log(
-      "error",
-      "unknown_adapter",
-      name,
-      `[HireFire] Unknown plan adapter ` +
-        `${JSON.stringify(adapter)} for ${JSON.stringify(
-          name,
-        )}. Entry skipped.`,
-    )
-  }
-
-  _warnUnsupportedStrategyOnce(name, adapter, strategy) {
-    this._once.log(
-      "error",
-      "unsupported_strategy",
-      `${name}\0${adapter}\0${strategy}`,
-      `[HireFire] Plan adapter ${JSON.stringify(adapter)} does not support ` +
-        `strategy ${JSON.stringify(strategy)} for ${JSON.stringify(
-          name,
-        )}. Entry skipped.`,
-    )
-  }
-
-  _warnUnknownStrategyOnce(name, strategy) {
-    this._once.log(
-      "error",
-      "unknown_strategy",
-      `${name}\0${strategy}`,
-      `[HireFire] Unknown plan strategy ${JSON.stringify(strategy)} for ` +
-        `${JSON.stringify(name)}. Entry skipped.`,
-    )
-  }
-
-  _warnEmptyQueuesOnce(name, adapter) {
-    this._once.log(
-      "error",
-      "queues_required",
-      `${name}\0${adapter}`,
-      `[HireFire] Plan adapter ${JSON.stringify(adapter)} for ` +
-        `${JSON.stringify(name)} requires named queues. Entry skipped.`,
-    )
-  }
-
-  _adapterPresent(entry) {
-    const adapter = entry.adapter
-    return !(adapter == null || adapter === "")
   }
 
   async _dispatchIfDue(generation) {
@@ -527,7 +375,7 @@ class Dispatcher {
         return
       }
 
-      if (this._verbose()) {
+      if (verbose()) {
         this._logger().info(`[HireFire] Dispatching metrics: ${body}`)
       }
 

@@ -1,6 +1,8 @@
 const https = require("https")
 const nock = require("nock")
 const HireFire = require("../src")
+const Plan = require("../src/plan")
+const { planAdapter } = require("./support")
 
 const BASE = "https://data.hirefire.io"
 const START = 1_767_225_600
@@ -636,6 +638,10 @@ describe("the client at its boundary", () => {
         'E [HireFire] Unknown plan strategy "nope" for "worker". Entry skipped.',
         'E [HireFire] Unknown plan adapter "sidekiq" for "mailer". Entry skipped.',
       ])
+      expect(logged("W")).toEqual([
+        'W [HireFire] No config.dyno sampler is named "other", so this process samples nothing for it. ' +
+          "Check the name, or select an adapter for it in the HireFire UI.",
+      ])
     })
 
     test("sends the trace of a sample round once when the server asks for it", async () => {
@@ -738,17 +744,108 @@ describe("the client at its boundary", () => {
   })
 
   describe("a process that the plan names by adapter", () => {
+    function leaseIdentities() {
+      return requests
+        .filter((request) => request.path === "lease")
+        .map((request) => request.headers["hirefire-process-id"])
+    }
+
+    beforeEach(() => {
+      process.env.DYNO = "web.1"
+      for (const name of Object.keys(Plan.ADAPTERS)) delete Plan.ADAPTERS[name]
+    })
+
     test("stays out of the race for the lease when no queue library is installed and no sampler is set", async () => {
-      process.env.DYNO = "worker.1"
-      const Plan = require("../src/plan")
-      jest
-        .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
-        .mockReturnValue(false)
+      Plan.ADAPTERS.fake = planAdapter(
+        { jobQueueSize: async () => 1 },
+        { packages: ["hirefire-no-such-package"] },
+      )
       configure()
       await pass(20)
 
       expect(at("lease")).toEqual([])
       expect(at("ingest").length).toBeGreaterThan(0)
+    })
+
+    test("joins the race when a queue library is installed, and samples through its adapter", async () => {
+      const jobQueueLatency = jest.fn(async () => 4.2)
+      Plan.ADAPTERS.fake = planAdapter({
+        jobQueueLatency,
+        jobQueueWorking: async () => 2,
+      })
+      answers.lease = () =>
+        granted([
+          {
+            name: "worker",
+            strategy: "jql",
+            adapter: "fake",
+            queues: ["default", "mailer"],
+          },
+        ])
+      configure()
+      await pass(3)
+      await HireFire.configuration.dispatcher.stop()
+
+      expect(jobQueueLatency.mock.calls).toEqual([["default", "mailer", {}]])
+      expect(Object.values(ingested("worker", "jql"))).toEqual([4.2])
+      expect(Object.values(ingested("worker", "wrk"))).toEqual([2])
+      expect(logged("E")).toEqual([])
+    })
+
+    test("gives the lease back when it can sample no entry of the plan, says so once, and asks again under a new identity", async () => {
+      Plan.ADAPTERS.fake = planAdapter(
+        { jobQueueSize: async () => 1 },
+        { strategies: ["jqs"] },
+      )
+      answers.lease = () =>
+        granted(
+          [
+            { name: "worker", strategy: "jql", adapter: "fake" },
+            { name: "mailer", strategy: "jqs", adapter: "nope" },
+          ],
+          { "HireFire-Lease-TTL": "5" },
+        )
+      configure()
+      await pass(11)
+
+      const identities = leaseIdentities()
+      expect(at("lease")).toEqual([0, 5, 10])
+      expect(new Set(identities).size).toBe(3)
+      expect(logged("I").filter((line) => line.includes("Lease"))).toEqual([
+        "I [HireFire] Lease grant dropped: this process cannot sample the plan " +
+          "(no local job-queue samplers and no executable plan adapter).",
+      ])
+      expect(logged("E")).toEqual([])
+      expect(ingested("worker", "jql")).toEqual({})
+    })
+
+    test("samples the entries it can and says once why it skips each of the others", async () => {
+      Plan.ADAPTERS.fake = planAdapter(
+        { jobQueueSize: async () => 6 },
+        { strategies: ["jqs"] },
+      )
+      answers.lease = () =>
+        granted(
+          [
+            { name: "worker", strategy: "jqs", adapter: "fake" },
+            { name: "mailer", strategy: "jql", adapter: "fake" },
+            { name: "clock", strategy: "jqs", adapter: "nope" },
+          ],
+          { "HireFire-Sample-Frequency": "1" },
+        )
+      configure()
+      await pass(4)
+      await HireFire.configuration.dispatcher.stop()
+
+      expect(new Set(Object.values(ingested("worker", "jqs")))).toEqual(
+        new Set([6]),
+      )
+      expect(Object.keys(ingested("worker", "jqs")).length).toBeGreaterThan(2)
+      expect(ingested("mailer", "jql")).toEqual({})
+      expect(logged("E")).toEqual([
+        'E [HireFire] Plan adapter "fake" does not support strategy "jql" for "mailer". Entry skipped.',
+        'E [HireFire] Unknown plan adapter "nope" for "clock". Entry skipped.',
+      ])
     })
   })
 })

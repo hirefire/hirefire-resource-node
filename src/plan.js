@@ -1,428 +1,76 @@
+const Adapter = require("./plan/adapter")
 const safeLog = require("./log")
 const { formatError } = safeLog
-const { validSample, coerceSample, formatSampleValue } = require("./sample")
-const { JQL, JQS, WRK } = require("./strategy")
-
-const STRATEGIES = {
-  [JQL]: "jobQueueLatency",
-  [JQS]: "jobQueueSize",
-}
-
-const MAX_QUEUES = 64
-const MAX_QUEUE_NAME_BYTES = 128
+const { JQL, JQS } = require("./strategy")
 
 const Plan = {
   ADAPTERS: {
-    get bull() {
-      return require("./macro/bull")
-    },
-    get bullmq() {
-      return require("./macro/bullmq")
-    },
-    get pg_boss() {
-      return require("./macro/pg_boss")
-    },
+    bull: new Adapter({
+      macro: () => require("./macro/bull"),
+      packages: ["bull", "ioredis"],
+      strategies: [JQS],
+      environment: { connection: "HIREFIRE_BULL_URL" },
+    }),
+    bullmq: new Adapter({
+      macro: () => require("./macro/bullmq"),
+      packages: ["bullmq", "ioredis"],
+      strategies: [JQS],
+      environment: { connection: "HIREFIRE_BULLMQ_URL" },
+    }),
+    pg_boss: new Adapter({
+      macro: () => require("./macro/pg_boss"),
+      packages: ["pg-boss", "pg"],
+      strategies: [JQL, JQS],
+      environment: {
+        connection: "HIREFIRE_PG_BOSS_URL",
+        schema: "HIREFIRE_PG_BOSS_SCHEMA",
+      },
+    }),
   },
 
-  STRATEGIES,
+  MAX_QUEUES: 64,
+  MAX_QUEUE_NAME_BYTES: 128,
 
-  MAX_QUEUES,
-  MAX_QUEUE_NAME_BYTES,
+  adapter(name) {
+    return Object.hasOwn(this.ADAPTERS, name) ? this.ADAPTERS[name] : null
+  },
 
-  anyAllowlistedJobQueueLibraryLoaded() {
-    return (
-      libraryLoaded("bullmq") ||
-      libraryLoaded("bull") ||
-      libraryLoaded("pg_boss")
+  anyLibraryLoaded() {
+    return Object.values(this.ADAPTERS).some((adapter) =>
+      adapter.libraryLoaded(),
     )
   },
 
-  knownAdapter(adapter) {
-    return Object.prototype.hasOwnProperty.call(this.ADAPTERS, String(adapter))
-  },
-
-  libraryLoaded(adapter) {
-    return libraryLoaded(adapter)
-  },
-
-  resetLibraryLoadedCache() {
-    resetLibraryLoadedCache()
-  },
-
-  executable(adapter) {
-    return this.knownAdapter(adapter) && this.libraryLoaded(adapter)
-  },
-
-  knownStrategy(strategy) {
-    return Object.prototype.hasOwnProperty.call(STRATEGIES, String(strategy))
-  },
-
-  supportsStrategy(adapter, strategy) {
-    if (!this.knownAdapter(adapter)) return false
-    if (!this.knownStrategy(strategy)) return false
-    const macro = this.ADAPTERS[String(adapter)]
-    if (!macro || typeof macro.supportsPlanStrategy !== "function") return false
-    return macro.supportsPlanStrategy(strategy)
-  },
-
-  queuesRequired(adapter) {
-    if (!this.knownAdapter(adapter)) return false
-    const macro = this.ADAPTERS[String(adapter)]
-    if (!macro || typeof macro.queuesRequired !== "function") return false
-    return Boolean(macro.queuesRequired())
-  },
-
-  namedPlanQueues(queues) {
-    if (!Array.isArray(queues)) return false
-    return queues.some((queue) => {
-      const name = queue == null ? "" : String(queue).trim()
-      return name.length > 0 && Buffer.byteLength(name) <= MAX_QUEUE_NAME_BYTES
+  async aroundJobQueueSample(logger, fn) {
+    const tokens = new Map()
+    await eachHook(logger, "beforeSampleJobQueues", async (name, hook) => {
+      tokens.set(name, await hook())
     })
-  },
-
-  sampleableEntry(entry) {
-    const adapter = entry.adapter
-    const strategy = entry.strategy
-    if (
-      !this.executable(adapter) ||
-      !this.supportsStrategy(adapter, strategy)
-    ) {
-      return false
-    }
-    if (!this.queuesRequired(adapter)) return true
-    return this.namedPlanQueues(entry.queues)
-  },
-
-  async aroundJobQueueSample(fn, configuration) {
-    const logger = configuration && configuration.logger
-    const tokens = Object.create(null)
-
-    for (const name of Object.keys(this.ADAPTERS)) {
-      try {
-        const macro = this.ADAPTERS[name]
-        if (macro && typeof macro.beforeSampleJobQueues === "function") {
-          tokens[name] = await macro.beforeSampleJobQueues()
-        } else {
-          tokens[name] = null
-        }
-      } catch (error) {
-        safeLog(
-          logger,
-          "error",
-          `[HireFire] beforeSampleJobQueues for ${JSON.stringify(
-            name,
-          )} raised ` + formatError(error),
-        )
-      }
-    }
 
     try {
       return await fn()
     } finally {
-      for (const name of Object.keys(tokens)) {
-        try {
-          const macro = this.ADAPTERS[name]
-          if (macro && typeof macro.afterSampleJobQueues === "function") {
-            await macro.afterSampleJobQueues(tokens[name])
-          }
-        } catch (error) {
-          safeLog(
-            logger,
-            "error",
-            `[HireFire] afterSampleJobQueues for ${JSON.stringify(
-              name,
-            )} raised ` + formatError(error),
-          )
-        }
-      }
+      await eachHook(logger, "afterSampleJobQueues", async (name, hook) => {
+        if (tokens.has(name)) await hook(tokens.get(name))
+      })
     }
   },
+}
 
-  async reinitMacrosAfterFork(configuration) {
-    const logger = configuration && configuration.logger
-    for (const name of Object.keys(this.ADAPTERS)) {
-      try {
-        const macro = this.ADAPTERS[name]
-        if (macro && typeof macro.reinitAfterFork === "function") {
-          await macro.reinitAfterFork()
-        }
-      } catch (error) {
-        safeLog(
-          logger,
-          "error",
-          `[HireFire] reinitAfterFork for ${JSON.stringify(name)} raised ` +
-            formatError(error),
-        )
-      }
-    }
-  },
-
-  async execute(entry, configuration, live) {
-    const adapter = String(entry.adapter ?? "").trim()
-    const strategy = String(entry.strategy ?? "").trim()
-    const name = String(entry.name ?? "").trim()
-    const methodName = STRATEGIES[strategy]
-    const logger = configuration.logger
-
-    if (!methodName) {
-      safeLog(
-        logger,
-        "error",
-        `[HireFire] Unknown plan strategy ${JSON.stringify(strategy)} for ` +
-          `${JSON.stringify(name)}. Entry skipped.`,
-      )
-      return
-    }
-
-    if (!this.knownAdapter(adapter)) {
-      safeLog(
-        logger,
-        "error",
-        `[HireFire] Unknown plan adapter ${JSON.stringify(adapter)} for ` +
-          `${JSON.stringify(name)}. Entry skipped.`,
-      )
-      return
-    }
-
-    const macro = this.ADAPTERS[adapter]
-
-    if (
-      typeof macro.supportsPlanStrategy === "function" &&
-      !macro.supportsPlanStrategy(strategy)
-    ) {
-      safeLog(
-        logger,
-        "error",
-        `[HireFire] Plan adapter ${JSON.stringify(adapter)} does not support ` +
-          `strategy ${JSON.stringify(strategy)} for ${JSON.stringify(
-            name,
-          )}. Entry skipped.`,
-      )
-      return
-    }
-
-    const queues = normalizePlanQueues(entry.queues, name, logger)
-    if (queues === null) return
-
-    if (this.queuesRequired(adapter) && queues.length === 0) {
-      safeLog(
-        logger,
-        "error",
-        `[HireFire] Plan adapter ${JSON.stringify(adapter)} for ` +
-          `${JSON.stringify(name)} requires named queues. Entry skipped.`,
-      )
-      return
-    }
-
+async function eachHook(logger, hook, fn) {
+  for (const [name, adapter] of Object.entries(Plan.ADAPTERS)) {
     try {
-      const connectionOptions = macro.planConnectionOptions()
-      const options = {
-        ...macro.planOptions(strategy, entry.options),
-        ...connectionOptions,
-      }
-      const method = macro[methodName]
-      if (typeof method !== "function") {
-        safeLog(
-          logger,
-          "error",
-          `[HireFire] Plan adapter ${JSON.stringify(
-            adapter,
-          )} has no ${methodName}. Entry skipped.`,
-        )
-        return
-      }
-
-      await sampleJobStrategy(
-        configuration,
-        name,
-        strategy,
-        method,
-        queues,
-        options,
-        logger,
-        live,
-      )
-
-      if (samplesWorking(macro, strategy, options)) {
-        await sampleWorking(
-          configuration,
-          name,
-          macro.jobQueueWorking,
-          queues,
-          connectionOptions,
-          logger,
-          live,
-        )
-      }
+      const macro = adapter.macro
+      if (typeof macro[hook] === "function") await fn(name, macro[hook])
     } catch (error) {
-      const reason = formatError(error)
       safeLog(
         logger,
         "error",
-        `[HireFire] Plan sampler for ${JSON.stringify(name)} raised ${reason}`,
+        `[HireFire] ${hook} for ${JSON.stringify(name)} raised ` +
+          formatError(error),
       )
     }
-  },
-}
-
-function samplesWorking(macro, strategy, options) {
-  if (typeof macro.jobQueueWorking !== "function") return false
-  return strategy === JQL || options.skipWorking === true
-}
-
-async function sampleJobStrategy(
-  configuration,
-  name,
-  strategy,
-  method,
-  queues,
-  options,
-  logger,
-  live,
-) {
-  try {
-    const value = await method(...queues, options)
-    if (live && !live()) return false
-
-    if (!validSample(value)) {
-      safeLog(
-        logger,
-        "error",
-        `[HireFire] Plan sampler for ${JSON.stringify(name)} returned ` +
-          `${formatSampleValue(
-            value,
-          )}, expected a non-negative number. Sample dropped.`,
-      )
-      return false
-    }
-
-    configuration.buffer.sample(name, strategy, coerceSample(value))
-    return true
-  } catch (error) {
-    const reason = formatError(error)
-    safeLog(
-      logger,
-      "error",
-      `[HireFire] Plan sampler for ${JSON.stringify(name)} raised ${reason}`,
-    )
-    return false
   }
-}
-
-async function sampleWorking(
-  configuration,
-  name,
-  method,
-  queues,
-  options,
-  logger,
-  live,
-) {
-  try {
-    const wrk = await method(...queues, options)
-    if (live && !live()) return
-    if (!validSample(wrk)) {
-      safeLog(
-        logger,
-        "error",
-        `[HireFire] Plan working sampler for ${JSON.stringify(
-          name,
-        )} returned ` +
-          `${formatSampleValue(
-            wrk,
-          )}, expected a non-negative number. wrk sample dropped.`,
-      )
-      return
-    }
-    configuration.buffer.sample(name, WRK, coerceSample(wrk))
-  } catch (error) {
-    const reason = formatError(error)
-    safeLog(
-      logger,
-      "error",
-      `[HireFire] Plan working sampler for ${JSON.stringify(
-        name,
-      )} raised ${reason}`,
-    )
-  }
-}
-
-const libraryLoadedCache = new Map()
-
-function libraryLoaded(adapter) {
-  const name = String(adapter)
-  if (libraryLoadedCache.has(name)) return libraryLoadedCache.get(name)
-  const loaded = detectLibrary(name)
-  libraryLoadedCache.set(name, loaded)
-  return loaded
-}
-
-function resetLibraryLoadedCache() {
-  libraryLoadedCache.clear()
-}
-
-function detectLibrary(name) {
-  if (name === "pg_boss") {
-    try {
-      require.resolve("pg-boss")
-      require.resolve("pg")
-      return true
-    } catch {
-      return false
-    }
-  }
-  if (name !== "bullmq" && name !== "bull") return false
-  try {
-    require.resolve(name)
-    require.resolve("ioredis")
-    return true
-  } catch {
-    return false
-  }
-}
-
-function normalizePlanQueues(queues, name, logger) {
-  if (queues == null) return []
-
-  if (!Array.isArray(queues)) {
-    safeLog(
-      logger,
-      "error",
-      `[HireFire] Plan queues for ${JSON.stringify(
-        name,
-      )} must be an array. Entry skipped.`,
-    )
-    return null
-  }
-
-  const list = []
-  for (const queue of queues) {
-    const qname = queue == null ? "" : String(queue).trim()
-    if (!qname || Buffer.byteLength(qname) > MAX_QUEUE_NAME_BYTES) continue
-    list.push(qname)
-  }
-
-  if (list.length === 0 && queues.length > 0) {
-    safeLog(
-      logger,
-      "error",
-      `[HireFire] Plan queue list for ${JSON.stringify(
-        name,
-      )} had no valid names. Entry skipped.`,
-    )
-    return null
-  }
-
-  if (list.length > MAX_QUEUES) {
-    safeLog(
-      logger,
-      "error",
-      `[HireFire] Plan queue list truncated to ${MAX_QUEUES} names.`,
-    )
-    return list.slice(0, MAX_QUEUES)
-  }
-
-  return list
 }
 
 module.exports = Plan

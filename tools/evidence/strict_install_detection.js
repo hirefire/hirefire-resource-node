@@ -39,8 +39,8 @@ function main() {
     const Plan = require(path.join(home, "src", "plan"))
     console.log(JSON.stringify({
       app: Boolean(require.resolve("bullmq")),
-      seen: Plan.libraryLoaded("bullmq"),
-      race: Plan.anyAllowlistedJobQueueLibraryLoaded(),
+      seen: Plan.ADAPTERS.bullmq.libraryLoaded(),
+      race: Plan.anyLibraryLoaded(),
     }))
   `
   const result = JSON.parse(
@@ -57,7 +57,7 @@ function main() {
     [
       "layout: the client in a store outside the app, linked into the app's node_modules, as pnpm does in a workspace without hoisting and Yarn does with Plug'n'Play",
       `the app resolves bullmq: ${result.app}`,
-      `Plan.libraryLoaded("bullmq"): ${result.seen}`,
+      `the bullmq adapter counts as loaded: ${result.seen}`,
       `the process enters the lease race: ${result.race}`,
     ],
   )

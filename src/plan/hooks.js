@@ -1,3 +1,5 @@
+const { jobQueue } = require("../strategy")
+
 const Hooks = {
   planOptions(_strategy, _options) {
     return {}
@@ -8,7 +10,7 @@ const Hooks = {
   },
 
   supportsPlanStrategy(strategy) {
-    return require("../plan").knownStrategy(strategy)
+    return jobQueue(strategy)
   },
 
   queuesRequired() {

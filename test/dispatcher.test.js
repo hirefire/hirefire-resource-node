@@ -476,9 +476,7 @@ describe("Dispatcher", () => {
   test("ensure job queue loop starts when enter race becomes true", async () => {
     stubLease()
     captureIngestBodies()
-    jest
-      .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
-      .mockReturnValue(false)
+    jest.spyOn(Plan, "anyLibraryLoaded").mockReturnValue(false)
     const dispatcher = config().dispatcher
     process.env.DYNO = "web.1"
     dispatcher.start()
@@ -1085,74 +1083,6 @@ describe("Dispatcher", () => {
     expect(Object.values(entry.metrics.jqs)[0]).toBe(11)
   })
 
-  test("unsupported strategy once log is isolated per name adapter strategy", async () => {
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(false)
-    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
-    const latency = jest.fn(async () => 1)
-    const macro = {
-      supportsPlanStrategy: () => false,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueLatency: latency,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bunny", {
-      get: () => macro,
-      configurable: true,
-    })
-    Object.defineProperty(Plan.ADAPTERS, "resque", {
-      get: () => macro,
-      configurable: true,
-    })
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bunny",
-            queues: [],
-            options: {},
-          },
-          {
-            name: "mailer",
-            strategy: "jql",
-            adapter: "bunny",
-            queues: [],
-            options: {},
-          },
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "resque",
-            queues: [],
-            options: {},
-          },
-        ],
-      }),
-    )
-    config().dyno("other", () => 0)
-    const dispatcher = config().dispatcher
-    await dispatcher._jobQueueTick()
-    await dispatcher._jobQueueTick()
-
-    const msgs = logger.error.mock.calls.map((c) => String(c[0]))
-    expect(msgs.filter((m) => m.includes("does not support")).length).toBe(3)
-    expect(msgs.filter((m) => m.includes("does not support"))).toEqual([
-      expect.stringContaining(
-        'adapter "bunny" does not support strategy "jql" for "worker"',
-      ),
-      expect.stringContaining(
-        'adapter "bunny" does not support strategy "jql" for "mailer"',
-      ),
-      expect.stringContaining(
-        'adapter "resque" does not support strategy "jql" for "worker"',
-      ),
-    ])
-  })
-
   test("stop closes transports even when final dispatch raises", async () => {
     stubLease()
     captureIngestBodies()
@@ -1227,79 +1157,6 @@ describe("Dispatcher", () => {
     await dispatcher._dispatch(1)
     expect(dispatcher._lastRqtSecond).toBe(999)
     expect(dispatcher._dispatchFrequency).toBe(1)
-  })
-
-  test("plan adapter overrides local sampler", async () => {
-    const sample = jest.fn(async () => 9.9)
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueLatency: sample,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bullmq",
-            queues: ["default"],
-            options: {},
-          },
-        ],
-      }),
-    )
-    const bodies = captureIngestBodies()
-    config().dyno("worker", () => 1)
-    const dispatcher = config().dispatcher
-    freezeTime(1000)
-    await dispatcher._jobQueueTick()
-    await dispatcher._dispatch()
-    const entry = bodies[0].find((e) => e.name === "worker")
-    expect(entry.metrics.jql).toBeDefined()
-    expect(Object.values(entry.metrics.jql)[0]).toBe(9.9)
-  })
-
-  test("plan override warns once", async () => {
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
-    jest.spyOn(Plan, "execute").mockResolvedValue(undefined)
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bullmq",
-            queues: [],
-            options: {},
-          },
-        ],
-      }),
-    )
-    config().dyno("worker", () => 99)
-    const dispatcher = config().dispatcher
-    freezeTime(1000)
-    await dispatcher._jobQueueTick()
-    await dispatcher._jobQueueTick()
-    const msgs = logger.warn.mock.calls.map((c) => String(c[0]))
-    const hits = msgs.filter((m) => m.includes("UI adapter is configured"))
-    expect(hits.length).toBe(1)
-    expect(hits[0]).toMatch(/config\.dyno/)
-    expect(hits[0]).toMatch(/You can remove/)
   })
 
   test("strategy only plan reports lease name not local dyno spelling", async () => {
@@ -1418,113 +1275,8 @@ describe("Dispatcher", () => {
     ).toHaveLength(Lease.MAX_JOB_QUEUES)
   })
 
-  test("known unloaded adapter skips without local fallback", async () => {
-    jest.spyOn(Plan, "executable").mockReturnValue(false)
-    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bullmq",
-            queues: [],
-            options: {},
-          },
-        ],
-      }),
-    )
-    const bodies = captureIngestBodies()
-    config().dyno("worker", () => 42)
-    const dispatcher = config().dispatcher
-    freezeTime(1000)
-    await dispatcher._jobQueueTick()
-    await dispatcher._jobQueueTick()
-    await dispatcher._dispatch()
-    expect(bodies).toEqual([])
-    const msgs = logger.error.mock.calls.map((c) => String(c[0]))
-    expect(
-      msgs.filter((m) => m.includes("is not loaded in this process")).length,
-    ).toBe(1)
-  })
-
-  test("executable plan without local dyno holds lease and samples", async () => {
-    jest
-      .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
-      .mockReturnValue(true)
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-    const sample = jest.fn(async () => 4.2)
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueLatency: sample,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bullmq",
-            queues: ["default"],
-            options: {},
-          },
-        ],
-      }),
-    )
-    const bodies = captureIngestBodies()
-    const dispatcher = config().dispatcher
-    freezeTime(1000)
-    expect(dispatcher._enterRace()).toBe(true)
-    expect(config().jobQueues.any()).toBe(false)
-    await dispatcher._jobQueueTick()
-    expect(dispatcher._lease.granted()).toBe(true)
-    await dispatcher._dispatch()
-    const entry = bodies[0].find((e) => e.name === "worker")
-    expect(Object.values(entry.metrics.jql)[0]).toBe(4.2)
-  })
-
-  test("hold lease false when only unsupported strategy entries", async () => {
-    jest
-      .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
-      .mockReturnValue(true)
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(false)
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bullmq",
-            queues: ["default"],
-            options: {},
-          },
-        ],
-      }),
-    )
-    const dispatcher = config().dispatcher
-    expect(dispatcher._enterRace()).toBe(true)
-    await dispatcher._jobQueueTick()
-    expect(dispatcher._lease.granted()).toBe(false)
-  })
-
   test("always lease non renew when no workers and no executable plan", async () => {
-    jest
-      .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
-      .mockReturnValue(true)
+    jest.spyOn(Plan, "anyLibraryLoaded").mockReturnValue(true)
     stubLease(
       true,
       JSON.stringify({
@@ -1544,158 +1296,6 @@ describe("Dispatcher", () => {
     expect(dispatcher._enterRace()).toBe(true)
     await dispatcher._jobQueueTick()
     expect(dispatcher._lease.granted()).toBe(false)
-  })
-
-  test("partial plan holds and samples only executable entries", async () => {
-    jest
-      .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
-      .mockReturnValue(true)
-    jest.spyOn(Plan, "executable").mockImplementation((a) => a === "bullmq")
-    jest
-      .spyOn(Plan, "knownAdapter")
-      .mockImplementation((a) => ["bullmq", "other"].includes(String(a)))
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-    const sample = jest.fn(async () => 2.5)
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueLatency: sample,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bullmq",
-            queues: ["default"],
-          },
-          {
-            name: "mailer",
-            strategy: "jql",
-            adapter: "other",
-            queues: ["mail"],
-          },
-        ],
-      }),
-    )
-    const bodies = captureIngestBodies()
-    const dispatcher = config().dispatcher
-    freezeTime(1000)
-    await dispatcher._jobQueueTick()
-    expect(dispatcher._lease.granted()).toBe(true)
-    await dispatcher._jobQueueTick()
-    await dispatcher._dispatch()
-    const names = bodies[0].map((e) => e.name)
-    expect(names).toContain("worker")
-    expect(names).not.toContain("mailer")
-    const msgs = logger.error.mock.calls.map((c) => String(c[0]))
-    expect(
-      msgs.filter((m) => m.includes("is not loaded in this process")).length,
-    ).toBe(1)
-  })
-
-  test("partial plan unsupported jql and supported jqs holds and samples size", async () => {
-    jest
-      .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
-      .mockReturnValue(true)
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest
-      .spyOn(Plan, "supportsStrategy")
-      .mockImplementation((_a, strategy) => strategy === "jqs")
-    const size = jest.fn(async () => 7)
-    const latency = jest.fn(async () => {
-      throw new Error("jql must not run")
-    })
-    const macro = {
-      supportsPlanStrategy: (s) => s === "jqs",
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: size,
-      jobQueueLatency: latency,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bullmq",
-            queues: ["default"],
-          },
-          {
-            name: "worker",
-            strategy: "jqs",
-            adapter: "bullmq",
-            queues: ["default"],
-          },
-        ],
-      }),
-    )
-    const bodies = captureIngestBodies()
-    const dispatcher = config().dispatcher
-    freezeTime(1000)
-    await dispatcher._jobQueueTick()
-    expect(dispatcher._lease.granted()).toBe(true)
-    await dispatcher._dispatch()
-    const entry = bodies[0].find((e) => e.name === "worker")
-    expect(entry.metrics.jqs).toBeDefined()
-    expect(entry.metrics.jql).toBeUndefined()
-    expect(latency).not.toHaveBeenCalled()
-  })
-
-  test("unsupported plan strategy logs once and skips macro", async () => {
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(false)
-    const latency = jest.fn(async () => 1)
-    const macro = {
-      supportsPlanStrategy: () => false,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueLatency: latency,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    stubLease(
-      true,
-      JSON.stringify({
-        version: 1,
-        job_queues: [
-          {
-            name: "worker",
-            strategy: "jql",
-            adapter: "bullmq",
-            queues: ["default"],
-          },
-        ],
-      }),
-    )
-    const bodies = captureIngestBodies()
-    config().dyno("other", () => 0)
-    const dispatcher = config().dispatcher
-    freezeTime(1000)
-    await dispatcher._jobQueueTick()
-    await dispatcher._jobQueueTick()
-    await dispatcher._dispatch()
-    expect(latency).not.toHaveBeenCalled()
-    const msgs = logger.error.mock.calls.map((c) => String(c[0]))
-    expect(msgs.filter((m) => m.includes("does not support")).length).toBe(1)
-    expect(bodies.every((b) => !b.some((e) => e.name === "worker"))).toBe(true)
   })
 
   test("encode omits non finite rqt mean", async () => {
@@ -1778,92 +1378,6 @@ describe("Dispatcher", () => {
     await dispatcher._dispatch()
     expect(dispatcher._lastRqtSecond).toBe(1000)
     expect(Object.keys(config().buffer.flush())).toHaveLength(0)
-  })
-
-  test("sample job queues runs plan samples inside around job queue sample", async () => {
-    const order = []
-    const around = jest
-      .spyOn(Plan, "aroundJobQueueSample")
-      .mockImplementation(async (fn, configuration) => {
-        order.push("around-enter")
-        expect(configuration).toBe(config())
-        const result = await fn()
-        order.push("around-exit")
-        return result
-      })
-    const execute = jest
-      .spyOn(Plan, "execute")
-      .mockImplementation(async (entry, configuration) => {
-        order.push("execute")
-        expect(configuration).toBe(config())
-        expect(entry).toEqual(
-          expect.objectContaining({
-            adapter: expect.stringMatching(/^(bullmq|bull)$/),
-            strategy: "jqs",
-          }),
-        )
-      })
-    const executable = jest.spyOn(Plan, "executable").mockReturnValue(true)
-    const supportsStrategy = jest
-      .spyOn(Plan, "supportsStrategy")
-      .mockReturnValue(true)
-    const knownAdapter = jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
-
-    const dispatcher = config().dispatcher
-    dispatcher._lease._granted = true
-    dispatcher._lease._jobQueues = [
-      {
-        name: "worker",
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues: ["default"],
-      },
-      {
-        name: "mailer",
-        adapter: "bull",
-        strategy: "jqs",
-        queues: ["mail"],
-      },
-    ]
-
-    try {
-      await dispatcher._sampleJobQueues()
-
-      expect(around).toHaveBeenCalledTimes(1)
-      expect(execute).toHaveBeenCalledTimes(2)
-      expect(execute).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-        }),
-        config(),
-        undefined,
-      )
-      expect(execute).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          name: "mailer",
-          adapter: "bull",
-          strategy: "jqs",
-        }),
-        config(),
-        undefined,
-      )
-      expect(order).toEqual([
-        "around-enter",
-        "execute",
-        "execute",
-        "around-exit",
-      ])
-    } finally {
-      around.mockRestore()
-      execute.mockRestore()
-      executable.mockRestore()
-      supportsStrategy.mockRestore()
-      knownAdapter.mockRestore()
-    }
   })
 
   test("backfills seconds skipped between dispatches", async () => {
@@ -2303,37 +1817,6 @@ describe("Dispatcher", () => {
     expect(loggerErrors()).toContain("Dispatch error")
   })
 
-  test("hold lease true when only supported plan entries without local dynos", () => {
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-    const dispatcher = config().dispatcher
-    expect(
-      dispatcher._holdLease([
-        {
-          name: "worker",
-          strategy: "jqs",
-          adapter: "bullmq",
-          queues: ["default"],
-        },
-      ]),
-    ).toBe(true)
-  })
-
-  test("sample plan adapter skips queues required empty lists", async () => {
-    const execute = jest.spyOn(Plan, "execute")
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-    jest.spyOn(Plan, "queuesRequired").mockReturnValue(true)
-    jest.spyOn(Plan, "namedPlanQueues").mockReturnValue(false)
-    const dispatcher = config().dispatcher
-    await dispatcher._samplePlanAdapter(
-      { name: "mail", adapter: "bunny", strategy: "jqs", queues: [] },
-      config().jobQueues,
-    )
-    expect(execute).not.toHaveBeenCalled()
-    expect(loggerErrors()).toMatch(/requires named queues/)
-  })
-
   test("strategy only unknown strategy skips and logs", async () => {
     stubGrantedLease(
       JSON.stringify({
@@ -2383,9 +1866,7 @@ describe("Dispatcher", () => {
   })
 
   test("ensure job queue loop is noop without enter race", async () => {
-    jest
-      .spyOn(Plan, "anyAllowlistedJobQueueLibraryLoaded")
-      .mockReturnValue(false)
+    jest.spyOn(Plan, "anyLibraryLoaded").mockReturnValue(false)
     stubLease()
     captureIngestBodies()
     const dispatcher = configureWebOnly()

@@ -1,1483 +1,172 @@
+const { capture, planAdapter } = require("../support")
+const HireFire = require("../../src")
 const Plan = require("../../src/plan")
-const Configuration = require("../../src/configuration")
 
 describe("Plan", () => {
-  let configuration
+  function replaceAdapters(adapters) {
+    for (const name of Object.keys(Plan.ADAPTERS)) delete Plan.ADAPTERS[name]
+    Object.assign(Plan.ADAPTERS, adapters)
+  }
 
-  beforeEach(() => {
-    configuration = new Configuration()
-    configuration.logger = { info() {}, warn() {}, error: jest.fn() }
-  })
+  test("the adapters with their packages, their strategies, and their variables", () => {
+    const table = Object.fromEntries(
+      Object.entries(Plan.ADAPTERS).map(([name, adapter]) => [
+        name,
+        [adapter.packages, adapter.strategies, adapter.environment],
+      ]),
+    )
 
-  test("known adapters", () => {
-    expect(Plan.knownAdapter("bullmq")).toBe(true)
-    expect(Plan.knownAdapter("bull")).toBe(true)
-    expect(Plan.knownAdapter("pg_boss")).toBe(true)
-    expect(Plan.knownAdapter("sidekiq")).toBe(false)
-    expect(Plan.knownAdapter("constructor")).toBe(false)
-    expect(Plan.knownAdapter("toString")).toBe(false)
-    expect(Plan.knownAdapter("valueOf")).toBe(false)
-    expect(Plan.knownAdapter("__proto__")).toBe(false)
+    expect(table).toEqual({
+      bull: [["bull", "ioredis"], ["jqs"], { connection: "HIREFIRE_BULL_URL" }],
+      bullmq: [
+        ["bullmq", "ioredis"],
+        ["jqs"],
+        { connection: "HIREFIRE_BULLMQ_URL" },
+      ],
+      pg_boss: [
+        ["pg-boss", "pg"],
+        ["jql", "jqs"],
+        {
+          connection: "HIREFIRE_PG_BOSS_URL",
+          schema: "HIREFIRE_PG_BOSS_SCHEMA",
+        },
+      ],
+    })
   })
 
   test("every planned adapter takes the strategies and options the server sends", () => {
     const sizeOnly = ["bull", "bullmq"]
 
-    expect(Object.keys(Plan.ADAPTERS).sort()).toEqual([
-      "bull",
-      "bullmq",
-      "pg_boss",
-    ])
-
-    for (const adapter of Object.keys(Plan.ADAPTERS)) {
-      const macro = Plan.ADAPTERS[adapter]
-
-      expect(macro.supportsPlanStrategy("jqs")).toBe(true)
-      expect(macro.supportsPlanStrategy("jql")).toBe(
-        !sizeOnly.includes(adapter),
-      )
-      expect(macro.queuesRequired()).toBe(false)
-      expect(typeof macro.jobQueueWorking).toBe("function")
-      expect(macro.planOptions("jqs", { skip_working: true })).toEqual({
+    for (const [name, adapter] of Object.entries(Plan.ADAPTERS)) {
+      expect(adapter.supports("jqs")).toBe(true)
+      expect(adapter.supports("jql")).toBe(!sizeOnly.includes(name))
+      expect(typeof adapter.macro.jobQueueSize).toBe("function")
+      expect(typeof adapter.macro.jobQueueLatency).toBe("function")
+      expect(typeof adapter.macro.jobQueueWorking).toBe("function")
+      expect(adapter.options("jqs", { skip_working: true })).toEqual({
         skipWorking: true,
       })
-      expect(macro.planOptions("jqs", {})).toEqual({})
-      expect(macro.planOptions("jql", { skip_working: true })).toEqual({})
+      expect(adapter.options("jqs", {})).toEqual({})
+      expect(adapter.options("jql", { skip_working: true })).toEqual({})
     }
   })
 
-  test("known strategy", () => {
-    expect(Plan.knownStrategy("jqs")).toBe(true)
-    expect(Plan.knownStrategy("jql")).toBe(true)
-  })
-
-  test("supports strategy jqs only for bullmq", () => {
-    expect(Plan.supportsStrategy("bullmq", "jqs")).toBe(true)
-    expect(Plan.supportsStrategy("bullmq", "jql")).toBe(false)
-  })
-
-  test("supports strategy jqs only for bull", () => {
-    expect(Plan.supportsStrategy("bull", "jqs")).toBe(true)
-    expect(Plan.supportsStrategy("bull", "jql")).toBe(false)
-  })
-
-  test("supports strategy jql and jqs for pg_boss", () => {
-    expect(Plan.supportsStrategy("pg_boss", "jqs")).toBe(true)
-    expect(Plan.supportsStrategy("pg_boss", "jql")).toBe(true)
-    expect(Plan.supportsStrategy("pg_boss", "rpm")).toBe(false)
-  })
-
-  test("library loaded for pg boss requires both pg boss and pg", () => {
-    const planModule = require.cache[require.resolve("../../src/plan")]
-    const originalResolve = planModule.require.resolve
-    const present = new Set(["pg-boss", "pg"])
-
-    const mockResolve = function resolve(request, options) {
-      if (request === "pg-boss" || request === "pg") {
-        if (!present.has(request)) {
-          const err = new Error(`Cannot find module '${request}'`)
-          err.code = "MODULE_NOT_FOUND"
-          throw err
-        }
-        return `/virtual-hirefire/${request}/index.js`
-      }
-      return originalResolve.call(planModule.require, request, options)
-    }
-    mockResolve.paths = originalResolve.paths
-    planModule.require.resolve = mockResolve
-
-    try {
-      present.delete("pg")
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("pg_boss")).toBe(false)
-      expect(Plan.executable("pg_boss")).toBe(false)
-
-      present.add("pg")
-      present.delete("pg-boss")
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("pg_boss")).toBe(false)
-      expect(Plan.executable("pg_boss")).toBe(false)
-
-      present.add("pg-boss")
-      present.add("pg")
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("pg_boss")).toBe(true)
-      expect(Plan.executable("pg_boss")).toBe(true)
-    } finally {
-      Plan.resetLibraryLoadedCache()
-      planModule.require.resolve = originalResolve
-    }
-  })
-
-  test("library loaded isolates bull from bullmq package names", () => {
-    const planModule = require.cache[require.resolve("../../src/plan")]
-    const originalResolve = planModule.require.resolve
-    const present = new Set()
-
-    const mockResolve = function resolve(request, options) {
-      if (request === "bull" || request === "bullmq" || request === "ioredis") {
-        if (!present.has(request)) {
-          const err = new Error(`Cannot find module '${request}'`)
-          err.code = "MODULE_NOT_FOUND"
-          throw err
-        }
-        return `/virtual-hirefire/${request}/index.js`
-      }
-      return originalResolve.call(planModule.require, request, options)
-    }
-    mockResolve.paths = originalResolve.paths
-    planModule.require.resolve = mockResolve
-
-    try {
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("bull")).toBe(false)
-      expect(Plan.libraryLoaded("bullmq")).toBe(false)
-
-      present.add("bullmq")
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("bullmq")).toBe(false)
-      expect(Plan.executable("bullmq")).toBe(false)
-
-      present.add("ioredis")
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("bullmq")).toBe(true)
-      expect(Plan.libraryLoaded("bull")).toBe(false)
-      expect(Plan.executable("bull")).toBe(false)
-
-      present.delete("bullmq")
-      present.delete("ioredis")
-      present.add("bull")
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("bull")).toBe(false)
-      expect(Plan.executable("bull")).toBe(false)
-
-      present.add("ioredis")
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("bull")).toBe(true)
-      expect(Plan.libraryLoaded("bullmq")).toBe(false)
-      expect(Plan.executable("bullmq")).toBe(false)
-
-      present.add("bullmq")
-      Plan.resetLibraryLoadedCache()
-      expect(Plan.libraryLoaded("bull")).toBe(true)
-      expect(Plan.libraryLoaded("bullmq")).toBe(true)
-    } finally {
-      Plan.resetLibraryLoadedCache()
-      planModule.require.resolve = originalResolve
-    }
-  })
-
-  test("supports strategy rejects unknown strategy with known adapter", () => {
-    expect(Plan.supportsStrategy("unknown", "jql")).toBe(false)
-    expect(Plan.supportsStrategy("bullmq", "rpm")).toBe(false)
-    expect(Plan.supportsStrategy("bullmq", "unknown")).toBe(false)
-  })
-
-  test("execute skips jql bullmq", async () => {
-    await Plan.execute(
-      {
-        name: "worker",
-        adapter: "bullmq",
-        strategy: "jql",
-        queues: ["default"],
-      },
-      configuration,
-    )
-    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
-    expect(configuration.logger.error).toHaveBeenCalled()
-  })
-
-  test("execute skips jql bull", async () => {
-    await Plan.execute(
-      {
-        name: "worker",
-        adapter: "bull",
-        strategy: "jql",
-        queues: ["default"],
-      },
-      configuration,
-    )
-    expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
-    expect(configuration.logger.error).toHaveBeenCalled()
-  })
-
-  test("execute unknown adapter logs and skips", async () => {
-    await Plan.execute(
-      {
-        name: "worker",
-        adapter: "nope",
-        strategy: "jqs",
-      },
-      configuration,
-    )
-    expect(configuration.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Unknown plan adapter"),
-    )
-  })
-
-  test("execute skips an adapter without the selected sampler", async () => {
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
-      expect(configuration.logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("has no jobQueueSize"),
-      )
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  })
-
-  test("execute logs primitive plan option failures", async () => {
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => {
-        throw "plan options boom"
-      },
-      planConnectionOptions: () => ({}),
-      jobQueueSize: async () => 1,
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
-      expect(configuration.logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("plan options boom"),
-      )
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  })
-
-  test("normalize queues null means all queues", async () => {
-    const sample = jest.fn(async () => 1)
-    const macro = require("../../src/macro/bullmq")
-    const orig = macro.jobQueueSize
-    const origWorking = macro.jobQueueWorking
-    macro.jobQueueSize = sample
-    macro.jobQueueWorking = async () => {
-      throw new Error("isolated from live redis")
-    }
-    try {
-      jest.spyOn(Plan, "executable").mockReturnValue(true)
-      jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-        get: () => macro,
-        configurable: true,
-      })
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: null,
-        },
-        configuration,
-      )
-      expect(sample).toHaveBeenCalledWith({})
-    } finally {
-      macro.jobQueueSize = orig
-      macro.jobQueueWorking = origWorking
-    }
-  })
-
-  test("json null queue elements are dropped not the name null", async () => {
-    const sample = jest.fn(async () => 1)
-    const macro = require("../../src/macro/bullmq")
-    const orig = macro.jobQueueSize
-    const origWorking = macro.jobQueueWorking
-    macro.jobQueueSize = sample
-    macro.jobQueueWorking = async () => {
-      throw new Error("isolated from live redis")
-    }
-    try {
-      jest.spyOn(Plan, "executable").mockReturnValue(true)
-      jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-        get: () => macro,
-        configurable: true,
-      })
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: [null, "default", undefined, null],
-        },
-        configuration,
-      )
-      expect(sample).toHaveBeenCalledWith("default", {})
-      expect(sample.mock.calls[0].some((a) => a === "null")).toBe(false)
-
-      sample.mockClear()
-      configuration.logger.error.mockClear()
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: [null, null],
-        },
-        configuration,
-      )
-      expect(sample).not.toHaveBeenCalled()
-      expect(configuration.logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("had no valid names"),
-      )
-    } finally {
-      macro.jobQueueSize = orig
-      macro.jobQueueWorking = origWorking
-    }
-  })
-
-  test("execute drops invalid samples", async () => {
-    const macro = require("../../src/macro/bullmq")
-    const orig = macro.jobQueueSize
-    const origWorking = macro.jobQueueWorking
-    const bad = [-1, NaN, Infinity, null, "nope"]
-    let i = 0
-    macro.jobQueueSize = async () => bad[i++]
-    macro.jobQueueWorking = async () => {
-      throw new Error("isolated from live redis")
-    }
-    try {
-      for (let n = 0; n < bad.length; n++) {
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "bullmq",
-            strategy: "jqs",
-            queues: ["default"],
-          },
-          configuration,
-        )
-      }
-      expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
-      const dropped = configuration.logger.error.mock.calls
-        .map((c) => String(c[0]))
-        .join("\n")
-      expect(dropped).toContain("Sample dropped")
-      expect(dropped).toContain('number("-1")')
-      expect(dropped).toContain('string("nope")')
-
-      const recorded = []
-      for (const good of [7, 1.5]) {
-        macro.jobQueueSize = async () => good
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "bullmq",
-            strategy: "jqs",
-            queues: ["default"],
-          },
-          configuration,
-        )
-        recorded.push(...Object.values(configuration.buffer.flush().worker.jqs))
-      }
-      expect(recorded).toContain(7)
-      expect(recorded.some((value) => Math.abs(value - 1.5) < 0.0001)).toBe(
-        true,
-      )
-    } finally {
-      macro.jobQueueSize = orig
-      macro.jobQueueWorking = origWorking
-    }
-  })
-
-  test("bounds invalid plan sample diagnostics", async () => {
-    const invalidValues = [
-      "x".repeat(200),
-      {
-        toString: () => {
-          throw new Error("inspect boom")
-        },
-      },
-    ]
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: jest
-        .fn()
-        .mockResolvedValueOnce(invalidValues[0])
-        .mockResolvedValueOnce(invalidValues[1]),
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-
-    try {
-      for (let i = 0; i < invalidValues.length; i++) {
-        await Plan.execute(
-          {
-            name: "worker",
-            adapter: "bullmq",
-            strategy: "jqs",
-            queues: ["default"],
-          },
-          configuration,
-        )
-      }
-      const messages = configuration.logger.error.mock.calls.map((call) =>
-        String(call[0]),
-      )
-      expect(messages.some((message) => message.includes("…"))).toBe(true)
-      expect(messages.some((message) => message.includes("inspect boom"))).toBe(
-        false,
-      )
-      expect(
-        messages.some((message) => message.includes("returned object,")),
-      ).toBe(true)
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  })
-
-  test("execute live gate drops a sample that returns after stop", async () => {
-    const macro = require("../../src/macro/bullmq")
-    const origSize = macro.jobQueueSize
-    const origWorking = macro.jobQueueWorking
-    macro.jobQueueSize = async () => 11
-    macro.jobQueueWorking = async () => 3
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-          options: { skip_working: true },
-        },
-        configuration,
-        () => false,
-      )
-      expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
-    } finally {
-      macro.jobQueueSize = origSize
-      macro.jobQueueWorking = origWorking
-    }
-  })
-
-  test("execute calls macro and buffers nested metric", async () => {
-    const sample = jest.fn(async () => 1.5)
-    const macro = require("../../src/macro/bullmq")
-    const orig = macro.jobQueueSize
-    const origWorking = macro.jobQueueWorking
-    macro.jobQueueSize = sample
-    macro.jobQueueWorking = async () => {
-      throw new Error("isolated from live redis")
-    }
-    try {
-      jest.spyOn(Plan, "executable").mockReturnValue(true)
-      jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-        get: () => macro,
-        configurable: true,
-      })
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
-      const data = configuration.buffer.flush()
-      expect(Object.values(data.worker.jqs)[0]).toBe(1.5)
-    } finally {
-      macro.jobQueueSize = orig
-      macro.jobQueueWorking = origWorking
-    }
-  })
-
-  test("execute rescues macro errors and logs", async () => {
-    const macro = require("../../src/macro/bullmq")
-    const orig = macro.jobQueueSize
-    const origWorking = macro.jobQueueWorking
-    macro.jobQueueSize = async () => {
-      throw new Error("broker down")
-    }
-    macro.jobQueueWorking = async () => {
-      throw new Error("isolated from live redis")
-    }
-    try {
-      jest.spyOn(Plan, "executable").mockReturnValue(true)
-      jest.spyOn(Plan, "supportsStrategy").mockReturnValue(true)
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-        get: () => ({
-          ...macro,
-          supportsPlanStrategy: () => true,
-          planOptions: () => ({}),
-          planConnectionOptions: () => ({}),
-          jobQueueSize: macro.jobQueueSize,
-          jobQueueWorking: macro.jobQueueWorking,
-        }),
-        configurable: true,
-      })
-      await expect(
-        Plan.execute(
-          {
-            name: "worker",
-            adapter: "bullmq",
-            strategy: "jqs",
-            queues: ["default"],
-          },
-          configuration,
-        ),
-      ).resolves.toBeUndefined()
-      expect(Object.keys(configuration.buffer.flush())).toHaveLength(0)
-      expect(configuration.logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("broker down"),
-      )
-    } finally {
-      macro.jobQueueSize = orig
-      macro.jobQueueWorking = origWorking
-    }
-  })
-
-  test("execute unknown strategy logs and skips", async () => {
-    await Plan.execute(
-      {
-        name: "worker",
-        adapter: "bullmq",
-        strategy: "rpm",
-        queues: [],
-      },
-      configuration,
-    )
-    expect(configuration.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Unknown plan strategy"),
-    )
-  })
-
-  test("execute merges adapter plan connection options", async () => {
-    const sample = jest.fn(async () => 1)
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({ url: "redis://plan" }),
-      jobQueueSize: sample,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    await Plan.execute(
-      {
-        name: "worker",
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues: ["default"],
-      },
-      configuration,
-    )
-    expect(sample).toHaveBeenCalledWith("default", { url: "redis://plan" })
-  })
-
-  test("normalize queues truncates and strips", async () => {
-    const sample = jest.fn(async () => 1)
-    const queues = Array.from(
-      { length: Plan.MAX_QUEUES + 5 },
-      (_, i) => ` q${i} `,
-    )
-    queues.push("")
-    queues.push("a".repeat(Plan.MAX_QUEUE_NAME_BYTES + 1))
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: sample,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    await Plan.execute(
-      {
-        name: "worker",
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues,
-      },
-      configuration,
-    )
-    expect(sample.mock.calls[0].length - 1).toBe(Plan.MAX_QUEUES)
-  })
-
-  test("normalize queues skips non array", async () => {
-    const sample = jest.fn(async () => 1)
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: sample,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    await Plan.execute(
-      {
-        name: "worker",
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues: "not-array",
-      },
-      configuration,
-    )
-    expect(sample).not.toHaveBeenCalled()
-    expect(configuration.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("must be an array"),
-    )
-  })
-
-  test("normalize queues skips when all names invalid", async () => {
-    const sample = jest.fn(async () => 1)
-    const macro = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: sample,
-    }
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
-    })
-    await Plan.execute(
-      {
-        name: "worker",
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues: ["", "  "],
-      },
-      configuration,
-    )
-    expect(sample).not.toHaveBeenCalled()
-    expect(configuration.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("no valid names"),
-    )
-  })
-
-  test("around job queue sample calls before and after on every adapter", async () => {
-    const events = []
-    const a = {
-      beforeSampleJobQueues: () => {
-        events.push(["before", "a"])
-        return "token_a"
-      },
-      afterSampleJobQueues: (token) => {
-        events.push(["after", "a", token])
-      },
-    }
-    const b = {
-      beforeSampleJobQueues: () => {
-        events.push(["before", "b"])
-        return "token_b"
-      },
-      afterSampleJobQueues: (token) => {
-        events.push(["after", "b", token])
-      },
-    }
-
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-    Object.defineProperty(Plan.ADAPTERS, "a", {
-      get: () => a,
-      configurable: true,
-      enumerable: true,
-    })
-    Object.defineProperty(Plan.ADAPTERS, "b", {
-      get: () => b,
-      configurable: true,
-      enumerable: true,
-    })
-
-    try {
-      const result = await Plan.aroundJobQueueSample(() => {
-        events.push("body")
-        return "ok"
-      }, configuration)
-      expect(result).toBe("ok")
-      expect(events).toEqual([
-        ["before", "a"],
-        ["before", "b"],
-        "body",
-        ["after", "a", "token_a"],
-        ["after", "b", "token_b"],
-      ])
-    } finally {
-      for (const key of Object.keys(Plan.ADAPTERS)) {
-        delete Plan.ADAPTERS[key]
-      }
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  test("around job queue sample runs after when body raises", async () => {
-    const afterTokens = []
-    const mod = {
-      beforeSampleJobQueues: () => "wave",
-      afterSampleJobQueues: (token) => {
-        afterTokens.push(token)
-      },
-    }
-
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-    Object.defineProperty(Plan.ADAPTERS, "x", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-
-    try {
-      await expect(
-        Plan.aroundJobQueueSample(async () => {
-          throw new Error("boom")
-        }, configuration),
-      ).rejects.toThrow("boom")
-      expect(afterTokens).toEqual(["wave"])
-    } finally {
-      for (const key of Object.keys(Plan.ADAPTERS)) {
-        delete Plan.ADAPTERS[key]
-      }
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  test("reinit macros after fork notifies every adapter", async () => {
-    const called = []
-    const a = {
-      reinitAfterFork: () => {
-        called.push("a")
-      },
-    }
-    const b = {
-      reinitAfterFork: () => {
-        called.push("b")
-      },
-    }
-
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-    Object.defineProperty(Plan.ADAPTERS, "a", {
-      get: () => a,
-      configurable: true,
-      enumerable: true,
-    })
-    Object.defineProperty(Plan.ADAPTERS, "b", {
-      get: () => b,
-      configurable: true,
-      enumerable: true,
-    })
-
-    try {
-      await Plan.reinitMacrosAfterFork(configuration)
-      expect(called).toEqual(["a", "b"])
-    } finally {
-      for (const key of Object.keys(Plan.ADAPTERS)) {
-        delete Plan.ADAPTERS[key]
-      }
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  test("around job queue sample rescues raising before hook and still runs body and after", async () => {
-    const events = []
-    const a = {
-      beforeSampleJobQueues: () => {
-        events.push(["before", "a"])
-        throw new Error("before-a")
-      },
-      afterSampleJobQueues: (token) => {
-        events.push(["after", "a", token])
-      },
-    }
-    const b = {
-      beforeSampleJobQueues: () => {
-        events.push(["before", "b"])
-        return "token_b"
-      },
-      afterSampleJobQueues: (token) => {
-        events.push(["after", "b", token])
-      },
-    }
-
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-    Object.defineProperty(Plan.ADAPTERS, "a", {
-      get: () => a,
-      configurable: true,
-      enumerable: true,
-    })
-    Object.defineProperty(Plan.ADAPTERS, "b", {
-      get: () => b,
-      configurable: true,
-      enumerable: true,
-    })
-
-    try {
-      const result = await Plan.aroundJobQueueSample(() => {
-        events.push("body")
-        return "ok"
-      }, configuration)
-      expect(result).toBe("ok")
-      expect(events).toEqual([
-        ["before", "a"],
-        ["before", "b"],
-        "body",
-        ["after", "b", "token_b"],
-      ])
-      expect(configuration.logger.error).toHaveBeenCalledWith(
-        expect.stringMatching(/beforeSampleJobQueues for "a" raised.*before-a/),
-      )
-    } finally {
-      for (const key of Object.keys(Plan.ADAPTERS)) {
-        delete Plan.ADAPTERS[key]
-      }
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  test("around job queue sample logs primitive before failures", async () => {
-    const mod = {
-      beforeSampleJobQueues: () => {
-        throw "before-a"
-      },
-      afterSampleJobQueues: jest.fn(),
-    }
-
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-    Object.defineProperty(Plan.ADAPTERS, "x", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-
-    try {
-      await expect(
-        Plan.aroundJobQueueSample(() => "ok", configuration),
-      ).resolves.toBe("ok")
-      expect(mod.afterSampleJobQueues).not.toHaveBeenCalled()
-      expect(configuration.logger.error).toHaveBeenCalledWith(
-        expect.stringMatching(/beforeSampleJobQueues for "x" raised before-a/),
-      )
-    } finally {
-      for (const key of Object.keys(Plan.ADAPTERS)) {
-        delete Plan.ADAPTERS[key]
-      }
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  test("around job queue sample rescues raising after hook and still runs other afters", async () => {
-    const events = []
-    const a = {
-      beforeSampleJobQueues: () => "token_a",
-      afterSampleJobQueues: () => {
-        events.push(["after", "a"])
-        throw new Error("after-a")
-      },
-    }
-    const b = {
-      beforeSampleJobQueues: () => "token_b",
-      afterSampleJobQueues: (token) => {
-        events.push(["after", "b", token])
-      },
-    }
-
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-    Object.defineProperty(Plan.ADAPTERS, "a", {
-      get: () => a,
-      configurable: true,
-      enumerable: true,
-    })
-    Object.defineProperty(Plan.ADAPTERS, "b", {
-      get: () => b,
-      configurable: true,
-      enumerable: true,
-    })
-
-    try {
-      await Plan.aroundJobQueueSample(() => {
-        events.push("body")
-      }, configuration)
-      expect(events).toEqual([
-        "body",
-        ["after", "a"],
-        ["after", "b", "token_b"],
-      ])
-      expect(configuration.logger.error).toHaveBeenCalledWith(
-        expect.stringMatching(/afterSampleJobQueues for "a" raised.*after-a/),
-      )
-    } finally {
-      for (const key of Object.keys(Plan.ADAPTERS)) {
-        delete Plan.ADAPTERS[key]
-      }
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  test("reinit macros after fork rescues raising adapter and continues", async () => {
-    const called = []
-    const a = {
-      reinitAfterFork: () => {
-        called.push("a")
-        throw new Error("reinit-a")
-      },
-    }
-    const b = {
-      reinitAfterFork: () => {
-        called.push("b")
-      },
-    }
-
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-    Object.defineProperty(Plan.ADAPTERS, "a", {
-      get: () => a,
-      configurable: true,
-      enumerable: true,
-    })
-    Object.defineProperty(Plan.ADAPTERS, "b", {
-      get: () => b,
-      configurable: true,
-      enumerable: true,
-    })
-
-    try {
-      await expect(
-        Plan.reinitMacrosAfterFork(configuration),
-      ).resolves.toBeUndefined()
-      expect(called).toEqual(["a", "b"])
-      expect(configuration.logger.error).toHaveBeenCalledWith(
-        expect.stringMatching(/reinitAfterFork for "a" raised.*reinit-a/),
-      )
-    } finally {
-      for (const key of Object.keys(Plan.ADAPTERS)) {
-        delete Plan.ADAPTERS[key]
-      }
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  test("allowlisted macros expose sample wave hooks", () => {
-    const Hooks = require("../../src/plan/hooks")
-    const pgBoss = require("../../src/macro/pg_boss")
-    expect(pgBoss.beforeSampleJobQueues).toBe(Hooks.beforeSampleJobQueues)
-    expect(pgBoss.afterSampleJobQueues).toBe(Hooks.afterSampleJobQueues)
-    expect(pgBoss.reinitAfterFork).toBe(Hooks.reinitAfterFork)
-    expect(pgBoss.beforeSampleJobQueues()).toBeNull()
-
-    for (const name of ["bull", "bullmq"]) {
-      const macro = require(`../../src/macro/${name}`)
-      expect(macro.beforeSampleJobQueues).not.toBe(Hooks.beforeSampleJobQueues)
-      expect(macro.beforeSampleJobQueues()).toBe(true)
-      expect(macro.afterSampleJobQueues()).toBeUndefined()
-      expect(macro.reinitAfterFork()).toBeUndefined()
-    }
-  })
-
-  test("around job queue sample calls after with successful null token", async () => {
-    const afterTokens = []
-    const mod = {
-      beforeSampleJobQueues: () => null,
-      afterSampleJobQueues: (token) => {
-        afterTokens.push(token)
-      },
-    }
-
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-    Object.defineProperty(Plan.ADAPTERS, "x", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-
-    try {
-      const result = await Plan.aroundJobQueueSample(() => "ok", configuration)
-      expect(result).toBe("ok")
-      expect(afterTokens).toEqual([null])
-    } finally {
-      for (const key of Object.keys(Plan.ADAPTERS)) {
-        delete Plan.ADAPTERS[key]
-      }
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  test("around job queue sample with empty adapters still runs body", async () => {
-    const original = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
-    for (const key of Object.keys(Plan.ADAPTERS)) {
-      delete Plan.ADAPTERS[key]
-    }
-
-    try {
-      const result = await Plan.aroundJobQueueSample(
-        () => "empty",
-        configuration,
-      )
-      expect(result).toBe("empty")
-      expect(configuration.logger.error).not.toHaveBeenCalled()
-    } finally {
-      Object.defineProperties(Plan.ADAPTERS, original)
-    }
-  })
-
-  const executeWithWorkingMacro = async (strategy, options) => {
-    const Hooks = require("../../src/plan/hooks")
-    const jobQueueWorking = jest.fn(async () => 3)
-    const mod = {
-      supportsPlanStrategy: () => true,
-      planOptions: (strategy, options) => {
-        const { skip_working: skipWorking } = Hooks.extractPlanOptions(
-          strategy,
-          options,
-          { jqs: { skip_working: "boolean" } },
-        )
-        return skipWorking === undefined ? {} : { skipWorking }
-      },
-      planConnectionOptions: () => ({}),
-      jobQueueSize: async () => 7,
-      jobQueueLatency: async () => 1.5,
-      jobQueueWorking,
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy,
-          queues: ["default"],
-          options,
-        },
-        configuration,
-      )
-      return { data: configuration.buffer.flush(), jobQueueWorking }
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  }
-
-  test("execute samples no wrk for jqs without skip working", async () => {
-    for (const options of [
-      undefined,
-      {},
-      { skip_working: false },
-      { skip_working: "true" },
+  test("adapter returns the row of a known name and null for every other name", () => {
+    expect(Plan.adapter("bullmq")).toBe(Plan.ADAPTERS.bullmq)
+    expect(Plan.adapter("pg_boss")).toBe(Plan.ADAPTERS.pg_boss)
+    for (const name of [
+      "sidekiq",
+      "",
+      "constructor",
+      "toString",
+      "valueOf",
+      "__proto__",
     ]) {
-      const { data, jobQueueWorking } = await executeWithWorkingMacro(
-        "jqs",
-        options,
-      )
-      expect(Object.values(data.worker.jqs)[0]).toBe(7)
-      expect(data.worker.wrk).toBeUndefined()
-      expect(jobQueueWorking).not.toHaveBeenCalled()
+      expect(Plan.adapter(name)).toBeNull()
     }
   })
 
-  test("execute samples wrk for jqs with skip working", async () => {
-    const { data, jobQueueWorking } = await executeWithWorkingMacro("jqs", {
-      skip_working: true,
-    })
-    expect(Object.values(data.worker.jqs)[0]).toBe(7)
-    expect(Object.values(data.worker.wrk)[0]).toBe(3)
-    expect(jobQueueWorking).toHaveBeenCalledWith("default", {})
+  test("a library counts as loaded when one adapter has its packages", () => {
+    const absent = { packages: ["hirefire-no-such-package"] }
+
+    replaceAdapters({})
+    expect(Plan.anyLibraryLoaded()).toBe(false)
+
+    replaceAdapters({ a: planAdapter({}, absent), b: planAdapter({}, absent) })
+    expect(Plan.anyLibraryLoaded()).toBe(false)
+
+    replaceAdapters({ a: planAdapter({}, absent), b: planAdapter({}) })
+    expect(Plan.anyLibraryLoaded()).toBe(true)
   })
 
-  test("execute samples wrk for every jql entry", async () => {
-    for (const options of [undefined, {}, { skip_working: false }]) {
-      const { data, jobQueueWorking } = await executeWithWorkingMacro(
-        "jql",
-        options,
-      )
-      expect(Object.values(data.worker.jql)[0]).toBe(1.5)
-      expect(Object.values(data.worker.wrk)[0]).toBe(3)
-      expect(jobQueueWorking).toHaveBeenCalledWith("default", {})
-    }
-  })
-
-  test("execute passes only connection options to job queue working", async () => {
-    const jobQueueSize = jest.fn(async () => 7)
-    const jobQueueWorking = jest.fn(async () => 3)
-    const mod = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({ skipWorking: true }),
-      planConnectionOptions: () => ({ connection: "redis://plan" }),
-      jobQueueSize,
-      jobQueueWorking,
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-          options: { skip_working: true },
-        },
-        configuration,
-      )
-      expect(jobQueueSize).toHaveBeenCalledWith("default", {
-        skipWorking: true,
-        connection: "redis://plan",
-      })
-      expect(jobQueueWorking).toHaveBeenCalledWith("default", {
-        connection: "redis://plan",
-      })
-      const data = configuration.buffer.flush()
-      expect(Object.values(data.worker.jqs)[0]).toBe(7)
-      expect(Object.values(data.worker.wrk)[0]).toBe(3)
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  })
-
-  test("execute still samples wrk when job strategy sample invalid", async () => {
-    let workingCalled = false
-    const mod = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({ skipWorking: true }),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: async () => -1,
-      jobQueueWorking: async () => {
-        workingCalled = true
-        return 3
+  test("the round hooks of every adapter run before and after the body, and the after hook gets what the before hook returned", async () => {
+    const events = []
+    const macro = (name, token) => ({
+      beforeSampleJobQueues: async () => {
+        events.push(`before ${name}`)
+        return token
       },
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
-      const data = configuration.buffer.flush()
-      expect(data.worker && data.worker.jqs).toBeUndefined()
-      expect(Object.values(data.worker.wrk)[0]).toBe(3)
-      expect(workingCalled).toBe(true)
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  })
-
-  test("execute still samples wrk when job strategy raises", async () => {
-    let workingCalled = false
-    const mod = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({ skipWorking: true }),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: async () => {
-        throw new Error("jqs boom")
+      afterSampleJobQueues: async (received) => {
+        events.push(`after ${name} ${received}`)
       },
-      jobQueueWorking: async () => {
-        workingCalled = true
-        return 3
+    })
+    replaceAdapters({
+      a: planAdapter(macro("a", "token")),
+      b: planAdapter(macro("b", null)),
+      c: planAdapter({}),
+    })
+    const lines = capture()
+
+    const result = await Plan.aroundJobQueueSample(
+      HireFire.configuration.logger,
+      async () => {
+        events.push("body")
+        return "result"
       },
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
-      const data = configuration.buffer.flush()
-      expect(data.worker && data.worker.jqs).toBeUndefined()
-      expect(Object.values(data.worker.wrk)[0]).toBe(3)
-      expect(workingCalled).toBe(true)
-      const messages = configuration.logger.error.mock.calls.map((c) =>
-        String(c[0]),
-      )
-      expect(messages.some((m) => m.includes("Plan sampler for"))).toBe(true)
-      expect(messages.some((m) => m.includes("raised"))).toBe(true)
-      expect(messages.some((m) => m.includes("jqs boom"))).toBe(true)
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
+    )
+
+    expect(result).toBe("result")
+    expect(events).toEqual([
+      "before a",
+      "before b",
+      "body",
+      "after a token",
+      "after b null",
+    ])
+    expect(lines).toEqual([])
   })
 
-  test("execute skips wrk when macro lacks job queue working", async () => {
-    const mod = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({ skipWorking: true }),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: async () => 5,
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
-      const data = configuration.buffer.flush()
-      expect(Object.values(data.worker.jqs)[0]).toBe(5)
-      expect(data.worker.wrk).toBeUndefined()
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  })
-
-  test("execute keeps jqs when job queue working raises", async () => {
-    const mod = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({ skipWorking: true }),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: async () => 9,
-      jobQueueWorking: async () => {
-        throw new Error("wrk boom")
-      },
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
-      const data = configuration.buffer.flush()
-      expect(Object.values(data.worker.jqs)[0]).toBe(9)
-      expect(data.worker.wrk).toBeUndefined()
-      expect(configuration.logger.error).toHaveBeenCalled()
-      const messages = configuration.logger.error.mock.calls.map((c) =>
-        String(c[0]),
-      )
-      expect(messages.some((m) => m.includes("Plan working sampler"))).toBe(
-        true,
-      )
-      expect(messages.some((m) => m.includes("wrk boom"))).toBe(true)
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  })
-
-  test("execute drops invalid wrk without clearing jqs", async () => {
-    const mod = {
-      supportsPlanStrategy: () => true,
-      planOptions: () => ({ skipWorking: true }),
-      planConnectionOptions: () => ({}),
-      jobQueueSize: async () => 4,
-      jobQueueWorking: async () => -2,
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => mod,
-      configurable: true,
-      enumerable: true,
-    })
-    try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
-      )
-      const data = configuration.buffer.flush()
-      expect(Object.values(data.worker.jqs)[0]).toBe(4)
-      expect(data.worker.wrk).toBeUndefined()
-      const messages = configuration.logger.error.mock.calls.map((c) =>
-        String(c[0]),
-      )
-      expect(messages.some((m) => m.includes("wrk sample dropped"))).toBe(true)
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
-  })
-
-  test("sampleable entry is false for queues required empty lists", () => {
-    const required = {
-      supportsPlanStrategy: () => true,
-      queuesRequired: () => true,
-    }
-    const enumerating = {
-      supportsPlanStrategy: () => true,
-      queuesRequired: () => false,
-    }
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
-    jest
-      .spyOn(Plan.ADAPTERS, "bullmq", "get")
-      .mockImplementation(() => required)
-    expect(
-      Plan.sampleableEntry({
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues: [],
+  test("the after hooks run when the body throws", async () => {
+    const afterSampleJobQueues = jest.fn()
+    replaceAdapters({
+      a: planAdapter({
+        beforeSampleJobQueues: () => "token",
+        afterSampleJobQueues,
       }),
-    ).toBe(false)
-
-    jest
-      .spyOn(Plan.ADAPTERS, "bullmq", "get")
-      .mockImplementation(() => enumerating)
-    expect(
-      Plan.sampleableEntry({
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues: [],
-      }),
-    ).toBe(true)
-  })
-
-  test("sampleable entry accepts only valid named queues", () => {
-    const required = {
-      supportsPlanStrategy: () => true,
-      queuesRequired: () => true,
-    }
-    jest.spyOn(Plan, "executable").mockReturnValue(true)
-    jest.spyOn(Plan, "knownAdapter").mockReturnValue(true)
-    jest
-      .spyOn(Plan.ADAPTERS, "bullmq", "get")
-      .mockImplementation(() => required)
-
-    expect(
-      Plan.sampleableEntry({
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues: [null, "  ", "x".repeat(129)],
-      }),
-    ).toBe(false)
-    expect(
-      Plan.sampleableEntry({
-        adapter: "bullmq",
-        strategy: "jqs",
-        queues: ["default"],
-      }),
-    ).toBe(true)
-  })
-
-  test("execute skips queues required adapter with empty queues", async () => {
-    const sample = jest.fn(async () => 4)
-    const macro = {
-      supportsPlanStrategy: () => true,
-      queuesRequired: () => true,
-      jobQueueSize: sample,
-      planOptions: () => ({}),
-      planConnectionOptions: () => ({}),
-    }
-    const original = Object.getOwnPropertyDescriptor(Plan.ADAPTERS, "bullmq")
-    Object.defineProperty(Plan.ADAPTERS, "bullmq", {
-      get: () => macro,
-      configurable: true,
     })
-    try {
-      await Plan.execute(
-        {
-          name: "mail",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: [],
+
+    await expect(
+      Plan.aroundJobQueueSample(HireFire.configuration.logger, async () => {
+        throw new Error("body boom")
+      }),
+    ).rejects.toThrow("body boom")
+
+    expect(afterSampleJobQueues.mock.calls).toEqual([["token"]])
+  })
+
+  test("a round hook that throws is logged and the other hooks and the body still run", async () => {
+    const events = []
+    replaceAdapters({
+      a: planAdapter({
+        beforeSampleJobQueues: () => {
+          throw new Error("redis://user:secret@localhost:6379/0 before boom")
         },
-        configuration,
-      )
-      expect(sample).not.toHaveBeenCalled()
-      expect(configuration.logger.error.mock.calls.join(" ")).toMatch(
-        /requires named queues/,
-      )
-    } finally {
-      Object.defineProperty(Plan.ADAPTERS, "bullmq", original)
-    }
+        afterSampleJobQueues: () => events.push("after a"),
+      }),
+      b: planAdapter({
+        beforeSampleJobQueues: () => events.push("before b"),
+        afterSampleJobQueues: () => {
+          throw "after boom"
+        },
+      }),
+      c: planAdapter({
+        beforeSampleJobQueues: () => events.push("before c"),
+        afterSampleJobQueues: () => events.push("after c"),
+      }),
+    })
+    const lines = capture()
+
+    await Plan.aroundJobQueueSample(HireFire.configuration.logger, async () =>
+      events.push("body"),
+    )
+
+    expect(events).toEqual(["before b", "before c", "body", "after c"])
+    expect(lines).toEqual([
+      [
+        "error",
+        '[HireFire] beforeSampleJobQueues for "a" raised Error: redis://***@localhost:6379/0 before boom',
+      ],
+      ["error", '[HireFire] afterSampleJobQueues for "b" raised after boom'],
+    ])
   })
 })

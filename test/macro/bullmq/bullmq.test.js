@@ -8,6 +8,7 @@ const {
 } = require("../../../src/macro/bullmq")
 const { JobQueueLatencyUnsupportedError } = require("../../../src/errors")
 const Plan = require("../../../src/plan")
+const Sampler = require("../../../src/sampler")
 const Configuration = require("../../../src/configuration")
 const IORedis = require("ioredis")
 const { expectIntegerCount } = require("../numericTypes")
@@ -68,9 +69,8 @@ describe("BullMQ", () => {
   })
 
   test("libraryLoaded is true when the bullmq package is imported", () => {
-    expect(Plan.libraryLoaded("bullmq")).toBe(true)
-    expect(Plan.executable("bullmq")).toBe(true)
-    expect(Plan.anyAllowlistedJobQueueLibraryLoaded()).toBe(true)
+    expect(Plan.ADAPTERS.bullmq.libraryLoaded()).toBe(true)
+    expect(Plan.anyLibraryLoaded()).toBe(true)
   })
 
   test("jobQueueLatency is unsupported", async () => {
@@ -462,14 +462,16 @@ describe("BullMQ", () => {
     const prev = process.env.HIREFIRE_BULLMQ_URL
     process.env.HIREFIRE_BULLMQ_URL = redisURL
     try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-        },
-        configuration,
+      await new Sampler(configuration).round(
+        [
+          {
+            name: "worker",
+            adapter: "bullmq",
+            strategy: "jqs",
+            queues: ["default"],
+          },
+        ],
+        () => true,
       )
       const flushed = configuration.buffer.flush()
       expect(flushed.worker.jqs).toBeDefined()
@@ -493,15 +495,17 @@ describe("BullMQ", () => {
     const prev = process.env.HIREFIRE_BULLMQ_URL
     process.env.HIREFIRE_BULLMQ_URL = redisURL
     try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: ["default"],
-          options: { skip_working: true },
-        },
-        configuration,
+      await new Sampler(configuration).round(
+        [
+          {
+            name: "worker",
+            adapter: "bullmq",
+            strategy: "jqs",
+            queues: ["default"],
+            options: { skip_working: true },
+          },
+        ],
+        () => true,
       )
       const flushed = configuration.buffer.flush()
       expect(Object.values(flushed.worker.jqs)[0]).toBe(1)
@@ -522,15 +526,17 @@ describe("BullMQ", () => {
     const prev = process.env.HIREFIRE_BULLMQ_URL
     process.env.HIREFIRE_BULLMQ_URL = redisURL
     try {
-      await Plan.execute(
-        {
-          name: "worker",
-          adapter: "bullmq",
-          strategy: "jqs",
-          queues: [],
-          options: { skip_working: true },
-        },
-        configuration,
+      await new Sampler(configuration).round(
+        [
+          {
+            name: "worker",
+            adapter: "bullmq",
+            strategy: "jqs",
+            queues: [],
+            options: { skip_working: true },
+          },
+        ],
+        () => true,
       )
       const flushed = configuration.buffer.flush()
       const wrk = Object.values(flushed.worker.wrk)[0]

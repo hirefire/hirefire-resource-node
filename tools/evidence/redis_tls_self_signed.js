@@ -7,7 +7,7 @@ async function main() {
   const port = process.argv[2]
   const url = `rediss://127.0.0.1:${port}/0`
   const macro = require(path.join(library, "src", "macro", "bullmq"))
-  const Plan = require(path.join(library, "src", "plan"))
+  const Sampler = require(path.join(library, "src", "sampler"))
   const Configuration = require(path.join(library, "src", "configuration"))
   const options = { tls: { rejectUnauthorized: false } }
   const withOption = await macro.jobQueueSize("default", {
@@ -28,9 +28,16 @@ async function main() {
   delete process.env.REDIS_TLS_URL
   delete process.env.HIREFIRE_BULLMQ_URL
   const started = performance.now()
-  await Plan.execute(
-    { name: "worker", strategy: "jqs", adapter: "bullmq", queues: ["default"] },
-    configuration,
+  await new Sampler(configuration).round(
+    [
+      {
+        name: "worker",
+        strategy: "jqs",
+        adapter: "bullmq",
+        queues: ["default"],
+      },
+    ],
+    () => true,
   )
   const seconds = Math.round((performance.now() - started) / 100) / 10
   const sent = Object.keys(configuration.buffer.flush())

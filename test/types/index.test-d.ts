@@ -65,13 +65,6 @@ expectType<void>(
 
 expectType<boolean>(configuration.jobQueues.any())
 expectType<(jobQueue: JobQueue) => void>(configuration.jobQueues.add)
-expectType<
-  (
-    jobQueue: JobQueue | null | undefined,
-    strategy: string,
-    options?: { live?: () => boolean; name?: string },
-  ) => Promise<void>
->(configuration.jobQueues.sampleJobQueue)
 const found = configuration.jobQueues.findByName("worker")
 if (found) {
   expectType<string>(found.name)
