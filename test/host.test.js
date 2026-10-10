@@ -5,13 +5,15 @@ const { execFile } = require("child_process")
 const { Worker } = require("worker_threads")
 const Host = require("../src/host")
 
-const fixture = path.join(__dirname, "fixtures", "host", "report.js")
-
 function run(...args) {
+  return runFixture("report.js", ...args)
+}
+
+function runFixture(name, ...args) {
   return new Promise((resolve, reject) => {
     execFile(
       process.execPath,
-      [fixture, ...args],
+      [path.join(__dirname, "fixtures", "host", name), ...args],
       {
         env: {
           PATH: process.env.PATH,
@@ -44,7 +46,7 @@ describe("Host", () => {
     expect(Host.startsAtBoot()).toBe(false)
   })
 
-  test("a worker thread does not start at boot", async () => {
+  test("a worker thread below a thread that loaded the client does not start at boot", async () => {
     const source = `
       const { parentPort } = require("worker_threads")
       const Host = require(${JSON.stringify(require.resolve("../src/host"))})
@@ -84,6 +86,14 @@ describe("Host", () => {
         "main booted true",
         "thread booted false",
         "main threaded true",
+      ])
+    })
+
+    test("a worker thread with no client above it starts at boot, and its helper thread starts nothing", async () => {
+      expect(await runFixture("thread_app.js")).toEqual([
+        "app booted true",
+        "app loaded again true",
+        "helper booted false",
       ])
     })
 

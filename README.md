@@ -31,7 +31,9 @@ Metric collection starts with `HireFire.configure()`, `HireFire.boot()`, or the 
 Two places report only when they serve requests themselves. `configure` and `boot` start nothing there, and the first request through the middleware does:
 
 - A `cluster` primary that has forked workers. Its workers report. A primary stops at its first fork, unless it has served a request by then.
-- A worker thread. The main thread reports. An app that its server runs in a worker thread reports from its first request.
+- A worker thread below a thread that has loaded the client, such as a helper thread of the app. The thread above it reports.
+
+A worker thread with no client above it starts with `configure` or `boot` like any process. That is the case for an app that its server runs in a worker thread.
 
 After `await HireFire.reset()`, nothing starts again until `configure` or `boot` runs, so a request that is still being served during a shutdown does not restart it.
 
