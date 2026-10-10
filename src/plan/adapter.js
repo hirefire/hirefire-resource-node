@@ -1,3 +1,4 @@
+const { installed } = require("../optional")
 const { JQS } = require("../strategy")
 
 class Adapter {
@@ -34,15 +35,6 @@ class Adapter {
       if (value) options[option] = value
     }
     return options
-  }
-}
-
-function installed(name) {
-  try {
-    require.resolve(name)
-    return true
-  } catch {
-    return false
   }
 }
 

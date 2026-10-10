@@ -19,6 +19,6 @@ if [ ! -d node_modules ]; then
   npm ci --silent --no-audit --no-fund
 fi
 if [ "$#" -gt 0 ]; then
-  npm install "$@" --no-save --no-audit --no-fund --silent
+  npm install "$@" --no-save --save-peer --no-audit --no-fund --silent
 fi
 echo "$dest"

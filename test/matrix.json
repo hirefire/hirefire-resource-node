@@ -29,8 +29,8 @@
     },
     {
       "package": "next",
-      "majors": [14, 15, 16],
-      "test": "test/middleware/next.test.js"
+      "majors": [15, 16],
+      "test": "test/middleware/next"
     },
     {
       "package": "sails",

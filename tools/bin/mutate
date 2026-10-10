@@ -197,6 +197,7 @@ function prepare() {
           "install",
           ...packages,
           "--no-save",
+          "--save-peer",
           "--no-audit",
           "--no-fund",
           "--silent",

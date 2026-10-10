@@ -26,8 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Request queue time is sampled automatically from HTTP traffic. `config.dyno("web")` is not required.
-- BullMQ and classic Bull sampling require the app's `ioredis` package as an optional peer. Without it, those job metrics are not collected.
+- BullMQ and classic Bull sampling require the app's `ioredis` package as an optional peer. Without it, those job metrics are not collected. `bull`, `bullmq`, `ioredis`, `next`, `pg`, and `pg-boss` are declared as optional peer dependencies, and a package that is not found from the library is looked up from the working directory of the process.
 - Official Node.js support is 20+.
+- Next.js support starts at 15.5, on the Node.js middleware runtime. The middleware does not run on the Edge runtime, which is the only middleware runtime of Next.js 14.
 - Process names may be any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone. An invalid name throws `TypeError` (1.x threw `InvalidDynoNameError`).
 - `config.dyno` without a sampler raises `MissingSamplerError` except when the name is `"web"` (1.x raised `MissingDynoFnError`). Duplicate dyno names raise `DuplicateDynoError`.
 - `HireFire.configure` callbacks must be synchronous.

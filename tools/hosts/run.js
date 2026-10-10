@@ -317,7 +317,7 @@ async function main() {
     results.push({ name: "load-every-subpath", loads })
   }
 
-  for (const major of (process.env.NEXT_MAJORS || "14 15 16").split(" ")) {
+  for (const major of (process.env.NEXT_MAJORS || "15 16").split(" ")) {
     if (only && !only.test(`next-${major}`)) continue
     const built = build(major)
     results.push(built)

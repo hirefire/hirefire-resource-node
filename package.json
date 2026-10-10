@@ -124,20 +124,39 @@
     "setupFilesAfterEnv": [
       "<rootDir>/test/support.js"
     ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/tmp/"
+    ],
     "openHandlesTimeout": 5000
   },
   "engines": {
     "node": ">=20"
   },
   "peerDependencies": {
+    "bull": ">=4",
+    "bullmq": ">=4",
     "ioredis": ">=4",
-    "pg": ">=8"
+    "next": "*",
+    "pg": ">=8",
+    "pg-boss": ">=10"
   },
   "peerDependenciesMeta": {
+    "bull": {
+      "optional": true
+    },
+    "bullmq": {
+      "optional": true
+    },
     "ioredis": {
       "optional": true
     },
+    "next": {
+      "optional": true
+    },
     "pg": {
+      "optional": true
+    },
+    "pg-boss": {
       "optional": true
     }
   },

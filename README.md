@@ -12,7 +12,7 @@ This package integrates Node.js applications running on [Heroku] with [HireFire]
 - Koa 2+
 - Connect 3+
 - Fastify 4+
-- Next.js 14+ (unit-tested). Node.js middleware runtime requires 15.5+ (not Edge). Next.js 16 uses `proxy.ts`.
+- Next.js 15.5+ (Node.js middleware runtime, not Edge). Next.js 16 uses `proxy.ts`.
 - Sails 1+
 - Nest 10+
 

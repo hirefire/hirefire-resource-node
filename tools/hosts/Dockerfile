@@ -4,7 +4,7 @@ COPY package.json ./
 RUN npm install --no-audit --no-fund --loglevel=error
 COPY hirefire-resource.tgz ./
 RUN npm install ./hirefire-resource.tgz --no-audit --no-fund --loglevel=error
-ARG NEXT_MAJORS="14 15 16"
+ARG NEXT_MAJORS="15 16"
 ARG NEXT_EXTRA=""
 COPY next /next-template
 RUN for major in $NEXT_MAJORS; do \

@@ -7,7 +7,7 @@ usage() {
 Usage: bin/run-cell <package> <major> <testfile>
        bin/run-cell core
 
-Runs one matrix cell: installs <package>@<major> (--no-save) and runs <testfile>.
+Runs one matrix cell: installs <package>@<major> (--no-save --save-peer, the form npm 11 accepts for an optional peer) and runs <testfile>.
 "core" runs the full suite minus the version-pinned integration files.
 Cells are defined in test/matrix.json. Run them all with bin/matrix.
 
@@ -31,15 +31,15 @@ if [ -z "$major" ] || [ -z "$testfile" ]; then
 fi
 
 if [ "$package" = "bullmq" ] || [ "$package" = "bull" ]; then
-  npm install "${package}@${major}" ioredis --no-save --no-audit --no-fund --silent
+  npm install "${package}@${major}" ioredis --no-save --save-peer --no-audit --no-fund --silent
 elif [ "$package" = "@nestjs/platform-express" ]; then
   nest_pkgs=("${package}@${major}" "@nestjs/core@${major}" "@nestjs/common@${major}" reflect-metadata)
   if [ "$major" -ge 12 ]; then
     nest_pkgs+=(jest-light-runner)
   fi
-  npm install "${nest_pkgs[@]}" --no-save --no-audit --no-fund --silent
+  npm install "${nest_pkgs[@]}" --no-save --save-peer --no-audit --no-fund --silent
 else
-  npm install "${package}@${major}" --no-save --no-audit --no-fund --silent
+  npm install "${package}@${major}" --no-save --save-peer --no-audit --no-fund --silent
 fi
 if [ "$package" = "pg-boss" ] || [ "$package" = "bullmq" ] || [ "$package" = "bull" ]; then
   exec npx --no-install jest --runInBand "$testfile"

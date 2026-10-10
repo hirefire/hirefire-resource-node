@@ -34,6 +34,20 @@ describe("TypeScript packaging", () => {
     expect(pkg.homepage).toBe("https://hirefire.io")
   })
 
+  test("every package that the client loads from the app is an optional peer dependency", () => {
+    const Plan = require("../src/plan")
+    const loaded = new Set(["next"])
+    for (const adapter of Object.values(Plan.ADAPTERS)) {
+      for (const name of adapter.packages) loaded.add(name)
+    }
+
+    expect(Object.keys(pkg.peerDependencies).sort()).toEqual([...loaded].sort())
+    for (const name of loaded) {
+      expect(pkg.peerDependenciesMeta[name]).toEqual({ optional: true })
+    }
+    expect(pkg.dependencies).toBeUndefined()
+  })
+
   test("npm pack does not include test/ or AGENTS.md", () => {
     const output = execFileSync("npm", ["pack", "--dry-run"], {
       cwd: path.resolve(__dirname, ".."),

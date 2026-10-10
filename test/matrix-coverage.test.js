@@ -183,7 +183,7 @@ test("every matrix integration is in the README and the README has no extras", (
         ),
       )
     } else {
-      expect(line).toMatch(new RegExp(`${min}\\+`))
+      expect(line).toMatch(new RegExp(`${min}(\\.\\d+)?\\+`))
     }
     if (SIZE_ONLY.has(entry.package)) {
       expect(line).toMatch(/size only, no job queue latency/)

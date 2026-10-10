@@ -1,3 +1,4 @@
+const { load } = require("../optional")
 const { unpack, normalizeQueues } = require("../utility")
 
 const DEFAULT_SCHEMA = "pgboss"
@@ -17,10 +18,6 @@ const COLUMNS_TTL = 60
 const columnsCache = new Map()
 const connectionIdMap = new WeakMap()
 let connectionIdSeq = 0
-
-function loadPg() {
-  return require("pg")
-}
 
 async function jobQueueSize(...args) {
   const { skipWorking } = unpack(args).options
@@ -95,7 +92,7 @@ async function withConnection(args, fn) {
     )
   }
 
-  const { Pool } = loadPg()
+  const { Pool } = load("pg")
   const userOpts = options.connectionOptions || {}
   const connectionString = String(connection)
   const pool = new Pool({

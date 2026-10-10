@@ -1,3 +1,4 @@
+const { load } = require("../../optional")
 const sampleRound = require("../../sample_round")
 const { unpack, normalizeQueues } = require("../../utility")
 
@@ -74,7 +75,7 @@ function connect({ connection, connectionOptions }) {
     return target.duplicate({ ...SAMPLE_REDIS_OPTIONS, ...connectionOptions })
   }
 
-  const IORedis = require("ioredis")
+  const IORedis = load("ioredis")
   return typeof target === "object"
     ? new IORedis({ ...SAMPLE_REDIS_OPTIONS, ...target, ...connectionOptions })
     : new IORedis(target, {
