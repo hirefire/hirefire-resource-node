@@ -37,9 +37,12 @@ describe("Client", () => {
     expect(scope.isDone()).toBe(true)
   })
 
-  test("submit samples returns null on unauthorized", async () => {
+  test("submit samples returns the response on unauthorized", async () => {
     nock(BASE).post("/metrics/ingest").reply(401)
-    expect(await client.submitSamples(BODY)).toBeNull()
+    const response = await client.submitSamples(BODY)
+    expect(response.unauthorized).toBe(true)
+    expect(response.ok).toBe(false)
+    expect(response.tooLarge).toBe(false)
   })
 
   test("submit samples raises on server error", async () => {
@@ -50,16 +53,18 @@ describe("Client", () => {
   test("submit samples raises on unexpected status", async () => {
     nock(BASE).post("/metrics/ingest").reply(422)
     await expect(client.submitSamples(BODY)).rejects.toThrow(
-      "Unexpected response code 422",
+      "Ingest request failed with 422 status.",
     )
   })
 
-  test("submit samples returns payload too large on 413", async () => {
+  test("submit samples returns the response on 413", async () => {
     nock(BASE)
       .post("/metrics/ingest")
       .reply(413, { error: "payload too large" })
     const result = await client.submitSamples(BODY)
-    expect(result).toBe("payload_too_large")
+    expect(result.tooLarge).toBe(true)
+    expect(result.ok).toBe(false)
+    expect(result.unauthorized).toBe(false)
   })
 
   test("submit samples raises on timeout", async () => {
@@ -129,7 +134,7 @@ describe("Client", () => {
     const response = await client.requestLease("abc123")
 
     expect(scope.isDone()).toBe(true)
-    expect(response.statusCode).toBe(200)
+    expect(response.status).toBe(200)
   })
 
   test("request lease raises on timeout", async () => {
@@ -343,7 +348,7 @@ describe("Client (persistent connection)", () => {
     await client.submitSamples("[]")
     const response = await client.submitSamples("[]")
 
-    expect(response.statusCode).toBe(200)
+    expect(response.status).toBe(200)
     expect(requests).toBe(3)
     await client.close()
   })
@@ -387,7 +392,7 @@ describe("Client (persistent connection)", () => {
     await client.submitSamples("[]")
     const response = await client.submitSamples("[]")
 
-    expect(response.statusCode).toBe(200)
+    expect(response.status).toBe(200)
     expect(requests).toBe(3)
     await client.close()
     await new Promise((resolve) => raw.close(resolve))

@@ -74,15 +74,16 @@ class Lease {
 
     if (this._epoch !== epoch) return
 
-    const status = response.statusCode
-    if (status === 401) {
+    if (response.unauthorized) {
       this._clearGrant()
       return
     }
 
-    if (status < 200 || status >= 300) {
+    if (!response.ok) {
       this._clearGrant()
-      throw new RequestError(`Lease request failed with ${status} status.`)
+      throw new RequestError(
+        `Lease request failed with ${response.status} status.`,
+      )
     }
 
     const headers = response.headers

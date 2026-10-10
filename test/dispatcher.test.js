@@ -2,6 +2,7 @@ const { freezeTime } = require("./support")
 const nock = require("nock")
 const HireFire = require("../src")
 const Dispatcher = require("../src/dispatcher")
+const { Response } = require("../src/client")
 const Lease = require("../src/lease")
 const MetricsBuffer = require("../src/buffer")
 const Usage = require("../src/source/cpu/usage")
@@ -274,7 +275,7 @@ describe("Dispatcher", () => {
     const posted = []
     dispatcher._client.submitSamples = async (body) => {
       posted.push(Buffer.byteLength(body))
-      return { statusCode: 200, headers: {} }
+      return new Response(200, {}, "")
     }
     const stringify = jest.spyOn(JSON, "stringify")
     try {
@@ -304,7 +305,7 @@ describe("Dispatcher", () => {
     const posted = []
     dispatcher._client.submitSamples = async (body) => {
       posted.push(body)
-      return { statusCode: 200, headers: {} }
+      return new Response(200, {}, "")
     }
     const names = Array.from({ length: Lease.MAX_JOB_QUEUES }, (_, i) =>
       `worker_${String(i).padStart(3, "0")}`.padEnd(Lease.MAX_NAME_BYTES, "x"),

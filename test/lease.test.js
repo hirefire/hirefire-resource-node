@@ -1,7 +1,7 @@
 const { freezeTime } = require("./support")
 const nock = require("nock")
 const Lease = require("../src/lease")
-const { RequestError } = require("../src/client")
+const { RequestError, Response } = require("../src/client")
 
 const BASE = "https://data.hirefire.io"
 const CONFIG = {
@@ -802,11 +802,11 @@ describe("Lease", () => {
   })
 
   test("demote during parsing or hold discards grant", async () => {
-    lease._client.requestLease = jest.fn().mockResolvedValue({
-      statusCode: 200,
-      headers: { "hirefire-lease-granted": "true" },
-      body: "",
-    })
+    lease._client.requestLease = jest
+      .fn()
+      .mockResolvedValue(
+        new Response(200, { "hirefire-lease-granted": "true" }, ""),
+      )
     jest.spyOn(lease, "_parseGrantBody").mockImplementation(() => {
       lease.demote()
       return { job_queues: [{ name: "q", strategy: "jqs" }], trace: true }
@@ -817,11 +817,11 @@ describe("Lease", () => {
     expect(lease.jobQueues).toEqual([])
 
     const heldLease = new Lease(CONFIG)
-    heldLease._client.requestLease = jest.fn().mockResolvedValue({
-      statusCode: 200,
-      headers: { "hirefire-lease-granted": "true" },
-      body: "",
-    })
+    heldLease._client.requestLease = jest
+      .fn()
+      .mockResolvedValue(
+        new Response(200, { "hirefire-lease-granted": "true" }, ""),
+      )
     jest.spyOn(heldLease, "_parseGrantBody").mockReturnValue({
       job_queues: [{ name: "q", strategy: "jqs" }],
       trace: false,

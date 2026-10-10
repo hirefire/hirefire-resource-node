@@ -549,10 +549,10 @@ class Dispatcher {
         return
       }
 
-      if (response === "payload_too_large") {
+      if (response.tooLarge) {
         return this._dropOversizedPayload(body, watermark, true)
       }
-      this._applyDispatchFrequency(response)
+      if (response.ok) this._applyDispatchFrequency(response)
       if (watermark !== undefined) this._lastRqtSecond = watermark
       this._pendingSampleTrace = null
     } catch (error) {
@@ -582,8 +582,6 @@ class Dispatcher {
   }
 
   _applyDispatchFrequency(response) {
-    if (!response || !response.headers) return
-
     const value = parseInt(response.headers["hirefire-dispatch-frequency"], 10)
     if (!Number.isFinite(value) || value <= 0) return
 

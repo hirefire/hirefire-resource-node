@@ -180,7 +180,7 @@ describe("the client at its boundary", () => {
         [START + 1]: [],
       })
       expect(logged("E")).toEqual([
-        "E [HireFire] Dispatch error: RequestError: Server responded with 500 status.",
+        "E [HireFire] Dispatch error: RequestError: Ingest request failed with 500 status.",
       ])
     })
 

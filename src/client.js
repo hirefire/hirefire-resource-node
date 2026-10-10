@@ -19,6 +19,26 @@ class RequestError extends Error {
   }
 }
 
+class Response {
+  constructor(status, headers, body) {
+    this.status = status
+    this.headers = headers
+    this.body = body
+  }
+
+  get ok() {
+    return this.status >= 200 && this.status < 300
+  }
+
+  get unauthorized() {
+    return this.status === 401
+  }
+
+  get tooLarge() {
+    return this.status === 413
+  }
+}
+
 class Client {
   constructor(configuration, { timeout = 5 } = {}) {
     this._configuration = configuration
@@ -42,18 +62,12 @@ class Client {
       { readBody: false },
     )
 
-    const status = response.statusCode
-    if (status >= 200 && status < 300) {
+    if (response.ok || response.unauthorized || response.tooLarge) {
       return response
-    } else if (status === 401) {
-      return null
-    } else if (status === 413) {
-      return "payload_too_large"
-    } else if (status >= 500) {
-      throw new RequestError(`Server responded with ${status} status.`)
-    } else {
-      throw new RequestError(`Unexpected response code ${status}.`)
     }
+    throw new RequestError(
+      `Ingest request failed with ${response.status} status.`,
+    )
   }
 
   async requestLease(processId) {
@@ -153,11 +167,10 @@ class Client {
         if (readOptions.readBody) {
           this._readBody(response, readOptions.maxBodyBytes)
             .then((bodyText) => {
-              settle(resolve, {
-                statusCode: response.statusCode,
-                headers: response.headers,
-                body: bodyText,
-              })
+              settle(
+                resolve,
+                new Response(response.statusCode, response.headers, bodyText),
+              )
             })
             .catch((error) =>
               settle(reject, this._transportError(error, request.reusedSocket)),
@@ -165,11 +178,10 @@ class Client {
         } else {
           response.resume()
           response.on("end", () => {
-            settle(resolve, {
-              statusCode: response.statusCode,
-              headers: response.headers,
-              body: "",
-            })
+            settle(
+              resolve,
+              new Response(response.statusCode, response.headers, ""),
+            )
           })
           response.on("error", (error) =>
             settle(reject, this._transportError(error, request.reusedSocket)),
@@ -284,4 +296,4 @@ class Client {
   }
 }
 
-module.exports = { Client, RequestError }
+module.exports = { Client, RequestError, Response }
