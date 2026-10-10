@@ -126,10 +126,8 @@ const Usage = {
   herokuEntitlement() {
     if (!process.env.DYNO) return null
 
-    const limit = this.read(this.CEDAR_MEMORY_LIMIT)
-    if (!limit) return null
-
-    return this.CEDAR_SHARED_ENTITLEMENTS[parseInt(limit, 10)] ?? null
+    const limit = parseInt(this.read(this.CEDAR_MEMORY_LIMIT), 10)
+    return this.CEDAR_SHARED_ENTITLEMENTS[limit] ?? null
   },
 
   renderEntitlement() {
