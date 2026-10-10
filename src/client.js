@@ -4,6 +4,7 @@ const VERSION = require("./version")
 
 const STALE_CONNECTION_CODES = new Set(["ECONNRESET", "ECONNABORTED", "EPIPE"])
 const DEFAULT_URL = "https://data.hirefire.io"
+const USER_AGENT = `hirefire-resource-node/${VERSION}`
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
 
 function isStaleConnectionCode(code) {
@@ -135,7 +136,7 @@ class Client {
       hostname: uri.hostname,
       port: uri.port || (uri.protocol === "https:" ? 443 : 80),
       path: uri.pathname + uri.search,
-      headers: { ...headers },
+      headers: { "User-Agent": USER_AGENT, ...headers },
       timeout: deadlineMs,
       signal: controller.signal,
       agent: this._agentFor(transport),

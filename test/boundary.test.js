@@ -166,14 +166,16 @@ describe("the client at its boundary", () => {
       expect(at("lease")).toEqual([])
     })
 
-    test("sends the token, the agent, and JSON on every ingest request", async () => {
+    test("sends the token, the agent, a user agent, and JSON on every ingest request", async () => {
+      const { version } = require("../package.json")
       configure()
       await pass(0)
 
       expect(requests[0].headers).toMatchObject({
         "content-type": "application/json",
         "hirefire-token": "boundary-token",
-        "hirefire-agent": `Node-${require("../package.json").version}`,
+        "hirefire-agent": `Node-${version}`,
+        "user-agent": `hirefire-resource-node/${version}`,
       })
     })
 

@@ -25,6 +25,7 @@ describe("Client", () => {
         "content-type": "application/json",
         "hirefire-token": "test-token-value",
         "hirefire-agent": `Node-${VERSION}`,
+        "user-agent": `hirefire-resource-node/${VERSION}`,
       },
     })
       .post("/metrics/ingest", [
@@ -143,6 +144,7 @@ describe("Client", () => {
       reqheaders: {
         "hirefire-token": "test-token-value",
         "hirefire-agent": `Node-${VERSION}`,
+        "user-agent": `hirefire-resource-node/${VERSION}`,
         "hirefire-process-id": "abc123",
       },
     })
