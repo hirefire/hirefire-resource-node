@@ -168,12 +168,49 @@ describe("middleware", () => {
       freezeTime(1700000001)
 
       expect(() => processRequestQueueTime("1700000000000")).not.toThrow()
-      expect(errorLog).toHaveBeenCalledWith(
-        expect.stringContaining("Middleware error"),
-      )
+      expect(errorLog.mock.calls).toEqual([
+        ["[HireFire] Middleware error: Error: boom"],
+      ])
       expect(HireFire.configuration.buffer.flush().web.rqt).toEqual({
         1700000001: { sum: 1000, count: 1 },
       })
+    })
+
+    test("an internal failure is logged once per error class", () => {
+      process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+      process.env.DYNO = "web.1"
+      const errorLog = jest
+        .spyOn(HireFire.configuration.logger, "error")
+        .mockImplementation(() => {})
+      freezeTime(1700000001)
+
+      start.mockImplementation(() => {
+        throw new Error("first")
+      })
+      processRequestQueueTime("1700000000000")
+      start.mockImplementation(() => {
+        throw new Error("second")
+      })
+      processRequestQueueTime("1700000000000")
+      start.mockImplementation(() => {
+        throw new TypeError("third")
+      })
+      processRequestQueueTime("1700000000000")
+      start.mockImplementation(() => {
+        throw "a string"
+      })
+      processRequestQueueTime("1700000000000")
+      start.mockImplementation(() => {
+        throw null
+      })
+      processRequestQueueTime("1700000000000")
+
+      expect(errorLog.mock.calls).toEqual([
+        ["[HireFire] Middleware error: Error: first"],
+        ["[HireFire] Middleware error: TypeError: third"],
+        ["[HireFire] Middleware error: a string"],
+        ["[HireFire] Middleware error: null"],
+      ])
     })
 
     test("a raising http source sample does not start the dispatcher", () => {

@@ -1,5 +1,5 @@
 const HireFire = require(".")
-const safeLog = require("./log")
+const { formatError } = require("./log")
 const { presence } = require("./utility")
 
 const REQUEST_QUEUE_TIME_LIMIT = 60000
@@ -25,10 +25,11 @@ function processRequestQueueTime(requestStart, queueStart) {
       configuration.dispatcher.start()
     }
   } catch (error) {
-    safeLog(
-      HireFire.configuration.logger,
+    HireFire.configuration._once.log(
       "error",
-      `[HireFire] Middleware error: ${error?.message ?? error}`,
+      "middleware_error",
+      error?.constructor?.name,
+      `[HireFire] Middleware error: ${formatError(error)}`,
     )
   }
 }
