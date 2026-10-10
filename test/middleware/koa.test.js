@@ -1,4 +1,5 @@
 const request = require("supertest")
+const { local } = require("../support")
 const Koa = require("koa")
 const HireFireMiddlewareKoa = require("../../src/middleware/koa")
 const HireFire = require("../../src")
@@ -19,7 +20,7 @@ describe("Koa", () => {
 
   test("passes through without a token", async () => {
     process.env.DYNO = "web.1"
-    const response = await request(app.callback())
+    const response = await request(await local(app.callback()))
       .get("/")
       .set("X-Request-Start", String(Date.now() - 1000))
     expect(response.status).toBe(200)
@@ -34,7 +35,7 @@ describe("Koa", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    const response = await request(app.callback())
+    const response = await request(await local(app.callback()))
       .get("/")
       .set("X-Request-Start", String(second * 1000 - 1234))
 
@@ -52,7 +53,7 @@ describe("Koa", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    const response = await request(app.callback())
+    const response = await request(await local(app.callback()))
       .get("/")
       .set("X-Queue-Start", String(second * 1000 - 1234))
 

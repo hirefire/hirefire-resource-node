@@ -20,7 +20,7 @@ describe("Nest", () => {
     await HireFire.reset()
     app = await NestFactory.create(AppModule, { logger: false })
     app.use(HireFireMiddlewareExpress)
-    await app.init()
+    await app.listen(0, "127.0.0.1")
     start = jest.spyOn(Dispatcher.prototype, "start").mockReturnValue(true)
   })
 

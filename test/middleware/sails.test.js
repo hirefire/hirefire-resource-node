@@ -1,4 +1,5 @@
 const request = require("supertest")
+const { local } = require("../support")
 const sails = require("sails")
 const HireFireMiddlewareExpress = require("../../src/middleware/express")
 const HireFire = require("../../src")
@@ -52,7 +53,7 @@ describe("Sails", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    await request(app)
+    await request(await local(app))
       .get("/")
       .set("X-Request-Start", String(second * 1000 - 1234))
 
@@ -64,7 +65,7 @@ describe("Sails", () => {
 
   test("passes through without a token", async () => {
     process.env.DYNO = "web.1"
-    await request(app)
+    await request(await local(app))
       .get("/")
       .set("X-Request-Start", String(Date.now() - 1000))
     expect(HireFire.configuration.buffer.flush().web).toBeUndefined()
@@ -77,7 +78,7 @@ describe("Sails", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    await request(app)
+    await request(await local(app))
       .get("/")
       .set("X-Queue-Start", String(second * 1000 - 1234))
 

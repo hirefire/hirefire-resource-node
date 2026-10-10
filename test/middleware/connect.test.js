@@ -1,4 +1,5 @@
 const request = require("supertest")
+const { local } = require("../support")
 const connect = require("connect")
 const HireFireMiddlewareConnect = require("../../src/middleware/connect")
 const HireFire = require("../../src")
@@ -17,7 +18,7 @@ describe("Connect", () => {
 
   test("passes through without a token", async () => {
     process.env.DYNO = "web.1"
-    const response = await request(app)
+    const response = await request(await local(app))
       .get("/")
       .set("X-Request-Start", String(Date.now() - 1000))
     expect(response.status).toBe(200)
@@ -32,7 +33,7 @@ describe("Connect", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    const response = await request(app)
+    const response = await request(await local(app))
       .get("/")
       .set("X-Request-Start", String(second * 1000 - 1234))
 
@@ -50,7 +51,7 @@ describe("Connect", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    const response = await request(app)
+    const response = await request(await local(app))
       .get("/")
       .set("X-Queue-Start", String(second * 1000 - 1234))
 

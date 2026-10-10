@@ -1,4 +1,5 @@
 const request = require("supertest")
+const { local } = require("../support")
 const express = require("express")
 const HireFireMiddlewareExpress = require("../../src/middleware/express")
 const HireFire = require("../../src")
@@ -17,7 +18,7 @@ describe("Express", () => {
 
   test("passes through without a token", async () => {
     process.env.DYNO = "web.1"
-    const response = await request(app)
+    const response = await request(await local(app))
       .get("/")
       .set("X-Request-Start", String(Date.now() - 1000))
     expect(response.status).toBe(200)
@@ -32,7 +33,7 @@ describe("Express", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    const response = await request(app)
+    const response = await request(await local(app))
       .get("/")
       .set("X-Request-Start", String(second * 1000 - 1234))
 
@@ -50,7 +51,7 @@ describe("Express", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    const response = await request(app)
+    const response = await request(await local(app))
       .get("/")
       .set("X-Queue-Start", String(second * 1000 - 1234))
 
@@ -66,7 +67,7 @@ describe("Express", () => {
     jest.spyOn(Date, "now").mockReturnValue(second * 1000)
     process.env.DYNO = "web.1"
 
-    const response = await request(app)
+    const response = await request(await local(app))
       .get("/")
       .set("X-Request-Start", String(second * 1000 - 1234))
       .set("X-Queue-Start", String(second * 1000 - 9999))
@@ -85,7 +86,9 @@ describe("Express", () => {
     infoApp.get("/hirefire/SOME_TOKEN/info", (_req, res) =>
       res.status(200).send("DEFAULT"),
     )
-    const response = await request(infoApp).get("/hirefire/SOME_TOKEN/info")
+    const response = await request(await local(infoApp)).get(
+      "/hirefire/SOME_TOKEN/info",
+    )
     expect(response.status).toBe(200)
     expect(response.text).toBe("DEFAULT")
     expect(HireFire.configuration.buffer.flush()).toEqual({})
@@ -99,7 +102,7 @@ describe("Express", () => {
     boomApp.get("/boom", () => {
       throw new Error("host boom")
     })
-    const response = await request(boomApp).get("/boom")
+    const response = await request(await local(boomApp)).get("/boom")
     expect(response.status).toBeGreaterThanOrEqual(500)
   })
 })

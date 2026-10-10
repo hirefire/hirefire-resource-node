@@ -484,7 +484,7 @@ describe("Client (persistent connection)", () => {
       }
       req.resume()
     })
-    const client = new Client({ token: "t" }, { timeout: 0.05 })
+    const client = new Client({ token: "t" }, { timeout: 0.5 })
 
     await client.submitSamples("[]")
     await expect(client.submitSamples("[]")).rejects.toThrow("timed out")

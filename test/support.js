@@ -1,3 +1,4 @@
+const http = require("http")
 const HireFire = require("../src")
 const nock = require("nock")
 const Plan = require("../src/plan")
@@ -19,6 +20,23 @@ const ADAPTERS = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
 function restoreAdapters() {
   for (const key of Reflect.ownKeys(Plan.ADAPTERS)) delete Plan.ADAPTERS[key]
   Object.defineProperties(Plan.ADAPTERS, ADAPTERS)
+}
+
+const servers = new Set()
+
+async function local(app) {
+  const server = typeof app === "function" ? http.createServer(app) : app
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  servers.add(server)
+  return server
+}
+
+async function closeServers() {
+  for (const server of servers) {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+  servers.clear()
 }
 
 function silentLogger() {
@@ -70,8 +88,9 @@ if (!skipGlobalReset) {
 }
 
 afterEach(async () => {
+  await closeServers()
   await closeOpenHandles()
   await resetState()
 })
 
-module.exports = { silentLogger, freezeTime }
+module.exports = { silentLogger, freezeTime, local }
