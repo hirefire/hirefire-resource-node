@@ -222,6 +222,22 @@ describe("the client at its boundary", () => {
       expect(logged("E")).toEqual([])
     })
 
+    test("a token the server does not know is tried as seldom as the server asks", async () => {
+      answers.ingest = () => [401, "", { "HireFire-Dispatch-Frequency": "30" }]
+      configure()
+      await pass(61)
+
+      expect(at("ingest")).toEqual([0, 30, 60])
+    })
+
+    test("a server that calls a payload too large is asked as seldom as it asks", async () => {
+      answers.ingest = () => [413, "", { "HireFire-Dispatch-Frequency": "5" }]
+      configure()
+      await pass(11)
+
+      expect(at("ingest")).toEqual([0, 5, 10])
+    })
+
     test("a payload the server calls too large is dropped with one log line", async () => {
       let reject = true
       answers.ingest = () => (reject ? [413] : [200])

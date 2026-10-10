@@ -549,10 +549,10 @@ class Dispatcher {
         return
       }
 
+      this._applyDispatchFrequency(response)
       if (response.tooLarge) {
         return this._dropOversizedPayload(body, watermark, true)
       }
-      if (response.ok) this._applyDispatchFrequency(response)
       if (watermark !== undefined) this._lastRqtSecond = watermark
       this._pendingSampleTrace = null
     } catch (error) {
