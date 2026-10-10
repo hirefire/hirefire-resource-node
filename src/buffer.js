@@ -1,5 +1,7 @@
 const { rqt } = require("./strategy")
 
+const EMPTY_BUCKET = Object.freeze({ sum: 0, count: 0 })
+
 class MetricsBuffer {
   static SAMPLE_COUNT_LIMIT = 1_000_000
 
@@ -12,7 +14,6 @@ class MetricsBuffer {
     if (typeof value !== "number" || !Number.isFinite(value)) return
 
     const timestamp = Math.floor(Date.now() / 1000)
-    strategy = String(strategy)
     const series = this._seriesFor(name, strategy)
     prune(series, timestamp, this._ttl)
     if (rqt(strategy)) {
@@ -40,29 +41,16 @@ class MetricsBuffer {
   }
 
   repopulate(name, strategy, data) {
-    strategy = String(strategy)
     if (!rqt(strategy)) return
 
     const now = Math.floor(Date.now() / 1000)
-    let series = null
-    for (const [timestampKey, bucket] of Object.entries(data)) {
-      const timestamp = parseInt(timestampKey, 10)
-      if (timestamp < now - this._ttl) continue
-      const { sum, count } = rqtParts(bucket)
-      if (count <= 0) continue
-      if (!series) series = this._seriesFor(name, strategy)
-      const existing = series[timestamp]
-      if (
-        existing &&
-        typeof existing === "object" &&
-        !Array.isArray(existing)
-      ) {
-        series[timestamp] = clampRqt(existing.sum + sum, existing.count + count)
-      } else {
-        series[timestamp] = clampRqt(sum, count)
-      }
+    const series = this._seriesFor(name, strategy)
+    for (const [second, { sum, count }] of Object.entries(data)) {
+      if (Number(second) < now - this._ttl) continue
+
+      const existing = series[second] ?? EMPTY_BUCKET
+      series[second] = clampRqt(existing.sum + sum, existing.count + count)
     }
-    if (series) prune(series, now, this._ttl)
   }
 
   _seriesFor(name, strategy) {
@@ -84,31 +72,13 @@ function clampRqt(sum, count) {
   return { sum, count }
 }
 
-function rqtParts(bucket) {
-  if (bucket && typeof bucket === "object" && !Array.isArray(bucket)) {
-    const sum =
-      bucket.sum === undefined || bucket.sum === null ? 0 : Number(bucket.sum)
-    const countRaw =
-      bucket.count === undefined || bucket.count === null
-        ? 0
-        : Math.trunc(Number(bucket.count))
-    return {
-      sum,
-      count: Number.isFinite(countRaw) ? countRaw : 0,
-    }
-  }
-  return { sum: 0, count: 0 }
-}
-
 function prune(buckets, now, ttl) {
-  const keys = Object.keys(buckets)
-  if (keys.length <= ttl + 5) return
+  const seconds = Object.keys(buckets)
+  if (seconds.length <= ttl + 5) return
 
-  const cutoff = now - ttl
-  keys.forEach((timestamp) => {
-    if (parseInt(timestamp, 10) < cutoff) delete buckets[timestamp]
-  })
+  for (const second of seconds) {
+    if (Number(second) < now - ttl) delete buckets[second]
+  }
 }
 
 module.exports = MetricsBuffer
-module.exports.rqtParts = rqtParts

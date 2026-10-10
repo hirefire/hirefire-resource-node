@@ -156,40 +156,41 @@ describe("MetricsBuffer", () => {
     expect(data.web.rqt[80]).toBeUndefined()
   })
 
-  test("repopulate skips non hash and non positive count", () => {
-    freezeTime(200)
-    buffer.repopulate("web", "rqt", {
-      190: 12,
-      191: { sum: 5, count: 0 },
-      192: { sum: 7, count: -1 },
-      193: { sum: 9, count: 1 },
-    })
-    expect(buffer.flush().web.rqt).toEqual({ 193: { sum: 9, count: 1 } })
-  })
-
-  test("repopulate ignores array buckets", () => {
+  test("a repopulate of seconds that are all too old keeps none", () => {
     freezeTime(100)
-    buffer.repopulate("web", "rqt", { 100: [12, 8] })
-    expect(Object.keys(buffer.flush())).toHaveLength(0)
+    buffer.repopulate("web", "rqt", { 39: { sum: 5, count: 1 } })
+    expect(buffer.flush().web.rqt).toEqual({})
   })
 
-  test("repopulate replaces existing non object cell", () => {
-    freezeTime(100)
-    const series = buffer._seriesFor("web", "rqt")
-    series[100] = 12
-    buffer.repopulate("web", "rqt", { 100: { sum: 9, count: 1 } })
-    expect(buffer.flush().web.rqt[100]).toEqual({ sum: 9, count: 1 })
-  })
-
-  test("repopulate prunes after merge", () => {
-    freezeTime(1000)
-    const series = buffer._seriesFor("web", "rqt")
-    for (let s = 900; s < 970; s++) {
-      series[s] = { sum: 1, count: 1 }
+  describe("a series that is sampled for longer than it is flushed", () => {
+    function sampleAt(...seconds) {
+      for (const second of seconds) {
+        freezeTime(second)
+        buffer.sample("web", "rqt", 1)
+      }
     }
-    buffer.repopulate("web", "rqt", { 1000: { sum: 5, count: 1 } })
-    const data = buffer.flush().web.rqt
-    expect(data[1000]).toEqual({ sum: 5, count: 1 })
-    expect(Object.keys(data).every((k) => parseInt(k, 10) >= 940)).toBe(true)
+
+    function range(from, to) {
+      return Array.from(
+        { length: to - from + 1 },
+        (_value, index) => from + index,
+      )
+    }
+
+    test("keeps its old seconds while it holds 65 of them or fewer", () => {
+      sampleAt(...range(1, 65), 200)
+
+      expect(Object.keys(buffer.flush().web.rqt)).toHaveLength(66)
+    })
+
+    test("drops the seconds older than 60 seconds once it holds more than 65", () => {
+      sampleAt(...range(1, 64), 141, 200, 201)
+
+      expect(Object.keys(buffer.flush().web.rqt)).toEqual(["141", "200", "201"])
+    })
+  })
+
+  test("the count of one second stops at a million samples", () => {
+    expect(MetricsBuffer.SAMPLE_COUNT_LIMIT).toBe(1_000_000)
   })
 })
