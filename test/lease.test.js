@@ -1,4 +1,5 @@
 const { freezeTime } = require("./support")
+const http = require("http")
 const nock = require("nock")
 const Configuration = require("../src/configuration")
 const Lease = require("../src/lease")
@@ -743,13 +744,15 @@ describe("Lease", () => {
     expect(lease._ttl).toBe(Lease.TTL_BOUNDS[1])
   })
 
-  test("closes the underlying client", async () => {
+  test("close ends the connections of its client", async () => {
+    const destroy = jest.spyOn(http.Agent.prototype, "destroy")
     grant()
     await lease.requestIfDue({ hold: holdTrue })
-    expect(lease._client._agent).not.toBeNull()
+    expect(destroy).not.toHaveBeenCalled()
 
-    lease.close()
-    expect(lease._client._agent).toBeNull()
+    await lease.close()
+
+    expect(destroy).toHaveBeenCalledTimes(1)
   })
 
   test("unauthorized ignores frequency and ttl headers", async () => {

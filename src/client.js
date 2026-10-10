@@ -2,15 +2,14 @@ const http = require("http")
 const https = require("https")
 const VERSION = require("./version")
 
-const STALE_CONNECTION_CODES = new Set(["ECONNRESET", "ECONNABORTED", "EPIPE"])
+const STALE_CONNECTION_CODES = ["ECONNRESET", "ECONNABORTED", "EPIPE"]
 const DEFAULT_URL = "https://data.hirefire.io"
 const USER_AGENT = `hirefire-resource-node/${VERSION}`
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
 
-function isStaleConnectionCode(code) {
+function staleConnection(code) {
   return (
-    STALE_CONNECTION_CODES.has(code) ||
-    (typeof code === "string" && code.startsWith("HPE_"))
+    STALE_CONNECTION_CODES.includes(code) || String(code).startsWith("HPE_")
   )
 }
 
@@ -41,7 +40,7 @@ class Response {
   }
 
   integer(name) {
-    const text = String(this.headers[name.toLowerCase()] ?? "").trim()
+    const text = String(this.headers[name.toLowerCase()]).trim()
     if (!/^\d+$/.test(text)) return null
     const value = Number(text)
     return value > 0 ? value : null
@@ -50,27 +49,20 @@ class Response {
 
 class Client {
   static MAX_BODY_BYTES = 131072
+  static TIMEOUT = 5
 
-  constructor(configuration, { timeout = 5 } = {}) {
+  constructor(configuration) {
     this._configuration = configuration
-    this._timeout = timeout
-    this._agent = null
-    this._agentTransport = null
+    this._agents = new Map()
     this._pending = new Set()
   }
 
   async submitSamples(body) {
-    this._requireToken()
-
     const response = await this._execute(
       "/metrics/ingest",
-      {
-        "Content-Type": "application/json",
-        "HireFire-Token": this._token(),
-        "HireFire-Agent": `Node-${VERSION}`,
-      },
+      { "Content-Type": "application/json", ...this._credentials() },
       body,
-      { readBody: false },
+      (stream) => this._drain(stream),
     )
 
     if (response.ok || response.unauthorized || response.tooLarge) {
@@ -82,41 +74,32 @@ class Client {
   }
 
   async requestLease(processId) {
-    this._requireToken()
-
     return this._execute(
       "/metrics/lease",
-      {
-        "HireFire-Token": this._token(),
-        "HireFire-Agent": `Node-${VERSION}`,
-        "HireFire-Process-ID": processId,
-      },
+      { ...this._credentials(), "HireFire-Process-ID": processId },
       undefined,
-      { readBody: true },
+      (stream) => this._read(stream),
     )
   }
 
   async close() {
-    const pending = [...this._pending]
-    if (pending.length > 0) {
+    if (this._pending.size > 0) {
       await Promise.race([
-        Promise.allSettled(pending),
+        Promise.allSettled(this._pending),
         new Promise((resolve) => {
-          setTimeout(resolve, 5000).unref()
+          setTimeout(resolve, Client.TIMEOUT * 1000).unref()
         }),
       ])
     }
-    if (this._agent) {
+    for (const agent of this._agents.values()) {
       try {
-        this._agent.destroy()
+        agent.destroy()
       } catch {}
-      this._agent = null
-      this._agentTransport = null
     }
   }
 
-  async _execute(path, headers, body, options = {}) {
-    const run = this._executeUntracked(path, headers, body, options)
+  async _execute(path, headers, body, read) {
+    const run = this._request(path, headers, body, read)
     this._pending.add(run)
     try {
       return await run
@@ -125,94 +108,69 @@ class Client {
     }
   }
 
-  async _executeUntracked(path, headers, body, options = {}) {
+  async _request(path, headers, body, read) {
     const uri = new URL(this._baseUrl() + path)
     const transport = uri.protocol === "https:" ? https : http
-    const deadlineMs = this._timeout * 1000
     const controller = new AbortController()
-    const deadline = setTimeout(() => controller.abort(), deadlineMs).unref()
-    const requestOptions = {
+    const deadline = setTimeout(
+      () => controller.abort(),
+      Client.TIMEOUT * 1000,
+    ).unref()
+    const options = {
       method: "POST",
       hostname: uri.hostname,
-      port: uri.port || (uri.protocol === "https:" ? 443 : 80),
+      port: uri.port,
       path: uri.pathname + uri.search,
       headers: { "User-Agent": USER_AGENT, ...headers },
-      timeout: deadlineMs,
       signal: controller.signal,
       agent: this._agentFor(transport),
     }
-
     if (body !== undefined) {
-      requestOptions.headers["Content-Length"] = Buffer.byteLength(body)
+      options.headers["Content-Length"] = Buffer.byteLength(body)
     }
 
     try {
-      try {
-        return await this._attempt(transport, requestOptions, body, options)
-      } catch (error) {
-        if (controller.signal.aborted) {
-          throw this._timeoutError(error)
-        }
-        if (error instanceof RequestError && error.retriable) {
-          return await this._attempt(transport, requestOptions, body, options)
-        }
-        throw error
-      }
+      return await this._attempt(transport, options, body, read).catch(
+        (error) => {
+          if (!error.retriable || controller.signal.aborted) throw error
+          return this._attempt(transport, options, body, read)
+        },
+      )
+    } catch (error) {
+      throw controller.signal.aborted
+        ? new RequestError("Request timed out.")
+        : error
     } finally {
       clearTimeout(deadline)
     }
   }
 
-  _attempt(transport, options, body, readOptions) {
+  _attempt(transport, options, body, read) {
     return new Promise((resolve, reject) => {
-      let settled = false
-      const settle = (fn, value) => {
-        if (settled) return
-        settled = true
-        fn(value)
-      }
-
+      const fail = (error) =>
+        reject(this._transportError(error, request.reusedSocket))
       const request = transport.request(options, (response) => {
-        if (readOptions.readBody) {
-          this._readBody(response)
-            .then((bodyText) => {
-              settle(
-                resolve,
-                new Response(response.statusCode, response.headers, bodyText),
-              )
-            })
-            .catch((error) =>
-              settle(reject, this._transportError(error, request.reusedSocket)),
-            )
-        } else {
-          response.resume()
-          response.on("end", () => {
-            settle(
-              resolve,
-              new Response(response.statusCode, response.headers, ""),
-            )
-          })
-          response.on("error", (error) =>
-            settle(reject, this._transportError(error, request.reusedSocket)),
-          )
-        }
+        read(response).then(
+          (text) =>
+            resolve(new Response(response.statusCode, response.headers, text)),
+          fail,
+        )
       })
-
-      request.on("timeout", () => {
-        settle(reject, new RequestError("Request timed out."))
-        request.destroy()
-      })
-
-      request.on("error", (error) =>
-        settle(reject, this._transportError(error, request.reusedSocket)),
-      )
-
+      request.on("error", fail)
       if (body !== undefined) request.write(body)
       request.end()
     })
   }
 
-  _readBody(response) {
+  _drain(response) {
+    return new Promise((resolve, reject) => {
+      response.resume()
+      response.on("end", () => resolve(""))
+      response.on("error", reject)
+    })
+  }
+
+  _read(response) {
     return new Promise((resolve, reject) => {
       const chunks = []
       let size = 0
@@ -241,46 +199,37 @@ class Client {
   }
 
   _agentFor(transport) {
-    if (this._agent && this._agentTransport !== transport) {
-      try {
-        this._agent.destroy()
-      } catch {}
-      this._agent = null
+    if (!this._agents.has(transport)) {
+      this._agents.set(
+        transport,
+        new transport.Agent({ keepAlive: true, maxSockets: 1 }),
+      )
     }
-    if (!this._agent) {
-      this._agent = new transport.Agent({
-        keepAlive: true,
-        maxSockets: 1,
-        maxFreeSockets: 1,
-      })
-      this._agentTransport = transport
-    }
-    return this._agent
+    return this._agents.get(transport)
   }
 
-  _timeoutError(error) {
-    if (error instanceof RequestError && /timed out/i.test(error.message)) {
-      return error
-    }
-    return new RequestError("Request timed out.")
-  }
-
-  _transportError(error, reusedSocket = false) {
+  _transportError(error, reusedSocket) {
     if (error instanceof RequestError) return error
-    if (
-      error.code === "ETIMEDOUT" ||
-      error.code === "ESOCKETTIMEDOUT" ||
-      error.code === "ABORT_ERR" ||
-      error.name === "AbortError"
-    ) {
+    if (error.code === "ETIMEDOUT") {
       return new RequestError("Request timed out.")
     }
+
     const requestError = new RequestError(
       `Network error (${error.code || error.name}: ${error.message}).`,
     )
-    requestError.retriable =
-      Boolean(reusedSocket) && isStaleConnectionCode(error.code)
+    requestError.retriable = reusedSocket && staleConnection(error.code)
     return requestError
+  }
+
+  _credentials() {
+    const token = this._configuration.token
+    if (!token) {
+      throw new RequestError(
+        "HireFire token is not set.\n" +
+          "Set HIREFIRE_TOKEN or config.token to enable metric dispatch.",
+      )
+    }
+    return { "HireFire-Token": token, "HireFire-Agent": `Node-${VERSION}` }
   }
 
   _baseUrl() {
@@ -298,19 +247,6 @@ class Client {
       this._configuration._warnPlainHttpDataUrlOnce(uri.hostname)
     }
     return url
-  }
-
-  _token() {
-    return this._configuration.token
-  }
-
-  _requireToken() {
-    if (this._token()) return
-
-    throw new RequestError(
-      "HireFire token is not set.\n" +
-        "Set HIREFIRE_TOKEN or config.token to enable metric dispatch.",
-    )
   }
 }
 

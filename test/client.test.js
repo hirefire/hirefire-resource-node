@@ -8,6 +8,11 @@ const VERSION = require("../src/version")
 const BASE = "https://data.hirefire.io"
 const BODY = '[{"name":"web","metrics":{"rqt":{"1000":[]}}}]'
 
+function timed(seconds, token = "test-token-value") {
+  jest.replaceProperty(Client, "TIMEOUT", seconds)
+  return new Client({ token })
+}
+
 describe("Client", () => {
   let client
 
@@ -89,19 +94,6 @@ describe("Client", () => {
     expect(response.integer("HireFire-Dispatch-Frequency")).toBe(expected)
   })
 
-  test("submit samples raises on timeout", async () => {
-    const slowClient = new Client(
-      { token: "test-token-value" },
-      { timeout: 0.1 },
-    )
-    nock(BASE).post("/metrics/ingest").delayConnection(500).reply(200)
-    try {
-      await expect(slowClient.submitSamples(BODY)).rejects.toThrow("timed out")
-    } finally {
-      await slowClient.close()
-    }
-  })
-
   test("submit samples times out when the request never connects", async () => {
     process.env.HIREFIRE_DATA_URL = "http://127.0.0.1:9"
     const connect = jest
@@ -110,10 +102,7 @@ describe("Client", () => {
         this.connecting = true
         return this
       })
-    const slowClient = new Client(
-      { token: "test-token-value" },
-      { timeout: 0.1 },
-    )
+    const slowClient = timed(0.1)
     const started = Date.now()
     try {
       await expect(slowClient.submitSamples(BODY)).rejects.toThrow("timed out")
@@ -160,34 +149,45 @@ describe("Client", () => {
     expect(response.status).toBe(200)
   })
 
-  test("request lease raises on timeout", async () => {
-    const slowClient = new Client(
-      { token: "test-token-value" },
-      { timeout: 0.1 },
-    )
-    nock(BASE).post("/metrics/lease").delayConnection(500).reply(200)
-    try {
-      await expect(slowClient.requestLease("abc123")).rejects.toThrow(
-        "timed out",
+  test.each([
+    ["a dispatch", (tokenless) => tokenless.submitSamples("[]")],
+    ["a lease request", (tokenless) => tokenless.requestLease("abc123")],
+  ])("%s without a token fails and sends nothing", async (_name, call) => {
+    const scope = nock(BASE).post(/.*/).reply(200)
+
+    for (const token of [null, ""]) {
+      await expect(call(new Client({ token }))).rejects.toThrow(
+        new RequestError(
+          "HireFire token is not set.\n" +
+            "Set HIREFIRE_TOKEN or config.token to enable metric dispatch.",
+        ),
       )
-    } finally {
-      await slowClient.close()
     }
+    expect(scope.isDone()).toBe(false)
   })
 
-  test("raises without token", async () => {
-    const tokenless = new Client({ token: null })
-    await expect(tokenless.submitSamples("[]")).rejects.toThrow(
-      "HireFire token is not set",
-    )
-  })
+  test.each([200, 204, 299])(
+    "a dispatch answered with %i succeeds",
+    async (status) => {
+      nock(BASE).post("/metrics/ingest").reply(status)
 
-  test("raises with empty token", async () => {
-    const tokenless = new Client({ token: "" })
-    await expect(tokenless.submitSamples("[]")).rejects.toThrow(
-      "HireFire token is not set",
-    )
-  })
+      const response = await client.submitSamples(BODY)
+
+      expect(response.ok).toBe(true)
+      expect(response.body).toBe("")
+    },
+  )
+
+  test.each([300, 404, 500])(
+    "a dispatch answered with %i fails with the status",
+    async (status) => {
+      nock(BASE).post("/metrics/ingest").reply(status)
+
+      await expect(client.submitSamples(BODY)).rejects.toThrow(
+        new RequestError(`Ingest request failed with ${status} status.`),
+      )
+    },
+  )
 
   test("blank and slash only data url falls back to default", async () => {
     for (const value of ["", "   ", "/", "///"]) {
@@ -312,7 +312,8 @@ describe("Client", () => {
     expect(warnPlainHttpDataUrlOnce).not.toHaveBeenCalled()
   })
 
-  test("rebuilds the keep alive agent when the base url scheme changes", async () => {
+  test("keeps one connection pool per scheme and closes each", async () => {
+    const destroy = jest.spyOn(http.Agent.prototype, "destroy")
     client = new Client({ token: "t", _warnPlainHttpDataUrlOnce() {} })
     nock("http://metrics.example").post("/metrics/ingest").reply(200)
     process.env.HIREFIRE_DATA_URL = "http://metrics.example"
@@ -321,6 +322,9 @@ describe("Client", () => {
     nock("https://metrics.example").post("/metrics/ingest").reply(200)
     process.env.HIREFIRE_DATA_URL = "https://metrics.example"
     await client.submitSamples(BODY)
+    await client.close()
+
+    expect(destroy).toHaveBeenCalledTimes(2)
   })
 
   test("maps a socket etimedout to a timeout error", async () => {
@@ -337,33 +341,6 @@ describe("Client", () => {
     await client.submitSamples(BODY)
 
     expect(scope.isDone()).toBe(true)
-  })
-
-  test("lease response body error is mapped to a request error", async () => {
-    const client = new Client({ token: "t" })
-    const response = new EventEmitter()
-    response.headers = {}
-    response.resume = jest.fn()
-    const request = new EventEmitter()
-    request.reusedSocket = false
-    request.write = jest.fn()
-    request.end = jest.fn(() => {
-      queueMicrotask(() =>
-        response.emit("error", new Error("body stream failed")),
-      )
-    })
-    const transport = {
-      request: jest.fn((_options, callback) => {
-        queueMicrotask(() => callback(response))
-        return request
-      }),
-    }
-
-    await expect(
-      client._attempt(transport, { method: "POST" }, undefined, {
-        readBody: true,
-      }),
-    ).rejects.toBeInstanceOf(RequestError)
   })
 })
 
@@ -482,12 +459,11 @@ describe("Client (persistent connection)", () => {
     await listen((req, res) => req.resume().on("end", () => res.end()))
     const client = new Client({ token: "t" })
     await client.submitSamples("[]")
-    expect(client._agent).not.toBeNull()
-    client._agent.destroy = () => {
+    jest.spyOn(http.Agent.prototype, "destroy").mockImplementation(() => {
       throw new Error("destroy boom")
-    }
+    })
+
     await expect(client.close()).resolves.toBeUndefined()
-    expect(client._agent).toBeNull()
   })
 
   test("does not retry twice on persistent stale errors", async () => {
@@ -599,7 +575,7 @@ describe("Client (persistent connection)", () => {
       }
       req.resume()
     })
-    const client = new Client({ token: "t" }, { timeout: 0.5 })
+    const client = timed(0.5, "t")
 
     await client.submitSamples("[]")
     await expect(client.submitSamples("[]")).rejects.toThrow("timed out")
@@ -639,5 +615,220 @@ describe("Client (persistent connection)", () => {
     await inflight
     await closePromise
     expect(completed).toBe(true)
+  })
+
+  test.each([
+    ["a dispatch", (client) => client.submitSamples("[]")],
+    ["a lease request", (client) => client.requestLease("abc123")],
+  ])("%s to a server that does not answer times out", async (_name, call) => {
+    await listen((req) => req.resume())
+    const client = timed(0.1, "t")
+
+    await expect(call(client)).rejects.toThrow(
+      new RequestError("Request timed out."),
+    )
+    await client.close()
+  })
+
+  test("two requests at once share one connection", async () => {
+    let opened = 0
+    await listen((req, res) => req.resume().on("end", () => res.end()))
+    server.on("connection", () => {
+      opened += 1
+    })
+    const client = new Client({ token: "t" })
+
+    await Promise.all([
+      client.submitSamples("[]"),
+      client.submitSamples("[]"),
+      client.requestLease("abc123"),
+    ])
+
+    expect(opened).toBe(1)
+    await client.close()
+  })
+
+  test("the body of a dispatch response is not read, whatever its size", async () => {
+    await listen((req, res) => {
+      req
+        .resume()
+        .on("end", () => res.end("x".repeat(Client.MAX_BODY_BYTES + 1)))
+    })
+    const client = new Client({ token: "t" })
+
+    const response = await client.submitSamples("[]")
+
+    expect(response.status).toBe(200)
+    expect(response.body).toBe("")
+    await client.close()
+  })
+
+  test("a lease response that announces a body over the bound fails before the body arrives", async () => {
+    const sockets = []
+    const raw = net.createServer((socket) => {
+      sockets.push(socket)
+      socket.once("data", () => {
+        socket.write(
+          `HTTP/1.1 200 OK\r\nContent-Length: ${
+            Client.MAX_BODY_BYTES + 1
+          }\r\n\r\n`,
+        )
+      })
+    })
+    await new Promise((resolve) => raw.listen(0, "127.0.0.1", resolve))
+    process.env.HIREFIRE_DATA_URL = `http://127.0.0.1:${raw.address().port}`
+    const client = new Client({ token: "t" })
+
+    await expect(client.requestLease("pid-1")).rejects.toThrow(
+      new RequestError("Response body exceeded 131072 bytes (status 200)."),
+    )
+    await client.close()
+    for (const socket of sockets) socket.destroy()
+    await new Promise((resolve) => raw.close(resolve))
+  })
+
+  test("a lease response whose body breaks off fails as a network error", async () => {
+    await listen((req, res) => {
+      req.resume().on("end", () => {
+        res.writeHead(200, { "Content-Length": "100" })
+        res.write("partial")
+        res.socket.end()
+      })
+    })
+    const client = new Client({ token: "t" })
+
+    const promise = client.requestLease("pid-1")
+    await expect(promise).rejects.toBeInstanceOf(RequestError)
+    await expect(promise).rejects.toThrow(/^Network error \(ECONNRESET: /)
+    await client.close()
+  })
+})
+
+describe("Client (a connection that fails)", () => {
+  let attempts
+
+  function fail(code, { reused }) {
+    attempts = 0
+    process.env.HIREFIRE_DATA_URL = "http://127.0.0.1:9"
+    jest.spyOn(http, "request").mockImplementation((_options, callback) => {
+      attempts += 1
+      const attempt = attempts
+      const request = new EventEmitter()
+      request.reusedSocket = reused
+      request.write = () => {}
+      request.end = () => {
+        queueMicrotask(() => {
+          if (attempt === 1) {
+            const error = new Error("socket failed")
+            if (code) error.code = code
+            request.emit("error", error)
+            return
+          }
+          const response = new EventEmitter()
+          response.statusCode = 200
+          response.headers = {}
+          response.resume = () => {}
+          callback(response)
+          queueMicrotask(() => response.emit("end"))
+        })
+      }
+      return request
+    })
+    return new Client({ token: "t" })
+  }
+
+  test.each(["ECONNRESET", "ECONNABORTED", "EPIPE", "HPE_INVALID_CONSTANT"])(
+    "a kept connection that fails with %s is tried once more",
+    async (code) => {
+      const client = fail(code, { reused: true })
+
+      expect((await client.submitSamples("[]")).status).toBe(200)
+      expect(attempts).toBe(2)
+    },
+  )
+
+  test.each([
+    ["ECONNREFUSED", "Network error (ECONNREFUSED: socket failed)."],
+    ["ENOTFOUND", "Network error (ENOTFOUND: socket failed)."],
+    [undefined, "Network error (Error: socket failed)."],
+  ])(
+    "a kept connection that fails with %s is not tried again",
+    async (code, message) => {
+      const client = fail(code, { reused: true })
+
+      await expect(client.submitSamples("[]")).rejects.toThrow(
+        new RequestError(message),
+      )
+      expect(attempts).toBe(1)
+    },
+  )
+
+  test("a new connection that fails with ECONNRESET is not tried again", async () => {
+    const client = fail("ECONNRESET", { reused: false })
+
+    await expect(client.submitSamples("[]")).rejects.toThrow(
+      new RequestError("Network error (ECONNRESET: socket failed)."),
+    )
+    expect(attempts).toBe(1)
+  })
+})
+
+describe("Client (the deadline of 5 seconds)", () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    process.env.HIREFIRE_DATA_URL = "http://127.0.0.1:9"
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  function silent({ aborts }) {
+    jest.spyOn(http, "request").mockImplementation((options) => {
+      const request = new EventEmitter()
+      request.write = () => {}
+      request.end = () => {}
+      if (aborts) {
+        options.signal.addEventListener("abort", () => {
+          const error = new Error("The operation was aborted")
+          error.code = "ABORT_ERR"
+          request.emit("error", error)
+        })
+      }
+      return request
+    })
+  }
+
+  async function settled(promise) {
+    let state = "pending"
+    promise.then(
+      () => (state = "resolved"),
+      (error) => (state = error.message),
+    )
+    await jest.advanceTimersByTimeAsync(0)
+    return state
+  }
+
+  test("a request without an answer fails at 5 seconds, not before", async () => {
+    silent({ aborts: true })
+    const request = new Client({ token: "t" }).submitSamples("[]")
+
+    await jest.advanceTimersByTimeAsync(4999)
+    expect(await settled(request)).toBe("pending")
+    await jest.advanceTimersByTimeAsync(1)
+    expect(await settled(request)).toBe("Request timed out.")
+  })
+
+  test("close waits 5 seconds for a request that never ends, then returns", async () => {
+    silent({ aborts: false })
+    const client = new Client({ token: "t" })
+    client.submitSamples("[]")
+    await jest.advanceTimersByTimeAsync(0)
+    const closing = client.close()
+
+    await jest.advanceTimersByTimeAsync(4999)
+    expect(await settled(closing)).toBe("pending")
+    await jest.advanceTimersByTimeAsync(1)
+    expect(await settled(closing)).toBe("resolved")
   })
 })
