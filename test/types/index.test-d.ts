@@ -10,13 +10,13 @@ import bullmq = require("../../types/macro/bullmq")
 import bull = require("../../types/macro/bull")
 import pgBoss = require("../../types/macro/pg_boss")
 import errors = require("../../types/errors")
-import JobQueue = require("../../types/source/jobQueue")
 
 const configuration = HireFire.configuration
 
 expectType<string | null>(configuration.token)
-expectType<string | null>(configuration.httpName)
-expectError(configuration.http)
+expectType<boolean>(configuration.forceStart)
+configuration.forceStart = true
+expectError((configuration.forceStart = "yes"))
 expectType<number>(Configuration.MAX_NAME_BYTES)
 configuration.token = "token"
 configuration.token = null
@@ -39,60 +39,16 @@ expectError(HireFire.Web)
 expectError(HireFire.Worker)
 expectError(HireFire.Workers)
 
-expectType<boolean>(configuration.dispatcher.start())
-expectType<boolean>(configuration.dispatcher.running())
-expectType<Promise<boolean>>(configuration.dispatcher.stop())
-expectType<Promise<boolean>>(configuration.dispatcher.stop({ flush: false }))
-expectType<void>(configuration.markHttpActive())
-expectType<boolean>(configuration.rqtEnabled)
+expectError(configuration.buffer)
+expectError(configuration.dispatcher)
+expectError(configuration.http)
+expectError(configuration.httpName)
+expectError(configuration.httpSource)
+expectError(configuration.markHttpActive())
+expectError(configuration.rqtEnabled)
 expectError(configuration.rqtLiveness)
-
-expectType<void>(configuration.buffer.sample("web", "rqt", 1))
-expectType<{
-  [name: string]: {
-    [strategy: string]: {
-      [timestamp: string]: number | { sum: number; count: number }
-    }
-  }
-}>(configuration.buffer.flush())
-expectType<void>(configuration.buffer.discard())
-expectType<void>(
-  configuration.buffer.repopulate("web", "rqt", {
-    "1": { sum: 1, count: 1 },
-  }),
-)
-
-expectType<boolean>(configuration.jobQueues.any())
-expectType<(jobQueue: JobQueue) => void>(configuration.jobQueues.add)
-const found = configuration.jobQueues.findByName("worker")
-if (found) {
-  expectType<string>(found.name)
-  expectType<number | Promise<number>>(found.sample())
-} else {
-  expectType<null>(found)
-}
-for (const queue of configuration.jobQueues) {
-  expectType<string>(queue.name)
-  expectType<number | Promise<number>>(queue.sample())
-}
-const queueIterator = configuration.jobQueues[Symbol.iterator]()
-const queueStep = queueIterator.next()
-if (!queueStep.done) {
-  expectType<string>(queueStep.value.name)
-  expectType<number | Promise<number>>(queueStep.value.sample())
-}
-
-const httpSource = configuration.httpSource
-if (httpSource) {
-  expectType<string>(httpSource.name)
-  expectType<void>(httpSource.sample(12))
-} else {
-  expectType<null>(httpSource)
-}
-
-const cpus = configuration.activeCpuSources()
-expectType<string>(cpus[0].name)
-expectType<void | null>(cpus[0].sample())
+expectError(configuration.activeCpuSources())
+expectError(configuration.jobQueues)
 
 expectType<typeof errors.MissingQueueError>(errors.MissingQueueError)
 expectType<typeof errors.JobQueueLatencyUnsupportedError>(

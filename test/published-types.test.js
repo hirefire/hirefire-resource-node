@@ -6,6 +6,18 @@ const Configuration = require("../src/configuration")
 
 const root = path.resolve(__dirname, "..")
 const BANNED_NAMES = ["service", "tracking", "Web", "Worker", "Workers"]
+const INTERNAL = {
+  "./configuration": [
+    "activeCpuSources",
+    "buffer",
+    "dispatcher",
+    "httpName",
+    "httpSource",
+    "jobQueues",
+    "markHttpActive",
+    "rqtEnabled",
+  ],
+}
 
 function walkDts(dir) {
   const out = []
@@ -202,7 +214,8 @@ function assertSameNames(label, jsNames, dtsNames) {
 describe("published declaration export names", () => {
   test.each(publishedModules())(
     "$subpath matches the JS module both ways",
-    ({ types, js }) => {
+    ({ subpath, types, js }) => {
+      const internal = INTERNAL[subpath] ?? []
       const mod = require(js)
       const sf = sourceFile(types)
       const kind = moduleKind(mod)
@@ -219,10 +232,11 @@ describe("published declaration export names", () => {
         const jsStatics = jsNamedExports(mod)
         const dtsStatics = dtsMembers(dtsConstructorType(sf))
         assertSameNames(`${js} statics`, jsStatics, dtsStatics)
-        const instance = new mod()
+        const members = jsInstanceMembers(new mod())
+        expect(members).toEqual(expect.arrayContaining(internal))
         assertSameNames(
           `${js} instance`,
-          jsInstanceMembers(instance),
+          members.filter((name) => !internal.includes(name)),
           dtsMembers(dtsInstanceType(sf)),
         )
         return
@@ -275,72 +289,9 @@ describe("published declaration export names", () => {
   })
 })
 
-describe("Configuration nested collector types", () => {
-  const previousDyno = process.env.DYNO
+test("the type files declare nothing beside the published modules", () => {
+  const published = new Set(publishedModules().map((mod) => mod.types))
+  published.add(path.join(root, "types", "hirefire.d.ts"))
 
-  afterEach(() => {
-    if (previousDyno === undefined) delete process.env.DYNO
-    else process.env.DYNO = previousDyno
-  })
-
-  test("reachable nested members match the handwritten declarations both ways", () => {
-    process.env.DYNO = "web.1"
-    const config = new Configuration()
-    config.logger = { info() {}, warn() {}, error() {} }
-    config.dyno("worker", () => 1)
-
-    const sf = sourceFile(path.join(root, "types/configuration.d.ts"))
-    const instType = dtsInstanceType(sf)
-
-    assertSameNames(
-      "Configuration",
-      jsInstanceMembers(config),
-      dtsMembers(instType),
-    )
-
-    const jobQueuesType = unwrapNullish(
-      typeOfProperty(instType, "jobQueues"),
-    )[0]
-    assertSameNames(
-      "jobQueues",
-      jsInstanceMembers(config.jobQueues),
-      dtsMembers(jobQueuesType),
-    )
-
-    const queue = [...config.jobQueues][0]
-    const queueType = unwrapNullish(returnType(jobQueuesType, "findByName"))[0]
-    assertSameNames("jobQueue", jsInstanceMembers(queue), dtsMembers(queueType))
-
-    const dispatcherType = unwrapNullish(
-      typeOfProperty(instType, "dispatcher"),
-    )[0]
-    assertSameNames(
-      "dispatcher",
-      jsInstanceMembers(config.dispatcher),
-      dtsMembers(dispatcherType),
-    )
-
-    const bufferType = unwrapNullish(typeOfProperty(instType, "buffer"))[0]
-    assertSameNames(
-      "buffer",
-      jsInstanceMembers(config.buffer),
-      dtsMembers(bufferType),
-    )
-
-    const httpSource = config.httpSource
-    expect(httpSource).not.toBeNull()
-    const httpType = unwrapNullish(typeOfProperty(instType, "httpSource"))[0]
-    assertSameNames(
-      "httpSource",
-      jsInstanceMembers(httpSource),
-      dtsMembers(httpType),
-    )
-
-    const cpu = config.activeCpuSources()[0]
-    expect(cpu).toBeDefined()
-    const cpuType = unwrapNullish(
-      arrayElementType(returnType(instType, "activeCpuSources")),
-    )[0]
-    assertSameNames("cpu", jsInstanceMembers(cpu), dtsMembers(cpuType))
-  })
+  expect(dtsFiles.filter((file) => !published.has(file))).toEqual([])
 })

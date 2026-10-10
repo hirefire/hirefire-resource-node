@@ -3,18 +3,10 @@ declare class Configuration {
   static MAX_NAME_BYTES: number
   logger: Logger | null
   forceStart: boolean
-  jobQueues: JobQueues
   set token(value: string | null | undefined)
   get token(): string | null
   dyno(name: string): void
   dyno(name: string, sampler: () => number | Promise<number>): void
-  get buffer(): Buffer
-  get dispatcher(): Dispatcher
-  get httpName(): string | null
-  get httpSource(): HTTP | null
-  markHttpActive(): void
-  get rqtEnabled(): boolean
-  activeCpuSources(): CPU[]
 }
 declare namespace Configuration {
   export { MissingSamplerError, DuplicateDynoError, Logger }
@@ -30,8 +22,3 @@ type Logger = {
   warn?: (message: string) => void
   info?: (message: string) => void
 }
-import Buffer = require("./buffer")
-import Dispatcher = require("./dispatcher")
-import HTTP = require("./source/http")
-import CPU = require("./source/cpu")
-import JobQueues = require("./source/jobQueues")

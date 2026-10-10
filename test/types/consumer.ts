@@ -2,41 +2,19 @@ import HireFire = require("../../types")
 import Configuration = require("../../types/configuration")
 import errors = require("../../types/errors")
 
-const configuration = HireFire.configuration
-const httpName: string | null = configuration.httpName
-const httpSource = configuration.httpSource
-void httpName
+const configuration = HireFire.configure((config) => {
+  config.token = "token"
+  config.forceStart = false
+  config.logger = { info() {}, warn() {}, error() {} }
+  config.dyno("worker", async () => 1)
+})
+const token: string | null = configuration.token
+void token
+void HireFire.boot()
+void HireFire.reset()
 void Configuration.MAX_NAME_BYTES
+void Configuration.MissingSamplerError
+void Configuration.DuplicateDynoError
 void errors.jobQueueLatencyUnsupported
 void errors.MissingQueueError
 void errors.JobQueueLatencyUnsupportedError
-
-void configuration.dispatcher.start()
-void configuration.dispatcher.stop({ flush: false })
-void configuration.dispatcher.stop()
-void configuration.dispatcher.running()
-
-void configuration.buffer.sample("web", "rqt", 1)
-const snapshot = configuration.buffer.flush()
-void snapshot
-void configuration.buffer.discard()
-void configuration.buffer.repopulate("web", "rqt", {
-  "1": { sum: 1, count: 1 },
-})
-
-void configuration.jobQueues.any()
-void configuration.jobQueues.findByName("worker")
-for (const queue of configuration.jobQueues) {
-  void queue.name
-  void queue.sample()
-}
-
-if (httpSource) {
-  void httpSource.name
-  httpSource.sample(1)
-}
-
-for (const cpu of configuration.activeCpuSources()) {
-  void cpu.name
-  cpu.sample()
-}
