@@ -5,10 +5,12 @@ const fs = require("fs")
 const path = require("path")
 const { results } = require("../lib/paths")
 
-const [rubyAudit, rubyFixes, ...runs] = process.argv.slice(2)
-if (!rubyAudit || !rubyFixes) {
+const args = process.argv.slice(2)
+const kept = args.filter((entry) => entry.includes("="))
+const runs = args.filter((entry) => !entry.includes("="))
+if (kept.length === 0) {
   console.error(
-    "usage: tools/bin/fault-compare <Ruby audit results.json> <Ruby fix pass results.json> [run...]",
+    "usage: tools/bin/fault-compare <label>=<results.json>... [run...]",
   )
   process.exit(64)
 }
@@ -21,10 +23,10 @@ function load(file) {
   return byScenario
 }
 
-const columns = [
-  ["Ruby audit", load(rubyAudit)],
-  ["Ruby fixed", load(rubyFixes)],
-]
+const columns = kept.map((entry) => {
+  const at = entry.indexOf("=")
+  return [entry.slice(0, at), load(entry.slice(at + 1))]
+})
 for (const run of runs.length ? runs : ["faults", "faults-2"]) {
   columns.push([`Node ${run}`, load(path.join(results, run, "results.json"))])
 }

@@ -48,7 +48,7 @@ hosts() {
 }
 
 step baseline baseline
-step matrix tools/bin/matrix-repeat 10 4100
+step matrix tools/bin/matrix-repeat "${TOOLS_MATRIX_RUNS:-10}" "${TOOLS_MATRIX_SEED:-4100}"
 step alone node tools/bin/rerun-failed
 step mutation mutation
 step faults faults

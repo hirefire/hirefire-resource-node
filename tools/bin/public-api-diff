@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const path = require("path")
+const { execFileSync } = require("child_process")
+const { root } = require("../lib/paths")
+
+const [ref] = process.argv.slice(2)
+if (!ref) {
+  console.error("usage: tools/bin/public-api-diff <commit of the older copy>")
+  process.exit(64)
+}
+
+const golden = path.join("tools", "baseline", "public_api.json")
+
+function flatten(value, at, out) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (item !== null && typeof item === "object") flatten(item, at, out)
+      else out.add(`${at}: ${item}`)
+    }
+  } else if (value !== null && typeof value === "object") {
+    for (const [key, inner] of Object.entries(value)) {
+      flatten(inner, at ? `${at} > ${key}` : key, out)
+    }
+  } else {
+    out.add(`${at} = ${value}`)
+  }
+  return out
+}
+
+const before = flatten(
+  JSON.parse(
+    execFileSync("git", ["show", `${ref}:${golden}`], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 1 << 26,
+    }),
+  ),
+  "",
+  new Set(),
+)
+const after = flatten(
+  JSON.parse(fs.readFileSync(path.join(root, golden), "utf8")),
+  "",
+  new Set(),
+)
+const removed = [...before].filter((entry) => !after.has(entry)).sort()
+const added = [...after].filter((entry) => !before.has(entry)).sort()
+
+console.log(`removed: ${removed.length}`)
+for (const entry of removed) console.log(`- ${entry}`)
+console.log(`added: ${added.length}`)
+for (const entry of added) console.log(`+ ${entry}`)

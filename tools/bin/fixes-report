@@ -1,0 +1,157 @@
+#!/usr/bin/env node
+"use strict"
+
+const { spawnSync } = require("child_process")
+const os = require("os")
+const { root, sandboxes } = require("../lib/paths")
+
+const [canon, audited = "98f2a73", tools = "5eaaa51"] = process.argv.slice(2)
+if (!canon) {
+  console.error(
+    "usage: tools/bin/fixes-report <canon tree> [audited commit] [commit of the audit tools]",
+  )
+  process.exit(64)
+}
+const directory = `${canon}/hirefire-resource/node-audit`
+
+function clean(text) {
+  return text
+    .split(sandboxes)
+    .join("<sandboxes>")
+    .split(directory)
+    .join("<audit>")
+    .split(canon)
+    .join("<canon>")
+    .split(root)
+    .join("<tree>")
+    .split(os.homedir())
+    .join("~")
+}
+
+function run(command, options = {}) {
+  const result = spawnSync("bash", ["-c", command], {
+    cwd: options.cwd || root,
+    encoding: "utf8",
+    maxBuffer: 1 << 28,
+    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+  })
+  const output = `${result.stdout}${result.stderr}`.replace(
+    /\x1b\[[0-9;]*m/g,
+    "",
+  )
+  let lines = output.trimEnd().split("\n")
+  if (options.tail && lines.length > options.tail) {
+    lines = ["...", ...lines.slice(-options.tail)]
+  }
+  return { text: clean(lines.join("\n")), status: result.status }
+}
+
+const out = [
+  "# Node client audit: fix pass, every command and its output",
+  "",
+  "`<tree>` is the Node tree, `<canon>` the canon tree, `<audit>` the audit directory of the canon, and `<sandboxes>` the directory of the throwaway copies.",
+  "",
+]
+function section(title, commands) {
+  out.push(`## ${title}`, "")
+  for (const [command, options] of commands) {
+    const result = run(command, options || {})
+    out.push(
+      "```text",
+      `$ ${clean(command)}`,
+      result.text,
+      `exit ${result.status}`,
+      "```",
+      "",
+    )
+  }
+}
+
+const audit = JSON.stringify(directory)
+const tree = JSON.stringify(canon)
+const soakRole =
+  "{rss_kb, heap_used_kb_after_gc, handles, sockets, listeners, event_loop_delay_p99_ms_worst, event_loop_delay_max_ms, middleware_calls, middleware_max_ms, log_lines_per_minute}"
+
+section("1. The status table", [
+  [`tools/bin/check-fixes ${audit}/fixes.md`],
+  [`grep -E '^\\| N-[0-9]+ ' ${audit}/fixes.md | cut -d'|' -f2,5,6`],
+])
+section("2. The matrix, three times in random order", [
+  [
+    "for run in tools/results/matrix-0[123]/; do grep -E '^(run|commit|seed|cells|passed|failed|tests run):' $run/summary.txt | tr '\\n' ' '; echo; done",
+  ],
+  [
+    'cat tools/results/matrix-0[123]/cells.jsonl | jq -r \'select(.status != "pass") | .failed[] | "\\(.file): \\(.test)"\' | sort | uniq -c | sort -rn',
+  ],
+  [
+    "test -s tools/results/alone/reruns.jsonl && jq -r '\"\\(.cell): \\(.test): passed \\(.passed) of \\(.runs) alone\"' tools/results/alone/reruns.jsonl || echo 'no test failed, so none was run again alone'",
+  ],
+])
+section("3. Coverage over all cells", [
+  ["cat tools/results/baseline/summary.txt"],
+  ["tail -4 tools/results/baseline/coverage.txt"],
+  [`tail -4 ${audit}/results/baseline/coverage.txt`],
+])
+section("4. Mutation testing", [["tools/bin/mutation-verdicts"]])
+section("5. Faults, soak, and hosts", [
+  ["cat tools/results/long-runs.txt"],
+  [
+    `tools/bin/fault-compare "Audit"=${audit}/results/faults/results.json "Audit 2"=${audit}/results/faults-2/results.json faults faults-2`,
+  ],
+  [
+    "jq -c '{seconds, requests_sent_to_app, requests_failed_to_app, worker_restarts, server_requests, escaped_worker_a, escaped_primary, stop_seconds_worker_a, stop_seconds_primary}' tools/results/soak/summary.json",
+  ],
+  [
+    `for role in worker-a primary; do echo $role; jq -c '.roles["'$role'"] | ${soakRole}' tools/results/soak/summary.json; done`,
+  ],
+  [
+    `echo audit; jq -c '{seconds, requests_sent_to_app, requests_failed_to_app, worker_restarts, server_requests, escaped_worker_a}' ${audit}/results/soak/summary.json; jq -c '.roles["worker-a"] | ${soakRole}' ${audit}/results/soak/summary.json`,
+  ],
+  [
+    "jq -r '.[] | select(.sending_connections) | \"\\(.name): \\(.sending_connections|length) senders, \\(.warnings|length) warnings, SIGTERM \\(.sigterm.exit_after_ms) ms, \\(.sigterm.ingest_requests_after_signal) requests after it\"' tools/results/hosts.json tools/results/hosts-next-with-drivers.json",
+  ],
+  [
+    'jq -r \'.[] | select(.name|test("build|idle|one-off")) | "\\(.name): exit \\(.exit_code) \\(.exits_by_itself // "") \\((.lines // [])[0:2] | join(" / "))"\' tools/results/hosts.json tools/results/hosts-next-with-drivers.json',
+  ],
+  [
+    `echo audit; jq -r '.[] | select(.sending_connections) | "\\(.name): \\(.sending_connections|length) senders, \\(.warnings|length) warnings, SIGTERM \\(.sigterm.exit_after_ms) ms"' ${audit}/results/hosts.json ${audit}/results/hosts-next-with-drivers.json`,
+  ],
+])
+section("6. The checks", [
+  [
+    "npm run check > tools/results/check.out 2>&1; echo \"npm run check: exit $?\"; grep -c 'No problems found' tools/results/check.out; grep 'All matched files' tools/results/check.out",
+  ],
+  ["bin/verify-package 2>&1 | grep -E 'pack ok|No problems|problems'"],
+  [`cd ${tree} && uv run --with tiktoken bin/canon-check`, { cwd: canon }],
+])
+section("7. Evidence scripts, public names, wire, and size", [
+  [
+    "for script in dispatch_cadence idle_timers proxy_env_ignored redis_commands_per_sample request_path_cost; do node tools/evidence/$script.js 2>&1 | grep -E '^(CHECK|RESULT)'; done",
+  ],
+  ["tools/bin/public-api --check"],
+  [`tools/bin/public-api-diff ${tools} | grep -v 'typeFiles\\|private'`],
+  [`tools/bin/public-api-diff ${tools} | grep -c typeFiles`],
+  ["tools/bin/wire-goldens --check"],
+  [
+    `git diff -U0 ${tools} -- tools/baseline/wire | grep -E '^[+-] ' | sort | uniq -c`,
+  ],
+  [
+    `git ls-tree -r --name-only ${audited} -- src | wc -l; git ls-tree -r --name-only ${audited} -- src | while read file; do git show ${audited}:$file; done | wc -l`,
+  ],
+  ["find src -name '*.js' | wc -l; find src -name '*.js' | xargs cat | wc -l"],
+])
+section("8. Both trees are clean beside this report, and nothing was pushed", [
+  ["git rev-parse --abbrev-ref HEAD && git status --short | wc -l"],
+  [
+    "git for-each-ref --format='%(refname)' refs/remotes | grep -c node-fixes; git config --get branch.node-fixes.remote || echo 'node-fixes has no upstream'",
+  ],
+  [
+    `cd ${tree} && git rev-parse --abbrev-ref HEAD && git status --short -- . ':!hirefire-resource/node-audit/fixes-report.md' ':!hirefire-resource/node-audit/results/fixes' | wc -l && git for-each-ref --format='%(refname)' refs/remotes | grep -c node-fixes; git config --get branch.node-fixes.remote || echo 'node-fixes has no upstream'`,
+    { cwd: canon },
+  ],
+  [
+    "git log --format='%h %G? %s' next..HEAD | awk '{print $2}' | sort | uniq -c",
+  ],
+])
+
+process.stdout.write(out.join("\n") + "\n")
