@@ -1,6 +1,9 @@
 const HireFire = require("../src")
 const nock = require("nock")
 
+nock.disableNetConnect()
+nock.enableNetConnect(/^127\.0\.0\.1(:|$)/)
+
 const IDENTITY_ENV = [
   "HIREFIRE_SERVICE_NAME",
   "DYNO",

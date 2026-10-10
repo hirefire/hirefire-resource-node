@@ -76,10 +76,13 @@ describe("Client", () => {
   })
 
   test("submit samples times out when the request never connects", async () => {
-    const dns = require("dns")
-    const wasActive = nock.isActive()
-    if (wasActive) nock.restore()
-    const spy = jest.spyOn(dns, "lookup").mockImplementation(() => {})
+    process.env.HIREFIRE_DATA_URL = "http://127.0.0.1:9"
+    const connect = jest
+      .spyOn(net.Socket.prototype, "connect")
+      .mockImplementation(function neverConnects() {
+        this.connecting = true
+        return this
+      })
     const slowClient = new Client(
       { token: "test-token-value" },
       { timeout: 0.1 },
@@ -87,11 +90,11 @@ describe("Client", () => {
     const started = Date.now()
     try {
       await expect(slowClient.submitSamples(BODY)).rejects.toThrow("timed out")
+      expect(connect).toHaveBeenCalledTimes(1)
       expect(Date.now() - started).toBeLessThan(2000)
     } finally {
-      spy.mockRestore()
+      connect.mockRestore()
       await slowClient.close()
-      if (wasActive && !nock.isActive()) nock.activate()
     }
   })
 
