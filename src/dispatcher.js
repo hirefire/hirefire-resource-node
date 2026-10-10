@@ -26,32 +26,36 @@ class Dispatcher {
     this._session = null
     try {
       session.halt()
-      const joined = await session.join(Dispatcher.JOIN_TIMEOUT)
-      if (!flush) {
-        this._configuration.buffer.discard()
-      } else if (!joined) {
-        this._log(
-          "warn",
-          "The dispatch loop did not stop within " +
-            `${Dispatcher.JOIN_TIMEOUT} seconds. The final flush is skipped.`,
-        )
-      } else if (session.failing) {
-        this._log(
-          "warn",
-          "The last dispatch failed. The final flush is skipped.",
-        )
+      if (flush) {
+        await this._flush(session)
       } else {
-        await session.flush()
+        this._configuration.buffer.discard()
+        session.abandon()
       }
-
-      if (joined) await session.close()
-      else session.abandon()
 
       this._log("info", "Dispatcher stopped.")
       return true
     } finally {
       this._stopping = false
     }
+  }
+
+  async _flush(session) {
+    if (!(await session.join(Dispatcher.JOIN_TIMEOUT))) {
+      this._log(
+        "warn",
+        "The dispatch loop did not stop within " +
+          `${Dispatcher.JOIN_TIMEOUT} seconds. The final flush is skipped.`,
+      )
+      return session.abandon()
+    }
+
+    if (session.failing) {
+      this._log("warn", "The last dispatch failed. The final flush is skipped.")
+    } else {
+      await session.flush()
+    }
+    await session.close()
   }
 
   running() {

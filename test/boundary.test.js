@@ -1051,6 +1051,26 @@ describe("the client at its boundary", () => {
       ])
     })
 
+    test("a stop without a flush returns while a request is still waiting for its answer, and a start works at once", async () => {
+      answers.ingest = () => after(3, [200])
+      configure()
+      await pass(0)
+      expect(at("ingest")).toEqual([0])
+
+      expect(await dispatcher().stop({ flush: false })).toBe(true)
+      expect(dispatcher().running()).toBe(false)
+      expect(dispatcher().start()).toBe(true)
+      await pass(0)
+
+      expect(logged("W")).toEqual([])
+      expect(logged("I")).toEqual([
+        "I [HireFire] Starting dispatcher.",
+        "I [HireFire] Dispatcher stopped.",
+        "I [HireFire] Starting dispatcher.",
+      ])
+      expect(at("ingest")).toEqual([0, 0])
+    })
+
     test("a stop without a flush after a failed dispatch says nothing about a flush", async () => {
       answers.ingest = () => [503]
       configure()
