@@ -24,14 +24,11 @@ class Probe {
 
   record(entry, ms) {
     this._payload = null
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      entry = {}
-    }
-    const queues = entry.queues
-    const options = entry.options
+    const queues = entry?.queues
+    const options = entry?.options
     this._ops.push({
-      adapter: entry.adapter ?? null,
-      strategy: String(entry.strategy ?? ""),
+      adapter: entry?.adapter ?? null,
+      strategy: String(entry?.strategy ?? ""),
       queues: Array.isArray(queues) ? queues : [],
       options:
         options && typeof options === "object" && !Array.isArray(options)
@@ -39,7 +36,6 @@ class Probe {
           : {},
       ms: Math.round(Number(ms) * 1000) / 1000,
     })
-    return this
   }
 
   finish() {
@@ -60,7 +56,7 @@ class Probe {
       `[HireFire] sample_job_queues wave_ms=${payload.wave_ms} ops=${payload.ops.length}`,
     )
     for (const op of payload.ops) {
-      const queues = (op.queues || []).join(",")
+      const queues = op.queues.join(",")
       safeLog(
         logger,
         "info",

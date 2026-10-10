@@ -106,6 +106,23 @@ describe("Probe", () => {
     expect(op.ms).toBeGreaterThanOrEqual(5)
   })
 
+  test("measures an operation and the wave to a thousandth of a millisecond", async () => {
+    const now = jest.spyOn(performance, "now").mockReturnValue(1000)
+    const probe = Probe.start()
+    now.mockReturnValue(1002.5)
+    await probe.measure({ strategy: "jql" }, async () => {
+      now.mockReturnValue(1014.84567)
+    })
+    now.mockReturnValue(1020.00049)
+
+    expect(probe.finish()).toEqual({
+      wave_ms: 20,
+      ops: [
+        { adapter: null, strategy: "jql", queues: [], options: {}, ms: 12.346 },
+      ],
+    })
+  })
+
   test("measure does not record when function raises", async () => {
     const probe = Probe.start()
     await expect(
@@ -185,18 +202,20 @@ describe("Probe", () => {
         lines.push(msg)
       },
     }
+    const now = jest.spyOn(performance, "now").mockReturnValue(1000)
     const probe = Probe.start()
     probe.record(
-      { adapter: "bullmq", strategy: "jql", queues: ["default"] },
+      { adapter: "bullmq", strategy: "jql", queues: ["default", "mailer"] },
       4.5,
     )
+    probe.record({ strategy: "jqs" }, 0)
+    now.mockReturnValue(1007.25)
     probe.logTo(logger)
 
-    const text = lines.join("\n")
-    expect(text).toContain("sample_job_queues wave_ms=")
-    expect(text).toContain("ops=1")
-    expect(text).toContain('sample adapter="bullmq" strategy=jql')
-    expect(text).toContain("queues=default")
-    expect(text).toContain("ms=4.5")
+    expect(lines).toEqual([
+      "[HireFire] sample_job_queues wave_ms=7.25 ops=2",
+      '[HireFire] sample adapter="bullmq" strategy=jql queues=default,mailer ms=4.5',
+      "[HireFire] sample adapter=null strategy=jqs queues= ms=0",
+    ])
   })
 })
