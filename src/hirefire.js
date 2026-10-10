@@ -1,4 +1,5 @@
 const Configuration = require("./configuration")
+const Identity = require("./identity")
 
 class HireFire {
   constructor() {
@@ -26,7 +27,7 @@ class HireFire {
   }
 
   _startIfToken() {
-    if (!this.configuration.token) return
+    if (!this.configuration.token || Identity.oneOff()) return
     this.configuration.dispatcher.start()
     this.configuration.dispatcher.ensureJobQueueLoop()
   }

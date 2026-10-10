@@ -1,6 +1,31 @@
 const Identity = require("../src/identity")
 
 describe("Identity", () => {
+  test.each([
+    ["run.4821", true],
+    ["release.1234", true],
+    ["RUN.1", true],
+    ["run-5fb9c979-lft2l", true],
+    ["web.1", false],
+    ["scheduler.1", false],
+    ["runner.1", false],
+    ["rerun.1", false],
+    [undefined, false],
+  ])("a DYNO of %j is a one-off dyno: %j", (dyno, expected) => {
+    if (dyno !== undefined) process.env.DYNO = dyno
+    expect(Identity.oneOff()).toBe(expected)
+  })
+
+  test("only DYNO tells whether a dyno is one-off, not the service name", () => {
+    process.env.HIREFIRE_SERVICE_NAME = "run"
+    process.env.DYNO = "web.1"
+    expect(Identity.oneOff()).toBe(false)
+
+    process.env.HIREFIRE_SERVICE_NAME = "web"
+    process.env.DYNO = "run.1"
+    expect(Identity.oneOff()).toBe(true)
+  })
+
   test("resolves to null when nothing is set", () => {
     expect(Identity.resolve()).toBeNull()
   })

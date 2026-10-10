@@ -1,3 +1,5 @@
+const ONE_OFF_DYNOS = ["run", "release"]
+
 const Identity = {
   resolve() {
     return this.explicit() || this.herokuDyno() || this.renderService() || null
@@ -30,6 +32,11 @@ const Identity = {
     return Boolean(
       explicit && dyno && explicit.toLowerCase() !== dyno.toLowerCase(),
     )
+  },
+
+  oneOff() {
+    const name = this.herokuDyno()
+    return name != null && ONE_OFF_DYNOS.includes(name.toLowerCase())
   },
 
   platformHttpRole() {

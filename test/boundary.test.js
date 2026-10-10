@@ -366,6 +366,41 @@ describe("the client at its boundary", () => {
     })
   })
 
+  describe("a Heroku one-off dyno", () => {
+    test.each(["run.4821", "release.1234"])(
+      "named %s sends nothing and logs nothing",
+      async (dyno) => {
+        process.env.DYNO = dyno
+        configure((config) => config.dyno("worker", () => 1))
+        HireFire.boot()
+        await pass(3)
+
+        expect(requests).toEqual([])
+        expect(log).toEqual([])
+      },
+    )
+
+    test("sends nothing for a request it serves", async () => {
+      process.env.DYNO = "run.4821"
+      require("../src/middleware").processRequestQueueTime(
+        () => `t=${START - 0.25}`,
+      )
+      await pass(3)
+
+      expect(requests).toEqual([])
+      expect(HireFire.configuration.buffer.flush()).toEqual({})
+    })
+
+    test("is told by DYNO alone, so a service name does not start it", async () => {
+      process.env.DYNO = "run.4821"
+      process.env.HIREFIRE_SERVICE_NAME = "web"
+      configure()
+      await pass(3)
+
+      expect(requests).toEqual([])
+    })
+  })
+
   describe("a process without a token", () => {
     test("sends nothing and logs nothing", async () => {
       delete process.env.HIREFIRE_TOKEN
