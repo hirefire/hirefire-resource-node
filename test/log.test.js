@@ -31,4 +31,32 @@ describe("safeLog", () => {
     expect(text).not.toMatch(/secret/)
     expect(text).toMatch(/redis:\/\/\*\*\*@127\.0\.0\.1:6379\/0/)
   })
+
+  test.each([
+    [
+      "connect failed for redis://:abc/def@host:6379",
+      "Error: connect failed for redis://***@host:6379",
+    ],
+    [
+      "redis://user:p@ss@host:6379/0 refused",
+      "Error: redis://***@host:6379/0 refused",
+    ],
+    [
+      "tried postgres://u:p@a/db and redis://:q@b:1",
+      "Error: tried postgres://***@a/db and redis://***@b:1",
+    ],
+    [
+      "no credentials in redis://host:6379/0 here",
+      "Error: no credentials in redis://host:6379/0 here",
+    ],
+    ["mail user@example.com", "Error: mail user@example.com"],
+  ])("formatError turns %j into %j", (message, expected) => {
+    expect(safeLog.formatError(new Error(message))).toBe(expected)
+  })
+
+  test("formatError names the class of an error and prints any other value as text", () => {
+    expect(safeLog.formatError(new TypeError("bad"))).toBe("TypeError: bad")
+    expect(safeLog.formatError("redis://a:b@c down")).toBe("redis://***@c down")
+    expect(safeLog.formatError(undefined)).toBe("undefined")
+  })
 })

@@ -1,7 +1,7 @@
 function formatError(error) {
   const text =
     error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-  return text.replace(/(:\/\/)([^/@\s]+)@/g, "$1***@")
+  return text.replace(/(:\/\/)[^\s]*@/g, "$1***@")
 }
 
 function safeLog(logger, level, message) {
