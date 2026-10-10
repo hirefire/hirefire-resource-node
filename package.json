@@ -125,7 +125,8 @@
       "<rootDir>/test/support.js"
     ],
     "modulePathIgnorePatterns": [
-      "<rootDir>/tmp/"
+      "<rootDir>/tmp/",
+      "<rootDir>/tools/results/"
     ],
     "openHandlesTimeout": 5000
   },
