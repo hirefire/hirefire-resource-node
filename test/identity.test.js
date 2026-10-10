@@ -33,6 +33,9 @@ describe("Identity", () => {
 
   test("resolves to null when nothing is set", () => {
     expect(Identity.resolve()).toBeNull()
+    expect(Identity.explicit()).toBeNull()
+    expect(Identity.herokuDyno()).toBeNull()
+    expect(Identity.renderService()).toBeNull()
   })
 
   test("explicit service name wins", () => {
