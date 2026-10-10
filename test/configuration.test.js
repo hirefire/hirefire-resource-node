@@ -1,3 +1,4 @@
+const { capture } = require("./support")
 const Configuration = require("../src/configuration")
 const Dispatcher = require("../src/dispatcher")
 const MetricsBuffer = require("../src/buffer")
@@ -386,5 +387,156 @@ describe("Configuration", () => {
   test("rqt not enabled for non http identity without explicit web", () => {
     process.env.HIREFIRE_SERVICE_NAME = "clock"
     expect(config.rqtEnabled).toBe(false)
+  })
+
+  describe("what it says", () => {
+    let lines
+
+    beforeEach(() => {
+      lines = capture(config)
+    })
+
+    test("about a third argument of dyno", () => {
+      expect(() => config.dyno("worker", () => 1, {})).toThrow(
+        new TypeError(
+          "config.dyno accepts at most two arguments (name, sampler).",
+        ),
+      )
+    })
+
+    test.each([
+      ["nope", '"nope"'],
+      [42, "42"],
+      [{}, "[object Object]"],
+    ])("about a sampler of %p", (sampler, shown) => {
+      expect(() => config.dyno("worker", sampler)).toThrow(
+        new TypeError(
+          `Invalid sampler ${shown} for config.dyno. Pass a function for job-queue metrics.`,
+        ),
+      )
+    })
+
+    test.each([
+      [undefined, "undefined"],
+      [null, "null"],
+      ["", '""'],
+      ["  ", '"  "'],
+    ])("about a dyno name of %p", (name, shown) => {
+      expect(() => config.dyno(name, () => 1)).toThrow(
+        new TypeError(
+          `config.dyno requires a dyno name as its first argument (got ${shown}).`,
+        ),
+      )
+    })
+
+    test("about a dyno name over the limit", () => {
+      expect(() => config.dyno("x".repeat(129), () => 1)).toThrow(
+        new TypeError("config.dyno name exceeds 128 bytes (got 129)."),
+      )
+    })
+
+    test("about a dyno without a sampler", () => {
+      const error = (() => {
+        try {
+          config.dyno("worker")
+        } catch (raised) {
+          return raised
+        }
+      })()
+
+      expect(error).toBeInstanceOf(Configuration.MissingSamplerError)
+      expect(error.name).toBe("MissingSamplerError")
+      expect(error.message).toBe(
+        'config.dyno("worker") could not be resolved: it needs a sampler function ' +
+          "(job-queue metrics). Request queue time is always-on via platform web role or " +
+          "middleware traffic. CPU is always-on when process identity resolves. " +
+          'Bare config.dyno("web") is a no-op and can be removed.',
+      )
+    })
+
+    test("about a second sampler for a dyno", () => {
+      config.dyno("worker", () => 1)
+      const error = (() => {
+        try {
+          config.dyno("Worker", () => 2)
+        } catch (raised) {
+          return raised
+        }
+      })()
+
+      expect(error).toBeInstanceOf(Configuration.DuplicateDynoError)
+      expect(error.name).toBe("DuplicateDynoError")
+      expect(error.message).toBe(
+        'Duplicate declaration for "Worker". Each dyno name takes one sampler.',
+      )
+    })
+
+    test("about a bare web dyno, once", () => {
+      config.dyno("web")
+      config.dyno("WEB")
+
+      expect(lines).toEqual([
+        [
+          "warn",
+          '[HireFire] config.dyno("web") is deprecated. It does nothing. ' +
+            "Request queue time is sampled automatically from HTTP traffic. You can remove this " +
+            "line. Leaving it does not break anything.",
+        ],
+      ])
+    })
+
+    test("about a process without a name, once per kind of metric", () => {
+      config.httpSource
+      config.httpSource
+      config.activeCpuSources()
+      config.activeCpuSources()
+
+      expect(lines).toEqual([
+        [
+          "warn",
+          "[HireFire] Request queue time samples dropped: process identity " +
+            "is unresolved. Set HIREFIRE_SERVICE_NAME or DYNO.",
+        ],
+        [
+          "warn",
+          "[HireFire] CPU metrics disabled: process identity is unresolved. " +
+            "Set HIREFIRE_SERVICE_NAME or DYNO.",
+        ],
+      ])
+    })
+
+    test("about a process name over the limit, once, and not about one of exactly the limit", () => {
+      process.env.HIREFIRE_SERVICE_NAME = "x".repeat(128)
+      expect(config.httpName).toBe("x".repeat(128))
+      expect(lines).toEqual([])
+
+      process.env.HIREFIRE_SERVICE_NAME = "x".repeat(129)
+      expect(config.httpName).toBeNull()
+      expect(config.httpName).toBeNull()
+      expect(lines).toEqual([
+        [
+          "error",
+          "[HireFire] Process identity exceeds 128 bytes (129). " +
+            "Metrics under this identity are disabled until the name is shortened.",
+        ],
+      ])
+    })
+
+    test("about a service name that differs from the dyno, once", () => {
+      process.env.HIREFIRE_SERVICE_NAME = "api"
+      process.env.DYNO = "web.1"
+
+      expect(config.httpName).toBe("api")
+      expect(config.httpName).toBe("api")
+      expect(lines).toEqual([
+        [
+          "warn",
+          "[HireFire] HIREFIRE_SERVICE_NAME (api) does not " +
+            "match the Heroku DYNO prefix (web). Heroku config vars " +
+            "are app-wide, so this makes every dyno identify as the same name. Set it inline per " +
+            "process in the Procfile, or unset it to use automatic detection.",
+        ],
+      ])
+    })
   })
 })

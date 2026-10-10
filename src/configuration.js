@@ -95,9 +95,7 @@ class Configuration {
   get httpSource() {
     const name = this.httpName
     if (name == null) {
-      if (this.token && (this._httpActive || Identity.platformHttpRole())) {
-        this._warnRqtUnresolvedOnce()
-      }
+      this._warnRqtUnresolvedOnce()
       return null
     }
 
@@ -213,12 +211,12 @@ class Configuration {
 }
 
 function coerceName(name) {
-  const stripped = presence(name) ?? ""
+  const stripped = presence(name)
 
-  if (stripped.length === 0) {
+  if (stripped === null) {
     throw new TypeError(
       `config.dyno requires a dyno name as its first argument (got ${inspect(
-        stripped,
+        name,
       )}).`,
     )
   }
