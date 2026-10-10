@@ -182,55 +182,27 @@ class Lease {
       return emptyGrantBody(trace)
     }
 
-    const accepted = []
-    let skipped = 0
-    for (const entry of entries) {
-      if (accepted.length >= Lease.MAX_JOB_QUEUES) {
-        skipped += 1
-        continue
-      }
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-        skipped += 1
-        continue
-      }
+    const valid = entries.map(normalizeEntry).filter(Boolean)
+    const invalid = entries.length - valid.length
 
-      const name = String(entry.name ?? "").trim()
-      const strategy = String(entry.strategy ?? "").trim()
-      const hasAdapter = Object.prototype.hasOwnProperty.call(entry, "adapter")
-      const adapter = hasAdapter ? String(entry.adapter ?? "").trim() : null
-
-      if (
-        !name ||
-        !strategy ||
-        Buffer.byteLength(name) > Lease.MAX_NAME_BYTES
-      ) {
-        skipped += 1
-        continue
-      }
-
-      const normalized = { ...entry, name, strategy }
-      if (hasAdapter) normalized.adapter = adapter
-      accepted.push(normalized)
-    }
-
-    if (entries.length > Lease.MAX_JOB_QUEUES) {
+    if (valid.length > Lease.MAX_JOB_QUEUES) {
       safeLog(
         this._configuration.logger,
         "error",
         `[HireFire] Lease plan truncated to ${Lease.MAX_JOB_QUEUES} job queue entries` +
-          (skipped > 0 ? ` (${skipped} invalid also skipped)` : "") +
+          (invalid > 0 ? ` (${invalid} invalid also skipped)` : "") +
           ".",
       )
-    } else if (skipped > 0) {
-      const label = skipped === 1 ? "entry" : "entries"
+    } else if (invalid > 0) {
+      const label = invalid === 1 ? "entry" : "entries"
       safeLog(
         this._configuration.logger,
         "error",
-        `[HireFire] Lease plan skipped ${skipped} invalid job queue ${label}.`,
+        `[HireFire] Lease plan skipped ${invalid} invalid job queue ${label}.`,
       )
     }
 
-    return { job_queues: accepted, trace }
+    return { job_queues: valid.slice(0, Lease.MAX_JOB_QUEUES), trace }
   }
 
   _clearGrant() {
@@ -238,6 +210,22 @@ class Lease {
     this._trace = false
     this._jobQueues = []
   }
+}
+
+function normalizeEntry(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null
+
+  const name = String(entry.name ?? "").trim()
+  const strategy = String(entry.strategy ?? "").trim()
+  if (!name || !strategy || Buffer.byteLength(name) > Lease.MAX_NAME_BYTES) {
+    return null
+  }
+
+  const normalized = { ...entry, name, strategy }
+  if (Object.prototype.hasOwnProperty.call(entry, "adapter")) {
+    normalized.adapter = String(entry.adapter ?? "").trim()
+  }
+  return normalized
 }
 
 function emptyGrantBody(trace = false) {

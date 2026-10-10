@@ -420,6 +420,68 @@ describe("Lease", () => {
     expect(lease.jobQueues[0].adapter).toBe("")
   })
 
+  describe("a plan with more entries than the limit, or with invalid ones", () => {
+    let error
+
+    beforeEach(() => {
+      error = jest.fn()
+      lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
+    })
+
+    async function request(valid, invalid) {
+      const entries = [
+        ...Array.from({ length: invalid }, () => ({
+          name: "",
+          strategy: "jqs",
+        })),
+        ...Array.from({ length: valid }, (_, index) => ({
+          name: `worker-${index}`,
+          strategy: "jqs",
+        })),
+      ]
+      grant(
+        { "HireFire-Lease-Granted": "true" },
+        JSON.stringify({ job_queues: entries }),
+      )
+      await lease.requestIfDue({ hold: holdTrue })
+      return error.mock.calls.map((call) => call[0])
+    }
+
+    test("says that it cut the plan, and counts no valid entry as invalid", async () => {
+      expect(await request(300, 0)).toEqual([
+        "[HireFire] Lease plan truncated to 256 job queue entries.",
+      ])
+      expect(lease.jobQueues).toHaveLength(256)
+      expect(lease.jobQueues[0].name).toBe("worker-0")
+      expect(lease.jobQueues[255].name).toBe("worker-255")
+    })
+
+    test("names the invalid entries beside the cut", async () => {
+      expect(await request(257, 3)).toEqual([
+        "[HireFire] Lease plan truncated to 256 job queue entries (3 invalid also skipped).",
+      ])
+      expect(lease.jobQueues).toHaveLength(256)
+    })
+
+    test("cuts nothing when the valid entries fit, however many were sent", async () => {
+      expect(await request(250, 10)).toEqual([
+        "[HireFire] Lease plan skipped 10 invalid job queue entries.",
+      ])
+      expect(lease.jobQueues).toHaveLength(250)
+    })
+
+    test("says nothing about a plan of exactly the limit", async () => {
+      expect(await request(256, 0)).toEqual([])
+      expect(lease.jobQueues).toHaveLength(256)
+    })
+
+    test("names one invalid entry in the singular", async () => {
+      expect(await request(1, 1)).toEqual([
+        "[HireFire] Lease plan skipped 1 invalid job queue entry.",
+      ])
+    })
+  })
+
   test("json null name or strategy is skipped", async () => {
     grant(
       {
