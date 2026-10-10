@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Process names may be any non-empty string up to 128 bytes. The 1.x letter-start charset and 30-character cap are gone. An invalid name throws `TypeError` (1.x threw `InvalidDynoNameError`).
 - `config.dyno` without a sampler raises `MissingSamplerError` except when the name is `"web"` (1.x raised `MissingDynoFnError`). Duplicate dyno names raise `DuplicateDynoError`.
 - `HireFire.configure` callbacks must be synchronous.
+- A BullMQ sample without queue names fails when listing the queues takes more than 2 seconds, and the error asks for queue names. 1.x had no limit.
 
 ### Deprecated
 

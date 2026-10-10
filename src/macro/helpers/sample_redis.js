@@ -1,7 +1,8 @@
 const sampleRound = require("../../sample_round")
 const { unpack, normalizeQueues } = require("../../utility")
 
-const WALK_PAGE = 100
+const WALK_PAGE = 1000
+const WALK_BUDGET = 2
 const SAMPLE_REDIS_OPTIONS = {
   maxRetriesPerRequest: 1,
   connectTimeout: 5000,
@@ -67,9 +68,18 @@ function discover(redis, states) {
 async function walk(redis, states) {
   const queue = new RegExp(`^bull:(.*):(${states.join("|")})$`)
   const names = new Set()
+  const deadline = performance.now() + WALK_BUDGET * 1000
   let cursor = "0"
 
   do {
+    if (performance.now() > deadline) {
+      throw new Error(
+        `Listing the queues took more than ${WALK_BUDGET} seconds, because ` +
+          "the Redis database holds many keys. Name the queues of this " +
+          "sample, so that the keys are not walked.",
+      )
+    }
+
     const [next, keys] = await redis.scan(
       cursor,
       "MATCH",

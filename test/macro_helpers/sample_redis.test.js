@@ -284,9 +284,9 @@ describe("the Redis sample helper", () => {
     await waiting([{ connection: URL }], ["wait", "active"])
 
     expect(clients[0].scan.mock.calls).toEqual([
-      ["0", "MATCH", "bull:*", "COUNT", 100],
-      ["7", "MATCH", "bull:*", "COUNT", 100],
-      ["12", "MATCH", "bull:*", "COUNT", 100],
+      ["0", "MATCH", "bull:*", "COUNT", 1000],
+      ["7", "MATCH", "bull:*", "COUNT", 1000],
+      ["12", "MATCH", "bull:*", "COUNT", 1000],
     ])
     expect(clients[0].commands).toEqual([
       ["llen", "bull:default:wait"],
@@ -315,6 +315,74 @@ describe("the Redis sample helper", () => {
       ["llen", "bull::wait"],
       ["llen", "bull:d:wait"],
     ])
+  })
+
+  describe("a walk of many keys", () => {
+    function slow(milliseconds) {
+      IORedis.mockImplementationOnce(() => {
+        const made = client()
+        made.scan.mockImplementation(async () => {
+          jest.advanceTimersByTime(milliseconds)
+          return pages.shift()
+        })
+        return made
+      })
+    }
+
+    beforeEach(() => {
+      jest.useFakeTimers()
+      pages = [
+        ["5", ["bull:a:wait"]],
+        ["9", ["bull:b:wait"]],
+        ["0", ["bull:c:wait"]],
+      ]
+    })
+
+    afterEach(() => {
+      jest.useRealTimers()
+    })
+
+    test("is given up after 2 seconds, with an error that asks for queue names", async () => {
+      slow(1001)
+
+      await expect(waiting([{ connection: URL }])).rejects.toThrow(
+        "Listing the queues took more than 2 seconds, because the Redis " +
+          "database holds many keys. Name the queues of this sample, so " +
+          "that the keys are not walked.",
+      )
+      expect(clients[0].scan).toHaveBeenCalledTimes(2)
+      expect(clients[0].commands).toEqual([])
+      expect(clients[0].quit).toHaveBeenCalledTimes(1)
+    })
+
+    test("goes on at exactly 2 seconds", async () => {
+      slow(1000)
+
+      await expect(waiting([{ connection: URL }])).resolves.toBe(0)
+      expect(clients[0].scan).toHaveBeenCalledTimes(3)
+      expect(clients[0].commands).toHaveLength(3)
+    })
+
+    test("keeps a last page that arrives late", async () => {
+      pages = [["0", ["bull:a:wait"]]]
+      slow(60_000)
+
+      await expect(waiting([{ connection: URL }])).resolves.toBe(0)
+      expect(clients[0].commands).toEqual([["llen", "bull:a:wait"]])
+    })
+
+    test("measures each walk from its own start", async () => {
+      slow(1500)
+      pages = [["0", []]]
+      await waiting([{ connection: URL }])
+
+      slow(1500)
+      pages = [
+        ["5", []],
+        ["0", []],
+      ]
+      await expect(waiting([{ connection: URL }])).resolves.toBe(0)
+    })
   })
 
   test("a walk without queues samples nothing and gives zero", async () => {

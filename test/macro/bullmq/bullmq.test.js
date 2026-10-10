@@ -237,6 +237,29 @@ describe("BullMQ", () => {
     ).toBe(1)
   })
 
+  test("a database with 5,000 job hashes is walked in pages of 1,000 keys", async () => {
+    async function scans() {
+      const stats = await redis.info("commandstats")
+      const match = stats.match(/cmdstat_scan:calls=(\d+)/)
+      return match ? Number(match[1]) : 0
+    }
+    await redis.lpush("bull:default:wait", "1", "2", "3")
+    for (let offset = 0; offset < 5000; offset += 1000) {
+      const pipeline = redis.pipeline()
+      for (let index = offset; index < offset + 1000; index += 1) {
+        pipeline.hset(`bull:default:${index}`, "name", "job")
+      }
+      await pipeline.exec()
+    }
+    const before = await scans()
+
+    expect(await jobQueueSize({ connection: redisURL })).toBe(3)
+
+    const calls = (await scans()) - before
+    expect(calls).toBeGreaterThanOrEqual(5)
+    expect(calls).toBeLessThanOrEqual(10)
+  })
+
   test("jobQueueSize counts live, due delayed, and active jobs and no future delayed job", async () => {
     await defaultQueue.add("liveJob", {})
     await defaultQueue.add("dueDelayedJob", {}, { delay: 1 })
