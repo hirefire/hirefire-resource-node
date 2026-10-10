@@ -58,7 +58,6 @@ class Session {
       clearTimeout(sleeper.timer)
       sleeper.wake()
     }
-    this._sleepers.clear()
   }
 
   join(seconds) {
@@ -145,7 +144,7 @@ class Session {
   }
 
   _pause() {
-    if (!this._live) return Promise.resolve()
+    if (!this._live) return
 
     return new Promise((resolve) => {
       const sleeper = { wake: resolve }

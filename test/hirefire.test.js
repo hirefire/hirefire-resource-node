@@ -168,6 +168,19 @@ describe("HireFire", () => {
     expect(Object.keys(hirefire.configuration.buffer.flush())).toHaveLength(0)
   })
 
+  test("reset answers whether it stopped a client that ran", async () => {
+    const hirefire = createHireFire()
+    hirefire.configuration.logger = null
+    expect(await hirefire.reset()).toBe(false)
+
+    hirefire.configure((config) => {
+      config.logger = null
+      config.token = "test-token-value"
+    })
+    expect(await hirefire.reset()).toBe(true)
+    expect(await hirefire.reset()).toBe(false)
+  })
+
   test("reset is swap then stop", async () => {
     const hirefire = createHireFire()
     hirefire.configuration.logger = { info() {}, warn() {}, error() {} }

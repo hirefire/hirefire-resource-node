@@ -1,4 +1,5 @@
 const cluster = require("cluster")
+const http = require("http")
 const path = require("path")
 const { execFile } = require("child_process")
 const { Worker } = require("worker_threads")
@@ -84,6 +85,61 @@ describe("Host", () => {
         "main threaded true",
       ])
     })
+
+    async function runAgainstServer(name) {
+      const paths = new Set()
+      const server = http.createServer((request, response) => {
+        paths.add(request.url)
+        request.resume().on("end", () => {
+          response.writeHead(200, {
+            "HireFire-Lease": "granted",
+            "HireFire-Lease-TTL": "5",
+            "HireFire-Sample-Frequency": "1",
+            "HireFire-Dispatch-Frequency": "1",
+          })
+          response.end(
+            JSON.stringify({
+              job_queues: [{ name: "worker", strategy: "jqs" }],
+            }),
+          )
+        })
+      })
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+
+      const outcome = await new Promise((resolve) => {
+        execFile(
+          process.execPath,
+          [path.join(__dirname, "fixtures", "host", name)],
+          {
+            env: {
+              PATH: process.env.PATH,
+              HIREFIRE_TOKEN: "host-token",
+              HIREFIRE_DATA_URL: `http://127.0.0.1:${server.address().port}`,
+              DYNO: "web.1",
+            },
+            timeout: 6_000,
+          },
+          (error) => resolve(error ? error.signal || error.code : 0),
+        )
+      })
+      server.closeAllConnections()
+      await new Promise((resolve) => server.close(resolve))
+      return { outcome, paths: [...paths].sort() }
+    }
+
+    test("a process with nothing left to do exits while the loops of the client sleep", async () => {
+      expect(await runAgainstServer("exit.js")).toEqual({
+        outcome: 0,
+        paths: ["/metrics/ingest", "/metrics/lease"],
+      })
+    }, 15_000)
+
+    test("a process that never calls configure starts with its first request", async () => {
+      expect(await runAgainstServer("request.js")).toEqual({
+        outcome: 0,
+        paths: ["/metrics/ingest"],
+      })
+    }, 15_000)
 
     test("a worker thread that asks for it reports", async () => {
       expect(await run("thread", "force")).toEqual([
