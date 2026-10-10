@@ -1,5 +1,4 @@
 const { unpack, normalizeQueues } = require("../utility")
-const blockedColumn = require("./pg_boss/blocked_column")
 
 const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://postgres:postgres@127.0.0.1:5432/postgres"
@@ -14,6 +13,10 @@ const SAMPLE_POOL_OPTIONS = {
   statement_timeout: SAMPLE_QUERY_TIMEOUT_MS,
 }
 
+const COLUMNS = ["blocked", "expire_in", "expire_seconds", "heartbeat_seconds"]
+const COLUMNS_TTL = 60
+
+const columnsCache = new Map()
 const connectionIdMap = new WeakMap()
 let connectionIdSeq = 0
 
@@ -23,9 +26,9 @@ function loadPg() {
 
 async function jobQueueSize(...args) {
   const { skipWorking } = unpack(args).options
-  return withConnection(args, async (client, queues, schema, flags) => {
-    const waiting = buildWaitingCondition(flags)
-    const counted = skipWorking ? waiting : `(${waiting}) OR state = 'active'`
+  return withConnection(args, async (client, queues, schema, columns) => {
+    const { waiting, orphaned } = conditions(columns)
+    const counted = either(waiting, skipWorking ? orphaned : `state = 'active'`)
     const sql = `
       SELECT COUNT(*)::bigint AS job_queue_size
       FROM ${schema}.job
@@ -38,11 +41,12 @@ async function jobQueueSize(...args) {
 }
 
 async function jobQueueLatency(...args) {
-  return withConnection(args, async (client, queues, schema, flags) => {
+  return withConnection(args, async (client, queues, schema, columns) => {
+    const { waiting, orphaned } = conditions(columns)
     const sql = `
       SELECT EXTRACT(EPOCH FROM (now() - start_after))::float8 AS latency
       FROM ${schema}.job
-      WHERE ${buildWhere(buildWaitingCondition(flags), queues)}
+      WHERE ${buildWhere(either(waiting, orphaned), queues)}
       ORDER BY start_after ASC
       LIMIT 1
     `
@@ -56,23 +60,19 @@ async function jobQueueLatency(...args) {
 }
 
 async function jobQueueWorking(...args) {
-  return withConnection(
-    args,
-    async (client, queues, schema) => {
-      const sql = `
+  return withConnection(args, async (client, queues, schema, columns) => {
+    const sql = `
       SELECT COUNT(*)::bigint AS job_queue_working
       FROM ${schema}.job
-      WHERE ${buildWhere(`state = 'active'`, queues)}
+      WHERE ${buildWhere(conditions(columns).running, queues)}
     `
-      const values = queues.length ? [queues] : []
-      const { rows } = await client.query(sql, values)
-      return Number(rows[0].job_queue_working) || 0
-    },
-    { detectBlocked: false },
-  )
+    const values = queues.length ? [queues] : []
+    const { rows } = await client.query(sql, values)
+    return Number(rows[0].job_queue_working) || 0
+  })
 }
 
-async function withConnection(args, fn, { detectBlocked = true } = {}) {
+async function withConnection(args, fn) {
   const { queues: rawQueues, options } = unpack(args)
   const queues = normalizeQueues(rawQueues, { allowEmpty: true })
   const schema = resolveSchema(options).toLowerCase()
@@ -80,49 +80,41 @@ async function withConnection(args, fn, { detectBlocked = true } = {}) {
     throw new Error(`Invalid pg-boss schema name: ${schema}`)
   }
 
-  const connection = resolveConnection(options)
-  let queryable
-  let ownedPool = null
-  let cacheKey
+  const borrowed = [options.connection, options.pool].find(isQueryable)
+  if (borrowed) {
+    const columns = await jobColumns(
+      borrowed,
+      schema,
+      connectionIdentity(borrowed),
+    )
+    return fn(borrowed, queues, schema, columns)
+  }
 
-  if (isQueryable(connection)) {
-    queryable = connection
-    cacheKey = blockedCacheKey(schema, connection)
-  } else if (isQueryable(options.pool)) {
-    queryable = options.pool
-    cacheKey = blockedCacheKey(schema, options.pool)
-  } else if (connection != null && typeof connection === "object") {
+  const connection = resolveConnection(options)
+  if (typeof connection === "object") {
     throw new TypeError(
       "pg-boss connection must be a URL string or a client/Pool with .query",
     )
-  } else {
-    const { Pool } = loadPg()
-    const userOpts = options.connectionOptions || {}
-    const connectionString = String(connection)
-    ownedPool = new Pool({
-      ...SAMPLE_POOL_OPTIONS,
-      ...herokuSslDefault(connectionString, userOpts),
-      ...userOpts,
-      connectionString,
-    })
-    ownedPool.on("error", () => {})
-    queryable = ownedPool
-    cacheKey = blockedCacheKey(schema, connectionString)
   }
 
+  const { Pool } = loadPg()
+  const userOpts = options.connectionOptions || {}
+  const connectionString = String(connection)
+  const pool = new Pool({
+    ...SAMPLE_POOL_OPTIONS,
+    ...herokuSslDefault(connectionString, userOpts),
+    ...userOpts,
+    connectionString,
+  })
+  pool.on("error", () => {})
+
   try {
-    const flags = {
-      hasBlockedColumn: detectBlocked
-        ? await detectHasBlockedColumn(queryable, schema, cacheKey)
-        : false,
-    }
-    return await fn(queryable, queues, schema, flags)
+    const columns = await jobColumns(pool, schema, connectionString)
+    return await fn(pool, queues, schema, columns)
   } finally {
-    if (ownedPool) {
-      try {
-        await ownedPool.end()
-      } catch {}
-    }
+    try {
+      await pool.end()
+    } catch {}
   }
 }
 
@@ -142,9 +134,6 @@ function resolveSchema(options) {
 function resolveConnection(options) {
   if (options.connection != null && options.connection !== "") {
     return options.connection
-  }
-  if (isQueryable(options.pool)) {
-    return options.pool
   }
   const hirefireUrl = process.env.HIREFIRE_PG_BOSS_URL
   if (hirefireUrl != null && String(hirefireUrl).trim()) {
@@ -173,10 +162,34 @@ function isQueryable(value) {
   )
 }
 
-function buildWaitingCondition(flags) {
-  const parts = [`state < 'active'`, `start_after <= now()`]
-  if (flags.hasBlockedColumn) parts.push(`NOT blocked`)
-  return parts.join(" AND ")
+function conditions(columns) {
+  const waiting = [`state < 'active'`, `start_after <= now()`]
+  if (columns.has("blocked")) waiting.push(`NOT blocked`)
+
+  const expired = []
+  if (columns.has("expire_seconds")) {
+    expired.push(`started_on + expire_seconds * interval '1 second' < now()`)
+  } else if (columns.has("expire_in")) {
+    expired.push(`started_on + expire_in < now()`)
+  }
+  if (columns.has("heartbeat_seconds")) {
+    expired.push(
+      `heartbeat_on + heartbeat_seconds * interval '1 second' < now()`,
+    )
+  }
+  const dead = expired.join(" OR ")
+
+  return {
+    waiting: waiting.join(" AND "),
+    orphaned: dead && `(state = 'active' AND (${dead}))`,
+    running: dead
+      ? `state = 'active' AND (${dead}) IS NOT TRUE`
+      : `state = 'active'`,
+  }
+}
+
+function either(condition, other) {
+  return other ? `(${condition}) OR ${other}` : condition
 }
 
 function buildWhere(condition, queues) {
@@ -184,20 +197,12 @@ function buildWhere(condition, queues) {
   return `(${condition}) AND name = ANY($1::text[])`
 }
 
-function blockedCacheKey(schema, connection) {
-  if (typeof connection === "string") {
-    return `${schema}\0${connection}`
-  }
-  return `${schema}\0obj:${connectionIdentity(connection)}`
-}
-
 function connectionIdentity(connection) {
-  if (!connection || typeof connection !== "object") return "unknown"
   const opts = connection.options || connection
-  if (opts && typeof opts.connectionString === "string") {
+  if (typeof opts.connectionString === "string") {
     return opts.connectionString
   }
-  if (opts && typeof opts.host === "string") {
+  if (typeof opts.host === "string") {
     return `${opts.host}:${opts.port || 5432}/${opts.database || ""}`
   }
   let id = connectionIdMap.get(connection)
@@ -209,34 +214,22 @@ function connectionIdentity(connection) {
   return id
 }
 
-async function detectHasBlockedColumn(client, schema, cacheKey) {
-  if (blockedColumn.present.has(cacheKey)) {
-    return true
-  }
-  const absentUntil = blockedColumn.absentUntil.get(cacheKey)
-  if (absentUntil != null && Date.now() < absentUntil) {
-    return false
-  }
+async function jobColumns(client, schema, connection) {
+  const key = `${schema}\0${connection}`
+  const cached = columnsCache.get(key)
+  if (cached && Date.now() < cached.until) return cached.columns
+
   const { rows } = await client.query(
-    `SELECT 1
+    `SELECT column_name
        FROM information_schema.columns
       WHERE table_schema = $1
         AND table_name = 'job'
-        AND column_name = 'blocked'
-      LIMIT 1`,
-    [schema],
+        AND column_name = ANY($2::text[])`,
+    [schema, COLUMNS],
   )
-  const has = rows.length > 0
-  if (has) {
-    blockedColumn.present.add(cacheKey)
-    blockedColumn.absentUntil.delete(cacheKey)
-  } else {
-    blockedColumn.absentUntil.set(
-      cacheKey,
-      Date.now() + blockedColumn.BLOCKED_ABSENT_TTL_MS,
-    )
-  }
-  return has
+  const columns = new Set(rows.map((row) => row.column_name))
+  columnsCache.set(key, { columns, until: Date.now() + COLUMNS_TTL * 1000 })
+  return columns
 }
 
 module.exports = {

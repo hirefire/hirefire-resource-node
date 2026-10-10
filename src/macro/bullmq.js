@@ -2,7 +2,7 @@ const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
-const { sample } = require("./helpers/sample_redis")
+const { sample, activity } = require("./helpers/sample_redis")
 const { unpack } = require("../utility")
 
 const STATES = ["wait", "paused", "active", "delayed", "prioritized"]
@@ -25,25 +25,29 @@ async function jobQueueSize(...args) {
       pipeline.lindex(`${key}paused`, -1)
       pipeline.zcount(`${key}delayed`, "-inf", due)
       pipeline.zcard(`${key}prioritized`)
-      pipeline.llen(`${key}active`)
+      activity(pipeline, key)
     },
-    ([lastWait, wait, paused, lastPaused, delayed, prioritized, active]) =>
+    ([
+      lastWait,
+      wait,
+      paused,
+      lastPaused,
+      delayed,
+      prioritized,
+      [active, running],
+    ]) =>
       Number(wait) +
       Number(paused) +
       Number(delayed) +
       Number(prioritized) +
-      (skipWorking ? 0 : Number(active)) -
+      Number(active) -
+      (skipWorking ? Number(running) : 0) -
       (marker(lastWait) || marker(lastPaused) ? 1 : 0),
   )
 }
 
 async function jobQueueWorking(...args) {
-  return sample(
-    args,
-    STATES,
-    (pipeline, key) => pipeline.llen(`${key}active`),
-    ([active]) => Number(active),
-  )
+  return sample(args, STATES, activity, ([[, running]]) => Number(running))
 }
 
 function marker(job) {

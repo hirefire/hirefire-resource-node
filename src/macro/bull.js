@@ -2,7 +2,7 @@ const {
   JobQueueLatencyUnsupportedError,
   jobQueueLatencyUnsupported,
 } = require("../errors")
-const { sample } = require("./helpers/sample_redis")
+const { sample, activity } = require("./helpers/sample_redis")
 const { unpack } = require("../utility")
 
 const STATES = ["wait", "paused", "active", "delayed", "priority"]
@@ -22,23 +22,19 @@ async function jobQueueSize(...args) {
       pipeline.llen(`${key}wait`)
       pipeline.llen(`${key}paused`)
       pipeline.zcount(`${key}delayed`, "-inf", due)
-      pipeline.llen(`${key}active`)
+      activity(pipeline, key)
     },
-    ([wait, paused, delayed, active]) =>
+    ([wait, paused, delayed, [active, running]]) =>
       Number(wait) +
       Number(paused) +
       Number(delayed) +
-      (skipWorking ? 0 : Number(active)),
+      Number(active) -
+      (skipWorking ? Number(running) : 0),
   )
 }
 
 async function jobQueueWorking(...args) {
-  return sample(
-    args,
-    STATES,
-    (pipeline, key) => pipeline.llen(`${key}active`),
-    ([active]) => Number(active),
-  )
+  return sample(args, STATES, activity, ([[, running]]) => Number(running))
 }
 
 module.exports = {

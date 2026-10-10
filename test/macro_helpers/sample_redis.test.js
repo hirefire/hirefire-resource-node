@@ -1,7 +1,7 @@
 jest.mock("ioredis", () => jest.fn())
 
 const IORedis = require("ioredis")
-const { sample } = require("../../src/macro/helpers/sample_redis")
+const { sample, activity } = require("../../src/macro/helpers/sample_redis")
 const sampleRound = require("../../src/sample_round")
 
 const URL = "redis://127.0.0.1:6379/0"
@@ -338,6 +338,20 @@ describe("the Redis sample helper", () => {
       ["llen", "bull:b:wait"],
       ["zcard", "bull:b:delayed"],
     ])
+  })
+
+  test("activity asks with one script for the active jobs of a queue and how many of them hold their lock", () => {
+    const pipeline = { eval: jest.fn() }
+
+    activity(pipeline, "bull:default:")
+
+    expect(pipeline.eval.mock.calls).toEqual([
+      [expect.any(String), 1, "bull:default:active", "bull:default:"],
+    ])
+    const script = pipeline.eval.mock.calls[0][0]
+    expect(script).toContain('redis.call("LRANGE", KEYS[1], 0, -1)')
+    expect(script).toContain('redis.call("EXISTS", ARGV[1] .. id .. ":lock")')
+    expect(script).toContain("return {#active, running}")
   })
 
   test("a total below zero is zero", async () => {

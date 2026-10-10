@@ -52,6 +52,11 @@ describe("BullMQ", () => {
     })
   })
 
+  async function running(queue, ...ids) {
+    await redis.lpush(`bull:${queue}:active`, ...ids)
+    for (const id of ids) await redis.set(`bull:${queue}:${id}:lock`, "token")
+  }
+
   afterEach(async () => {
     jest.useRealTimers()
     for (const queue of [defaultQueue, mailerQueue]) {
@@ -157,7 +162,7 @@ describe("BullMQ", () => {
   })
 
   test("jobQueueSize counts active jobs by default", async () => {
-    await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
+    await running("default", "job-active-1", "job-active-2")
     expect(await redis.llen("bull:default:active")).toBe(2)
     const size = await jobQueueSize("default", { connection: redisURL })
     expectIntegerCount(size)
@@ -179,7 +184,7 @@ describe("BullMQ", () => {
 
   test("jobQueueSize with skipWorking leaves active jobs out", async () => {
     await defaultQueue.add("liveJob", {})
-    await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
+    await running("default", "job-active-1", "job-active-2")
     expect(
       await jobQueueSize("default", {
         connection: redisURL,
@@ -226,8 +231,64 @@ describe("BullMQ", () => {
     }
   })
 
+  test("an active job without its lock counts as waiting and not as running", async () => {
+    await running("default", "held")
+    await redis.lpush("bull:default:active", "orphan-1", "orphan-2")
+    await running("mailer", "held-1", "held-2")
+    await redis.lpush("bull:mailer:active", "orphan-3")
+
+    expect(await jobQueueWorking("default", { connection: redisURL })).toBe(1)
+    expect(await jobQueueWorking({ connection: redisURL })).toBe(3)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(3)
+    expect(
+      await jobQueueSize("default", {
+        connection: redisURL,
+        skipWorking: true,
+      }),
+    ).toBe(2)
+    expect(
+      await jobQueueSize({ connection: redisURL, skipWorking: true }),
+    ).toBe(3)
+  })
+
+  test("the job of a worker that is gone counts as waiting once its lock expired", async () => {
+    jest.useRealTimers()
+    let started
+    const processing = new Promise((resolve) => {
+      started = resolve
+    })
+    const worker = new Worker(
+      "default",
+      () => {
+        started()
+        return new Promise(() => {})
+      },
+      {
+        connection: queueConnection(),
+        lockDuration: 500,
+        stalledInterval: 600_000,
+      },
+    )
+    await defaultQueue.add("orphan", {})
+    await processing
+    await worker.close(true)
+    const [id] = await redis.lrange("bull:default:active", 0, -1)
+    while (await redis.exists(`bull:default:${id}:lock`)) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+
+    expect(await jobQueueWorking("default", { connection: redisURL })).toBe(0)
+    expect(await jobQueueSize("default", { connection: redisURL })).toBe(1)
+    expect(
+      await jobQueueSize("default", {
+        connection: redisURL,
+        skipWorking: true,
+      }),
+    ).toBe(1)
+  })
+
   test("all-queues discovery includes active-only and prioritized-only queues", async () => {
-    await redis.lpush("bull:active-only:active", "job-active-1")
+    await running("active-only", "job-active-1")
     await redis.zadd("bull:prioritized-only:prioritized", 1, "job-priority-1")
 
     expect(await jobQueueWorking({ connection: redisURL })).toBe(1)
@@ -264,7 +325,7 @@ describe("BullMQ", () => {
     await defaultQueue.add("liveJob", {})
     await defaultQueue.add("dueDelayedJob", {}, { delay: 1 })
     await defaultQueue.add("futureDelayedJob", {}, { delay: 60_000 })
-    await redis.lpush("bull:default:active", "job-active-1", "job-active-2")
+    await running("default", "job-active-1", "job-active-2")
     jest.setSystemTime(Date.now() + 1)
     expect(await jobQueueSize({ connection: redisURL })).toBe(4)
     expect(await jobQueueSize("default", { connection: redisURL })).toBe(4)
@@ -279,12 +340,12 @@ describe("BullMQ", () => {
 
   test("jobQueueSize sums active jobs across two queues in one call", async () => {
     await defaultQueue.add("liveJob", {})
-    await redis.lpush("bull:default:active", "a1", "a2")
+    await running("default", "a1", "a2")
     await mailerQueue.add("liveJob", {})
     await mailerQueue.add("liveJob", {})
     await mailerQueue.add("liveJob", {})
     await mailerQueue.add("prioJob", {}, { priority: 1 })
-    await redis.lpush("bull:mailer:active", "m1", "m2", "m3", "m4")
+    await running("mailer", "m1", "m2", "m3", "m4")
     expect(
       await jobQueueSize("default", "mailer", { connection: redisURL }),
     ).toBe(11)
@@ -473,8 +534,8 @@ describe("BullMQ", () => {
   })
 
   test("jobQueueWorking counts active and filters queues", async () => {
-    await redis.lpush("bull:default:active", "a1")
-    await redis.lpush("bull:mailer:active", "m1", "m2")
+    await running("default", "a1")
+    await running("mailer", "m1", "m2")
     await defaultQueue.add("liveJob", {})
 
     const working = await jobQueueWorking({ connection: redisURL })
@@ -491,7 +552,7 @@ describe("BullMQ", () => {
   })
 
   test("plan execute bullmq jqs counts running jobs and samples no wrk", async () => {
-    await redis.lpush("bull:default:active", "a1", "a2")
+    await running("default", "a1", "a2")
     await defaultQueue.add("liveJob", {})
 
     const configuration = new Configuration()
@@ -524,7 +585,7 @@ describe("BullMQ", () => {
   })
 
   test("plan execute bullmq jqs with skip_working samples waiting jobs and still samples wrk", async () => {
-    await redis.lpush("bull:default:active", "a1", "a2")
+    await running("default", "a1", "a2")
     await defaultQueue.add("liveJob", {})
 
     const configuration = new Configuration()
@@ -555,8 +616,8 @@ describe("BullMQ", () => {
   })
 
   test("plan execute bullmq empty queues samples all wrk", async () => {
-    await redis.lpush("bull:default:active", "a1")
-    await redis.lpush("bull:mailer:active", "m1")
+    await running("default", "a1")
+    await running("mailer", "m1")
 
     const configuration = new Configuration()
     configuration.logger = { info() {}, warn() {}, error: jest.fn() }

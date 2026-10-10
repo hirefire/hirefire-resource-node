@@ -13,6 +13,14 @@ const SAMPLE_REDIS_OPTIONS = {
   },
 }
 
+const ACTIVITY = `
+local active = redis.call("LRANGE", KEYS[1], 0, -1)
+local running = 0
+for _, id in ipairs(active) do
+  running = running + redis.call("EXISTS", ARGV[1] .. id .. ":lock")
+end
+return {#active, running}`
+
 async function sample(args, states, commands, count) {
   const { queues: given, options } = unpack(args)
   const named = normalizeQueues(given, { allowEmpty: true })
@@ -46,6 +54,10 @@ async function sample(args, states, commands, count) {
       redis.disconnect()
     }
   }
+}
+
+function activity(pipeline, key) {
+  pipeline.eval(ACTIVITY, 1, `${key}active`, key)
 }
 
 function connect({ connection, connectionOptions }) {
@@ -125,4 +137,4 @@ function reply([error, value]) {
   return value
 }
 
-module.exports = { sample }
+module.exports = { sample, activity }

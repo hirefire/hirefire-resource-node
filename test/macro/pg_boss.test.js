@@ -6,9 +6,6 @@ const {
   jobQueueSize,
   jobQueueWorking,
 } = require("../../src/macro/pg_boss")
-const {
-  reset: resetBlockedColumnCacheForTests,
-} = require("../../src/macro/pg_boss/blocked_column")
 const Plan = require("../../src/plan")
 const Sampler = require("../../src/sampler")
 const Configuration = require("../../src/configuration")
@@ -27,17 +24,30 @@ const waitingOpts = { ...sampleOpts, skipWorking: true }
 const setupScript = path.join(__dirname, "pg_boss_setup.mjs")
 const fetchScript = path.join(__dirname, "pg_boss_fetch.mjs")
 
-async function hasBlockedColumn(pool) {
+async function hasColumn(pool, name) {
   const { rows } = await pool.query(
     `SELECT 1
        FROM information_schema.columns
       WHERE table_schema = $1
         AND table_name = 'job'
-        AND column_name = 'blocked'
+        AND column_name = $2
       LIMIT 1`,
-    [SCHEMA],
+    [SCHEMA, name],
   )
   return rows.length > 0
+}
+
+function hasBlockedColumn(pool) {
+  return hasColumn(pool, "blocked")
+}
+
+async function setStartedOn(pool, id, relativeSeconds) {
+  await pool.query(
+    `UPDATE ${SCHEMA}.job
+        SET started_on = now() + ($2::text || ' seconds')::interval
+      WHERE id = $1`,
+    [id, String(relativeSeconds)],
+  )
 }
 
 function installedPgBossVersion() {
@@ -172,12 +182,7 @@ describe("pg-boss", () => {
   })
 
   beforeEach(async () => {
-    resetBlockedColumnCacheForTests()
     await pool.query(`DELETE FROM ${SCHEMA}.job`)
-  })
-
-  afterEach(() => {
-    resetBlockedColumnCacheForTests()
   })
 
   test("libraryLoaded is true when the pg-boss package is imported", () => {
@@ -249,6 +254,44 @@ describe("pg-boss", () => {
       await jobQueueSize("email", { ...sampleOpts, skipWorking: null }),
     ).toBe(1)
     expect(await jobQueueLatency("email", sampleOpts)).toBe(0)
+  })
+
+  test("an active job past its expiry counts as waiting and not as running", async () => {
+    const running = await insertJob(pool, { name: "email", state: "active" })
+    await setStartedOn(pool, running, -60)
+    const orphan = await insertJob(pool, { name: "email", state: "active" })
+    await setStartedOn(pool, orphan, -3600)
+    await setStartAfter(pool, orphan, -30)
+    const other = await insertJob(pool, { name: "sms", state: "active" })
+    await setStartedOn(pool, other, -3600)
+
+    expect(await jobQueueWorking("email", sampleOpts)).toBe(1)
+    expect(await jobQueueWorking(sampleOpts)).toBe(1)
+    expect(await jobQueueSize("email", sampleOpts)).toBe(2)
+    expect(await jobQueueSize("email", waitingOpts)).toBe(1)
+    expect(await jobQueueSize(waitingOpts)).toBe(2)
+    const latency = await jobQueueLatency("email", sampleOpts)
+    expect(latency).toBeGreaterThanOrEqual(28)
+    expect(latency).toBeLessThan(60)
+  })
+
+  test("an active job whose heartbeat stopped counts as waiting where pg-boss keeps one", async () => {
+    if (!(await hasColumn(pool, "heartbeat_seconds"))) return
+
+    const beating = await insertJob(pool, { name: "email", state: "active" })
+    const silent = await insertJob(pool, { name: "email", state: "active" })
+    await pool.query(
+      `UPDATE ${SCHEMA}.job
+          SET started_on = now(),
+              heartbeat_seconds = 10,
+              heartbeat_on = now() - CASE WHEN id = $1 THEN interval '60 seconds' ELSE interval '1 second' END
+        WHERE id = ANY($2::uuid[])`,
+      [silent, [beating, silent]],
+    )
+
+    expect(await jobQueueWorking("email", sampleOpts)).toBe(1)
+    expect(await jobQueueSize("email", waitingOpts)).toBe(1)
+    expect(await jobQueueSize("email", sampleOpts)).toBe(2)
   })
 
   test("skipWorking leaves active jobs out of size", async () => {

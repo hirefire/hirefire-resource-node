@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `config.token` can set the HireFire token in code. 1.x read only `HIREFIRE_TOKEN`.
 - `HIREFIRE_SERVICE_NAME` sets the process name only on platforms that do not detect it automatically. On Heroku, `DYNO` is used.
 - `HIREFIRE_BULLMQ_URL` and `HIREFIRE_BULL_URL` set the Redis URL for BullMQ and classic Bull samples. `HIREFIRE_PG_BOSS_URL` and `HIREFIRE_PG_BOSS_SCHEMA` set the Postgres URL and schema for pg-boss samples.
-- `jobQueueWorking` reports how many jobs are currently in progress for BullMQ, classic Bull, and pg-boss.
+- `jobQueueWorking` reports how many jobs are currently in progress for BullMQ, classic Bull, and pg-boss. A job whose worker is gone counts as waiting, not as in progress: on BullMQ and classic Bull an active job without its lock, on pg-boss an active job past its expiry.
 - Classic Bull job queue size (latency is unsupported).
 - pg-boss 10 to 12: job queue size and job queue latency. Dependency-blocked jobs are excluded on schemas that track them. Versions 11 and 12 require Node.js 22+.
 - On Heroku, pg-boss samples connect to Postgres over SSL without certificate verification, as Heroku Postgres requires. `connectionOptions.ssl`, `PGSSLMODE`, or an SSL parameter in the URL sets it otherwise.

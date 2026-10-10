@@ -10,9 +10,20 @@ const {
   jobQueueLatency,
   jobQueueWorking,
 } = require("../../src/macro/pg_boss")
-const {
-  reset: resetBlockedColumnCacheForTests,
-} = require("../../src/macro/pg_boss/blocked_column")
+
+const COLUMNS = ["blocked", "expire_in", "expire_seconds", "heartbeat_seconds"]
+const REAL_TIMERS = [
+  "nextTick",
+  "setImmediate",
+  "clearImmediate",
+  "setInterval",
+  "clearInterval",
+  "setTimeout",
+  "clearTimeout",
+  "queueMicrotask",
+  "hrtime",
+  "performance",
+]
 
 const describeIfPg = pg ? describe : describe.skip
 
@@ -21,9 +32,15 @@ describeIfPg("pg-boss connection lifecycle", () => {
   let query
   let on
   let poolSpy
+  let clock = Date.now()
+
+  function columns(...names) {
+    return { rows: names.map((name) => ({ column_name: name })) }
+  }
 
   beforeEach(() => {
-    resetBlockedColumnCacheForTests()
+    clock += 120_000
+    jest.useFakeTimers({ now: clock, doNotFake: REAL_TIMERS })
     end = jest.fn().mockResolvedValue(undefined)
     query = jest.fn()
     on = jest.fn()
@@ -35,7 +52,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
   })
 
   afterEach(() => {
-    resetBlockedColumnCacheForTests()
+    jest.useRealTimers()
     poolSpy.mockRestore()
     jest.clearAllMocks()
   })
@@ -100,7 +117,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expect(end).toHaveBeenCalledTimes(1)
   })
 
-  test("ends owned pool when blocked column probe fails", async () => {
+  test("ends owned pool when the read of the job columns fails", async () => {
     query.mockRejectedValueOnce(new Error("probe failed"))
     await expect(
       jobQueueSize({ connection: "postgres://localhost/jobs" }),
@@ -184,14 +201,14 @@ describeIfPg("pg-boss connection lifecycle", () => {
 
   test("schema is lowercased for SQL and catalog probe", async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+      .mockResolvedValueOnce(columns("blocked"))
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
     await jobQueueSize({
       connection: "postgres://localhost/jobs",
       schema: "PgBoss",
     })
     expect(query.mock.calls[0][0]).toMatch(/information_schema/)
-    expect(query.mock.calls[0][1]).toEqual(["pgboss"])
+    expect(query.mock.calls[0][1]).toEqual(["pgboss", COLUMNS])
     expect(query.mock.calls[1][0]).toMatch(/FROM pgboss\.job/)
     expect(query.mock.calls[1][0]).toMatch(/NOT blocked/)
     expectWaitingSql(query.mock.calls[1][0])
@@ -219,7 +236,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
 
   test("size SQL keeps NOT blocked on the waiting side only", async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+      .mockResolvedValueOnce(columns("blocked"))
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "4" }] })
     await jobQueueSize("email", {
       connection: "postgres://localhost/jobs",
@@ -233,7 +250,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
 
   test("size SQL with skipWorking counts waiting rows only", async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+      .mockResolvedValueOnce(columns("blocked"))
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "3" }] })
       .mockResolvedValueOnce({ rows: [{ job_queue_size: "5" }] })
     await expect(
@@ -266,24 +283,87 @@ describeIfPg("pg-boss connection lifecycle", () => {
   })
 
   test("working SQL counts active rows with optional queue filter", async () => {
-    query.mockResolvedValueOnce({ rows: [{ job_queue_working: "2" }] })
+    query
+      .mockResolvedValueOnce(columns("blocked"))
+      .mockResolvedValueOnce({ rows: [{ job_queue_working: "2" }] })
     await expect(
       jobQueueWorking("email", {
         connection: "postgres://localhost/jobs",
         schema: "pgboss",
       }),
     ).resolves.toBe(2)
-    expect(query).toHaveBeenCalledTimes(1)
-    const workingSql = query.mock.calls[0][0]
+    expect(query).toHaveBeenCalledTimes(2)
+    const workingSql = query.mock.calls[1][0]
     expect(workingSql).toMatch(
       /SELECT COUNT\(\*\)::bigint AS job_queue_working/,
     )
     expect(whereClause(workingSql)).toBe(
       "(state = 'active') AND name = ANY($1::text[])",
     )
-    expect(workingSql).not.toMatch(/information_schema/)
     expect(workingSql).not.toMatch(/FOR UPDATE/i)
-    expect(query.mock.calls[0][1]).toEqual([["email"]])
+    expect(query.mock.calls[1][1]).toEqual([["email"]])
+  })
+
+  describe.each([
+    [
+      "expire_seconds",
+      ["expire_seconds"],
+      "started_on + expire_seconds * interval '1 second' < now()",
+    ],
+    ["expire_in", ["expire_in"], "started_on + expire_in < now()"],
+    [
+      "expire_seconds and heartbeat_seconds",
+      ["expire_seconds", "heartbeat_seconds"],
+      "started_on + expire_seconds * interval '1 second' < now() OR " +
+        "heartbeat_on + heartbeat_seconds * interval '1 second' < now()",
+    ],
+  ])("a job table with %s", (_label, names, dead) => {
+    const waiting = "state < 'active' AND start_after <= now()"
+    const options = { connection: "postgres://localhost/jobs" }
+
+    beforeEach(() => {
+      query.mockResolvedValueOnce(columns(...names))
+    })
+
+    test("counts an active row past its limit as waiting in a size without running jobs", async () => {
+      query.mockResolvedValueOnce({ rows: [{ job_queue_size: "2" }] })
+
+      await jobQueueSize({ ...options, skipWorking: true })
+
+      expect(whereClause(query.mock.calls[1][0])).toBe(
+        `(${waiting}) OR (state = 'active' AND (${dead}))`,
+      )
+    })
+
+    test("counts every active row once in a size with running jobs", async () => {
+      query.mockResolvedValueOnce({ rows: [{ job_queue_size: "2" }] })
+
+      await jobQueueSize("email", options)
+
+      expect(whereClause(query.mock.calls[1][0])).toBe(
+        `((${waiting}) OR state = 'active') AND name = ANY($1::text[])`,
+      )
+    })
+
+    test("leaves an active row past its limit out of the running count", async () => {
+      query.mockResolvedValueOnce({ rows: [{ job_queue_working: "1" }] })
+
+      await jobQueueWorking("email", options)
+
+      expect(whereClause(query.mock.calls[1][0])).toBe(
+        `(state = 'active' AND (${dead}) IS NOT TRUE) AND name = ANY($1::text[])`,
+      )
+    })
+
+    test("measures the latency of an active row past its limit", async () => {
+      query.mockResolvedValueOnce({ rows: [{ latency: 3 }] })
+
+      await jobQueueLatency(options)
+
+      expect(whereClause(query.mock.calls[1][0])).toBe(
+        `(${waiting}) OR (state = 'active' AND (${dead}))`,
+      )
+    })
   })
 
   test("all-queues size omits name filter", async () => {
@@ -345,7 +425,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
 
   test("latency SQL includes NOT blocked when column present", async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+      .mockResolvedValueOnce(columns("blocked"))
       .mockResolvedValueOnce({ rows: [{ latency: 12.5 }] })
     await expect(
       jobQueueLatency("email", {
@@ -359,42 +439,77 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expectWaitingSql(query.mock.calls[1][0])
   })
 
-  test("absence of blocked is cached briefly; presence is cached", async () => {
-    jest.useFakeTimers()
-    try {
-      const url = "postgres://localhost/cache-probe"
-      query
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
-      await jobQueueSize({ connection: url, schema: "pgboss" })
-      expect(query.mock.calls[0][0]).toMatch(/information_schema/)
-      expect(query.mock.calls[1][0]).not.toMatch(/NOT blocked/)
+  test("the columns of the job table are read once a minute per schema and connection", async () => {
+    const url = "postgres://localhost/cache-probe"
+    const size = { rows: [{ job_queue_size: "0" }] }
+    const reads = () =>
+      query.mock.calls.filter(([sql]) => /information_schema/.test(sql)).length
+    query.mockResolvedValue(size)
 
-      query.mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
-      await jobQueueSize({ connection: url, schema: "pgboss" })
-      expect(query).toHaveBeenCalledTimes(3)
-      expect(query.mock.calls[2][0]).not.toMatch(/information_schema/)
-      expect(query.mock.calls[2][0]).not.toMatch(/NOT blocked/)
+    query.mockResolvedValueOnce(columns())
+    await jobQueueSize({ connection: url, schema: "pgboss" })
+    await jobQueueSize({ connection: url, schema: "pgboss" })
+    await jobQueueWorking({ connection: url, schema: "pgboss" })
+    expect(reads()).toBe(1)
+    expect(query.mock.calls[2][0]).not.toMatch(/NOT blocked/)
 
-      jest.advanceTimersByTime(60_000)
+    jest.setSystemTime(clock + 59_999)
+    await jobQueueSize({ connection: url, schema: "pgboss" })
+    expect(reads()).toBe(1)
 
-      query
-        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
-        .mockResolvedValueOnce({ rows: [{ job_queue_size: "0" }] })
-      await jobQueueSize({ connection: url, schema: "pgboss" })
-      expect(query.mock.calls[3][0]).toMatch(/information_schema/)
-      expect(query.mock.calls[4][0]).toMatch(/NOT blocked/)
+    jest.setSystemTime(clock + 60_000)
+    query.mockResolvedValueOnce(columns("blocked"))
+    await jobQueueSize({ connection: url, schema: "pgboss" })
+    expect(reads()).toBe(2)
+    expect(query.mock.calls.at(-1)[0]).toMatch(/NOT blocked/)
 
-      query.mockResolvedValueOnce({ rows: [{ job_queue_size: "1" }] })
-      await expect(
-        jobQueueSize({ connection: url, schema: "pgboss" }),
-      ).resolves.toBe(1)
-      expect(query).toHaveBeenCalledTimes(6)
-      expect(query.mock.calls[5][0]).toMatch(/NOT blocked/)
-      expect(query.mock.calls[5][0]).not.toMatch(/information_schema/)
-    } finally {
-      jest.useRealTimers()
+    await jobQueueSize({ connection: url, schema: "pgboss" })
+    expect(reads()).toBe(2)
+    expect(query.mock.calls.at(-1)[0]).toMatch(/NOT blocked/)
+
+    query.mockResolvedValueOnce(columns())
+    await jobQueueSize({ connection: url, schema: "other" })
+    expect(reads()).toBe(3)
+    expect(query.mock.calls.at(-1)[0]).not.toMatch(/NOT blocked/)
+
+    query.mockResolvedValueOnce(columns())
+    await jobQueueSize({ connection: `${url}-2`, schema: "pgboss" })
+    expect(reads()).toBe(4)
+    expect(query.mock.calls.at(-1)[0]).not.toMatch(/NOT blocked/)
+  })
+
+  test("a borrowed pool is told apart by its connection string, by its host, port, and database, or by itself", async () => {
+    const size = { rows: [{ job_queue_size: "0" }] }
+    function pool(fields) {
+      const answer = async (sql) =>
+        /information_schema/.test(sql) ? columns() : size
+      return { ...fields, query: jest.fn(answer) }
     }
+    async function reads(borrowed) {
+      await jobQueueSize({ connection: borrowed })
+      return borrowed.query.mock.calls.filter(([sql]) =>
+        /information_schema/.test(sql),
+      ).length
+    }
+
+    expect(await reads(pool({ options: { connectionString: "a" } }))).toBe(1)
+    expect(await reads(pool({ options: { connectionString: "a" } }))).toBe(0)
+    expect(await reads(pool({ options: { connectionString: "b" } }))).toBe(1)
+
+    expect(await reads(pool({ host: "h", port: 1, database: "d" }))).toBe(1)
+    expect(await reads(pool({ host: "h", port: 1, database: "d" }))).toBe(0)
+    expect(await reads(pool({ host: "h", port: 2, database: "d" }))).toBe(1)
+    expect(await reads(pool({ host: "h", port: 1, database: "e" }))).toBe(1)
+    expect(await reads(pool({ host: "i", port: 1, database: "d" }))).toBe(1)
+    expect(await reads(pool({ host: "j" }))).toBe(1)
+    expect(await reads(pool({ host: "j", port: 5432, database: "" }))).toBe(0)
+
+    const first = pool({})
+    const second = pool({})
+    expect(await reads(first)).toBe(1)
+    expect(await reads(first)).toBe(1)
+    expect(await reads(second)).toBe(1)
+    expect(await reads(second)).toBe(1)
   })
 
   test("HIREFIRE_PG_BOSS_URL wins over DATABASE_URL when both set", async () => {
@@ -509,7 +624,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
     try {
       mockEmptySize()
       await jobQueueSize({ connection: "postgres://localhost/jobs" })
-      expect(query.mock.calls[0][1]).toEqual(["custom_schema"])
+      expect(query.mock.calls[0][1]).toEqual(["custom_schema", COLUMNS])
       expect(query.mock.calls[1][0]).toMatch(/FROM custom_schema\.job/)
     } finally {
       if (prevSchema === undefined) delete process.env.HIREFIRE_PG_BOSS_SCHEMA
@@ -526,7 +641,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
         connection: "postgres://localhost/jobs",
         schema: "from_options",
       })
-      expect(query.mock.calls[0][1]).toEqual(["from_options"])
+      expect(query.mock.calls[0][1]).toEqual(["from_options", COLUMNS])
       expect(query.mock.calls[1][0]).toMatch(/FROM from_options\.job/)
     } finally {
       if (prevSchema === undefined) delete process.env.HIREFIRE_PG_BOSS_SCHEMA
@@ -540,7 +655,7 @@ describeIfPg("pg-boss connection lifecycle", () => {
     try {
       mockEmptySize()
       await jobQueueSize({ connection: "postgres://localhost/jobs" })
-      expect(query.mock.calls[0][1]).toEqual(["pgboss"])
+      expect(query.mock.calls[0][1]).toEqual(["pgboss", COLUMNS])
       expect(query.mock.calls[1][0]).toMatch(/FROM pgboss\.job/)
     } finally {
       if (prevSchema === undefined) delete process.env.HIREFIRE_PG_BOSS_SCHEMA
