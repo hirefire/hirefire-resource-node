@@ -10,9 +10,9 @@
         "of": "HireFire",
         "members": {
           "public": ["boot", "configure", "reset"],
-          "private": ["_startIfToken"]
+          "private": ["_handOver", "_reports"]
         },
-        "properties": { "public": ["configuration"], "private": [] }
+        "properties": { "public": ["configuration"], "private": ["_stopped"] }
       }
     },
     "./configuration": {
@@ -40,7 +40,6 @@
             "httpSource",
             "markHttpActive",
             "rqtEnabled",
-            "rqtLiveness",
             "token"
           ],
           "private": [
@@ -50,28 +49,32 @@
             "_warnCpuUnresolvedOnce",
             "_warnHerokuConflictOnce",
             "_warnIdentityNameTooLongOnce",
+            "_warnPlainHttpDataUrlOnce",
             "_warnRqtUnresolvedOnce"
           ]
         },
         "properties": {
-          "public": ["http", "jobQueues", "logger"],
+          "public": ["forceStart", "jobQueues", "logger"],
           "private": [
             "_alwaysOnCpu",
             "_alwaysOnHttp",
-            "_bareWebDynoWarned",
             "_buffer",
-            "_cpuUnresolvedWarned",
             "_dispatcher",
-            "_herokuConflictWarned",
             "_httpActive",
-            "_identityNameTooLongWarned",
-            "_rqtUnresolvedWarned",
-            "_sourcesByName",
-            "_token"
+            "_once"
           ]
         }
       },
-      "onlyInCode": [],
+      "onlyInCode": [
+        "activeCpuSources",
+        "buffer",
+        "dispatcher",
+        "httpName",
+        "httpSource",
+        "jobQueues",
+        "markHttpActive",
+        "rqtEnabled"
+      ],
       "onlyInTypes": ["Logger"]
     },
     "./middleware/connect": {
@@ -152,16 +155,6 @@
             "statics": { "public": [], "private": [] },
             "members": { "public": [], "private": [] }
           },
-          "afterSampleJobQueues": {
-            "kind": "function",
-            "name": "afterSampleJobQueues",
-            "arity": 1
-          },
-          "beforeSampleJobQueues": {
-            "kind": "function",
-            "name": "beforeSampleJobQueues",
-            "arity": 0
-          },
           "jobQueueLatency": {
             "kind": "function",
             "name": "jobQueueLatency",
@@ -176,31 +169,6 @@
             "kind": "function",
             "name": "jobQueueWorking",
             "arity": 0
-          },
-          "planConnectionOptions": {
-            "kind": "function",
-            "name": "planConnectionOptions",
-            "arity": 0
-          },
-          "planOptions": {
-            "kind": "function",
-            "name": "planOptions",
-            "arity": 2
-          },
-          "queuesRequired": {
-            "kind": "function",
-            "name": "queuesRequired",
-            "arity": 0
-          },
-          "reinitAfterFork": {
-            "kind": "function",
-            "name": "reinitAfterFork",
-            "arity": 0
-          },
-          "supportsPlanStrategy": {
-            "kind": "function",
-            "name": "supportsPlanStrategy",
-            "arity": 1
           }
         }
       },
@@ -220,16 +188,6 @@
             "statics": { "public": [], "private": [] },
             "members": { "public": [], "private": [] }
           },
-          "afterSampleJobQueues": {
-            "kind": "function",
-            "name": "afterSampleJobQueues",
-            "arity": 1
-          },
-          "beforeSampleJobQueues": {
-            "kind": "function",
-            "name": "beforeSampleJobQueues",
-            "arity": 0
-          },
           "jobQueueLatency": {
             "kind": "function",
             "name": "jobQueueLatency",
@@ -244,31 +202,6 @@
             "kind": "function",
             "name": "jobQueueWorking",
             "arity": 0
-          },
-          "planConnectionOptions": {
-            "kind": "function",
-            "name": "planConnectionOptions",
-            "arity": 0
-          },
-          "planOptions": {
-            "kind": "function",
-            "name": "planOptions",
-            "arity": 2
-          },
-          "queuesRequired": {
-            "kind": "function",
-            "name": "queuesRequired",
-            "arity": 0
-          },
-          "reinitAfterFork": {
-            "kind": "function",
-            "name": "reinitAfterFork",
-            "arity": 0
-          },
-          "supportsPlanStrategy": {
-            "kind": "function",
-            "name": "supportsPlanStrategy",
-            "arity": 1
           }
         }
       },
@@ -281,16 +214,6 @@
       "exports": {
         "kind": "object",
         "names": {
-          "afterSampleJobQueues": {
-            "kind": "function",
-            "name": "afterSampleJobQueues",
-            "arity": 1
-          },
-          "beforeSampleJobQueues": {
-            "kind": "function",
-            "name": "beforeSampleJobQueues",
-            "arity": 0
-          },
           "jobQueueLatency": {
             "kind": "function",
             "name": "jobQueueLatency",
@@ -305,31 +228,6 @@
             "kind": "function",
             "name": "jobQueueWorking",
             "arity": 0
-          },
-          "planConnectionOptions": {
-            "kind": "function",
-            "name": "planConnectionOptions",
-            "arity": 0
-          },
-          "planOptions": {
-            "kind": "function",
-            "name": "planOptions",
-            "arity": 2
-          },
-          "queuesRequired": {
-            "kind": "function",
-            "name": "queuesRequired",
-            "arity": 0
-          },
-          "reinitAfterFork": {
-            "kind": "function",
-            "name": "reinitAfterFork",
-            "arity": 0
-          },
-          "supportsPlanStrategy": {
-            "kind": "function",
-            "name": "supportsPlanStrategy",
-            "arity": 1
           }
         }
       },
@@ -342,16 +240,6 @@
       "exports": {
         "kind": "object",
         "names": {
-          "afterSampleJobQueues": {
-            "kind": "function",
-            "name": "afterSampleJobQueues",
-            "arity": 1
-          },
-          "beforeSampleJobQueues": {
-            "kind": "function",
-            "name": "beforeSampleJobQueues",
-            "arity": 0
-          },
           "jobQueueLatency": {
             "kind": "function",
             "name": "jobQueueLatency",
@@ -366,31 +254,6 @@
             "kind": "function",
             "name": "jobQueueWorking",
             "arity": 0
-          },
-          "planConnectionOptions": {
-            "kind": "function",
-            "name": "planConnectionOptions",
-            "arity": 0
-          },
-          "planOptions": {
-            "kind": "function",
-            "name": "planOptions",
-            "arity": 2
-          },
-          "queuesRequired": {
-            "kind": "function",
-            "name": "queuesRequired",
-            "arity": 0
-          },
-          "reinitAfterFork": {
-            "kind": "function",
-            "name": "reinitAfterFork",
-            "arity": 0
-          },
-          "supportsPlanStrategy": {
-            "kind": "function",
-            "name": "supportsPlanStrategy",
-            "arity": 1
           }
         }
       },
@@ -403,6 +266,13 @@
       "exports": {
         "kind": "object",
         "names": {
+          "DuplicateDynoError": {
+            "kind": "class",
+            "name": "DuplicateDynoError",
+            "arity": 1,
+            "statics": { "public": [], "private": [] },
+            "members": { "public": [], "private": [] }
+          },
           "JobQueueLatencyUnsupportedError": {
             "kind": "class",
             "name": "JobQueueLatencyUnsupportedError",
@@ -421,6 +291,13 @@
               "private": []
             }
           },
+          "MissingSamplerError": {
+            "kind": "class",
+            "name": "MissingSamplerError",
+            "arity": 1,
+            "statics": { "public": [], "private": [] },
+            "members": { "public": [], "private": [] }
+          },
           "jobQueueLatencyUnsupported": {
             "kind": "function",
             "name": "jobQueueLatencyUnsupported",
@@ -433,20 +310,6 @@
     }
   },
   "typeFiles": {
-    "types/buffer.d.ts": {
-      "entry": false,
-      "exportEquals": "Buffer",
-      "any": 0,
-      "names": {
-        "Buffer": {
-          "kinds": ["class", "namespace"],
-          "exported": false,
-          "statics": [],
-          "members": ["discardInherited", "flush", "repopulate", "sample"],
-          "namespace": ["Leaf", "Series", "Snapshot"]
-        }
-      }
-    },
     "types/configuration.d.ts": {
       "entry": true,
       "exportEquals": "Configuration",
@@ -456,54 +319,10 @@
           "kinds": ["class", "namespace"],
           "exported": false,
           "statics": ["MAX_NAME_BYTES"],
-          "members": [
-            "activeCpuSources",
-            "buffer",
-            "dispatcher",
-            "dyno",
-            "http",
-            "httpName",
-            "httpSource",
-            "jobQueues",
-            "logger",
-            "markHttpActive",
-            "rqtEnabled",
-            "rqtLiveness",
-            "token"
-          ],
+          "members": ["dyno", "forceStart", "logger", "token"],
           "namespace": ["DuplicateDynoError", "Logger", "MissingSamplerError"]
         },
-        "MissingSamplerError": {
-          "kinds": ["class"],
-          "exported": false,
-          "statics": [],
-          "members": []
-        },
-        "DuplicateDynoError": {
-          "kinds": ["class"],
-          "exported": false,
-          "statics": [],
-          "members": []
-        },
-        "Logger": { "kinds": ["type"], "exported": false },
-        "Buffer": { "kinds": ["import"] },
-        "Dispatcher": { "kinds": ["import"] },
-        "HTTP": { "kinds": ["import"] },
-        "CPU": { "kinds": ["import"] },
-        "JobQueues": { "kinds": ["import"] }
-      }
-    },
-    "types/dispatcher.d.ts": {
-      "entry": false,
-      "exportEquals": "Dispatcher",
-      "any": 0,
-      "names": {
-        "Dispatcher": {
-          "kinds": ["class"],
-          "exported": false,
-          "statics": [],
-          "members": ["ensureJobQueueLoop", "running", "start", "stop"]
-        }
+        "Logger": { "kinds": ["type"], "exported": false }
       }
     },
     "types/errors.d.ts": {
@@ -518,6 +337,18 @@
           "members": []
         },
         "JobQueueLatencyUnsupportedError": {
+          "kinds": ["class"],
+          "exported": true,
+          "statics": [],
+          "members": []
+        },
+        "MissingSamplerError": {
+          "kinds": ["class"],
+          "exported": true,
+          "statics": [],
+          "members": []
+        },
+        "DuplicateDynoError": {
           "kinds": ["class"],
           "exported": true,
           "statics": [],
@@ -555,7 +386,7 @@
     "types/macro/bull.d.ts": {
       "entry": true,
       "exportEquals": null,
-      "any": 2,
+      "any": 0,
       "names": {
         "BullOptions": { "kinds": ["type"], "exported": true },
         "BullSizeOptions": { "kinds": ["type"], "exported": true },
@@ -568,13 +399,6 @@
           "kinds": ["function", "function"],
           "exported": true
         },
-        "planOptions": { "kinds": ["function"], "exported": true },
-        "planConnectionOptions": { "kinds": ["function"], "exported": true },
-        "supportsPlanStrategy": { "kinds": ["function"], "exported": true },
-        "queuesRequired": { "kinds": ["function"], "exported": true },
-        "beforeSampleJobQueues": { "kinds": ["function"], "exported": true },
-        "afterSampleJobQueues": { "kinds": ["function"], "exported": true },
-        "reinitAfterFork": { "kinds": ["function"], "exported": true },
         "JobQueueLatencyUnsupportedError": {
           "kinds": ["reexport"],
           "exported": true
@@ -584,7 +408,7 @@
     "types/macro/bullmq.d.ts": {
       "entry": true,
       "exportEquals": null,
-      "any": 2,
+      "any": 0,
       "names": {
         "BullMQOptions": { "kinds": ["type"], "exported": true },
         "BullMQSizeOptions": { "kinds": ["type"], "exported": true },
@@ -597,13 +421,6 @@
           "kinds": ["function", "function"],
           "exported": true
         },
-        "planOptions": { "kinds": ["function"], "exported": true },
-        "planConnectionOptions": { "kinds": ["function"], "exported": true },
-        "supportsPlanStrategy": { "kinds": ["function"], "exported": true },
-        "queuesRequired": { "kinds": ["function"], "exported": true },
-        "beforeSampleJobQueues": { "kinds": ["function"], "exported": true },
-        "afterSampleJobQueues": { "kinds": ["function"], "exported": true },
-        "reinitAfterFork": { "kinds": ["function"], "exported": true },
         "JobQueueLatencyUnsupportedError": {
           "kinds": ["reexport"],
           "exported": true
@@ -613,7 +430,7 @@
     "types/macro/pg_boss.d.ts": {
       "entry": true,
       "exportEquals": null,
-      "any": 6,
+      "any": 2,
       "names": {
         "Queryable": { "kinds": ["type"], "exported": true },
         "PgBossOptions": { "kinds": ["type"], "exported": true },
@@ -626,14 +443,7 @@
         "jobQueueWorking": {
           "kinds": ["function", "function"],
           "exported": true
-        },
-        "planOptions": { "kinds": ["function"], "exported": true },
-        "planConnectionOptions": { "kinds": ["function"], "exported": true },
-        "supportsPlanStrategy": { "kinds": ["function"], "exported": true },
-        "queuesRequired": { "kinds": ["function"], "exported": true },
-        "beforeSampleJobQueues": { "kinds": ["function"], "exported": true },
-        "afterSampleJobQueues": { "kinds": ["function"], "exported": true },
-        "reinitAfterFork": { "kinds": ["function"], "exported": true }
+        }
       }
     },
     "types/middleware/connect.d.ts": {
@@ -685,65 +495,6 @@
         "NextMiddleware": { "kinds": ["type"], "exported": true },
         "middleware": { "kinds": ["function"], "exported": true },
         "withHireFire": { "kinds": ["function"], "exported": true }
-      }
-    },
-    "types/source/cpu.d.ts": {
-      "entry": false,
-      "exportEquals": "CPU",
-      "any": 0,
-      "names": {
-        "CPU": {
-          "kinds": ["class"],
-          "exported": false,
-          "statics": [],
-          "members": ["name", "sample"]
-        }
-      }
-    },
-    "types/source/http.d.ts": {
-      "entry": false,
-      "exportEquals": "HTTP",
-      "any": 0,
-      "names": {
-        "HTTP": {
-          "kinds": ["class"],
-          "exported": false,
-          "statics": [],
-          "members": ["name", "sample"]
-        }
-      }
-    },
-    "types/source/jobQueue.d.ts": {
-      "entry": false,
-      "exportEquals": "JobQueue",
-      "any": 0,
-      "names": {
-        "JobQueue": {
-          "kinds": ["class"],
-          "exported": false,
-          "statics": [],
-          "members": ["name", "sample"]
-        }
-      }
-    },
-    "types/source/jobQueues.d.ts": {
-      "entry": false,
-      "exportEquals": "JobQueues",
-      "any": 0,
-      "names": {
-        "JobQueues": {
-          "kinds": ["class"],
-          "exported": false,
-          "statics": [],
-          "members": [
-            "[Symbol.iterator]",
-            "add",
-            "any",
-            "findByName",
-            "sampleJobQueue"
-          ]
-        },
-        "JobQueue": { "kinds": ["import"] }
       }
     }
   }

@@ -6,6 +6,7 @@
       "verb": "POST",
       "path": "/metrics/lease",
       "headers": [
+        ["User-Agent", "hirefire-resource-node/2.0.0"],
         ["HireFire-Token", "golden-token"],
         ["HireFire-Agent", "Node-2.0.0"],
         ["HireFire-Process-ID", "<uuid>"],
@@ -20,6 +21,7 @@
       "verb": "POST",
       "path": "/metrics/ingest",
       "headers": [
+        ["User-Agent", "hirefire-resource-node/2.0.0"],
         ["Content-Type", "application/json"],
         ["HireFire-Token", "golden-token"],
         ["HireFire-Agent", "Node-2.0.0"],
