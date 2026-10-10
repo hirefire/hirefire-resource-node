@@ -17,7 +17,6 @@ class Configuration {
   constructor() {
     this.jobQueues = new JobQueues()
     this.logger = console
-    this.forceStart = false
     this._buffer = null
     this._dispatcher = null
     this._alwaysOnCpu = null

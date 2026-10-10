@@ -902,17 +902,6 @@ describe("the client at its boundary", () => {
       expect(ingested("web", "rqt")).toMatchObject({ 0: [250, 1] })
     })
 
-    test("with workers reports when the host asks for it", async () => {
-      cluster.workers.test = {}
-
-      configure((config) => (config.forceStart = true))
-      processRequestQueueTime(() => `t=${START - 0.25}`)
-      await pass(1)
-
-      expect(at("ingest")).toEqual([0, 1])
-      expect(ingested("web", "rqt")).toMatchObject({ 0: [250, 1] })
-    })
-
     test("stops at its first fork without a last request", async () => {
       configure()
       await pass(1)
@@ -935,18 +924,6 @@ describe("the client at its boundary", () => {
     test("that has served a request keeps running when it forks", async () => {
       configure()
       processRequestQueueTime(() => `t=${START - 0.25}`)
-      await pass(1)
-
-      cluster.workers.test = {}
-      cluster.emit("fork", {})
-      await pass(2)
-
-      expect(dispatcher().running()).toBe(true)
-      expect(at("ingest")).toEqual([0, 1, 2, 3])
-    })
-
-    test("that the host asked to report keeps running when it forks", async () => {
-      configure((config) => (config.forceStart = true))
       await pass(1)
 
       cluster.workers.test = {}

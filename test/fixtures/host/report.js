@@ -4,17 +4,15 @@ const HireFire = require("../../../src")
 const { processRequestQueueTime } = require("../../../src/middleware")
 
 const mode = process.argv[2]
-const force = process.argv.includes("force")
 const serves = process.argv.includes("serves")
 
 function running() {
   return Boolean(HireFire.configuration._dispatcher?.running())
 }
 
-function boot(forceStart) {
+function boot() {
   HireFire.configure((config) => {
     config.logger = null
-    config.forceStart = forceStart
   })
 }
 
@@ -28,28 +26,28 @@ function serve(role) {
 }
 
 if (!isMainThread) {
-  boot(workerData.force)
+  boot()
   say("thread", "booted")
   if (workerData.serves) serve("thread")
   HireFire.reset()
 } else if (cluster.isWorker) {
-  boot(false)
+  boot()
   say("worker", "booted")
   HireFire.reset().then(() => process.exit(0))
 } else if (mode === "cluster") {
-  boot(force)
+  boot()
   say("primary", "booted")
   if (serves) serve("primary")
   cluster.fork().on("exit", () => {
     say("primary", "forked")
-    boot(force)
+    boot()
     say("primary", "alone")
     HireFire.reset()
   })
 } else {
-  boot(false)
+  boot()
   say("main", "booted")
-  new Worker(__filename, { workerData: { force, serves } }).on("exit", () => {
+  new Worker(__filename, { workerData: { serves } }).on("exit", () => {
     say("main", "threaded")
     HireFire.reset()
   })

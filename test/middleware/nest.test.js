@@ -1,5 +1,4 @@
 require("reflect-metadata")
-const { isMainThread } = require("worker_threads")
 const request = require("supertest")
 const { NestFactory } = require("@nestjs/core")
 const { Module } = require("@nestjs/common")
@@ -18,9 +17,6 @@ describe("Nest", () => {
     jest.restoreAllMocks()
     delete process.env.HIREFIRE_TOKEN
     delete process.env.DYNO
-    HireFire.configure((config) => {
-      config.forceStart = !isMainThread
-    })
     app = await NestFactory.create(AppModule, { logger: false })
     app.use(HireFireMiddlewareExpress)
     await app.listen(0, "127.0.0.1")

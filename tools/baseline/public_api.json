@@ -54,7 +54,7 @@
           ]
         },
         "properties": {
-          "public": ["forceStart", "jobQueues", "logger"],
+          "public": ["jobQueues", "logger"],
           "private": [
             "_alwaysOnCpu",
             "_alwaysOnHttp",
@@ -319,7 +319,7 @@
           "kinds": ["class", "namespace"],
           "exported": false,
           "statics": ["MAX_NAME_BYTES"],
-          "members": ["dyno", "forceStart", "logger", "token"],
+          "members": ["dyno", "logger", "token"],
           "namespace": ["DuplicateDynoError", "Logger", "MissingSamplerError"]
         },
         "Logger": { "kinds": ["type"], "exported": false }

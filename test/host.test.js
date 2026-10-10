@@ -69,15 +69,6 @@ describe("Host", () => {
       ])
     })
 
-    test("a cluster primary that asks for it keeps reporting beside its worker", async () => {
-      expect(await run("cluster", "force")).toEqual([
-        "primary booted true",
-        "worker booted true",
-        "primary forked true",
-        "primary alone true",
-      ])
-    })
-
     test("a cluster primary that has served a request keeps reporting beside its worker", async () => {
       expect(await run("cluster", "serves")).toEqual([
         "primary booted true",
@@ -159,13 +150,5 @@ describe("Host", () => {
         paths: ["/metrics/ingest"],
       })
     }, 15_000)
-
-    test("a worker thread that asks for it reports", async () => {
-      expect(await run("thread", "force")).toEqual([
-        "main booted true",
-        "thread booted true",
-        "main threaded true",
-      ])
-    })
   })
 })

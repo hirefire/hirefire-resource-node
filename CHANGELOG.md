@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Job metrics are pushed to HireFire instead of being read from a poll of the app.
 - CPU activity is sampled automatically on supported platforms when the process is identified.
-- `HireFire.boot()` starts metric collection when a token is set. A Heroku one-off dyno (`heroku run` and the release phase) does not start it. A `cluster` primary that has forked workers and a worker thread start it with the first request they serve, and not with `boot`. `config.forceStart = true` starts it in such a primary or thread with `boot` as well. `HireFire.reset()` stops the dispatcher and clears configuration, and nothing starts again until `configure` or `boot` runs.
+- `HireFire.boot()` starts metric collection when a token is set. A Heroku one-off dyno (`heroku run` and the release phase) does not start it. A `cluster` primary that has forked workers and a worker thread start it with the first request they serve, and not with `boot`. `HireFire.reset()` stops the dispatcher and clears configuration, and nothing starts again until `configure` or `boot` runs.
 - `config.token` can set the HireFire token in code. 1.x read only `HIREFIRE_TOKEN`.
 - `HIREFIRE_SERVICE_NAME` sets the process name and overrides the name that the platform provides. On Heroku the name comes from `DYNO`, so the variable is not needed there. A Heroku config var applies to every dyno of the app, and a warning is logged when the variable and `DYNO` disagree.
 - `HIREFIRE_BULLMQ_URL` and `HIREFIRE_BULL_URL` set the Redis URL for BullMQ and classic Bull samples. `HIREFIRE_PG_BOSS_URL` and `HIREFIRE_PG_BOSS_SCHEMA` set the Postgres URL and schema for pg-boss samples.

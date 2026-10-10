@@ -33,7 +33,7 @@ Two places report only when they serve requests themselves. `configure` and `boo
 - A `cluster` primary that has forked workers. Its workers report. A primary stops at its first fork, unless it has served a request by then.
 - A worker thread. The main thread reports. An app that its server runs in a worker thread reports from its first request.
 
-Set `config.forceStart = true` in a `cluster` primary or a worker thread that should report without serving a request. After `await HireFire.reset()`, nothing starts again until `configure` or `boot` runs, so a request that is still being served during a shutdown does not restart it.
+After `await HireFire.reset()`, nothing starts again until `configure` or `boot` runs, so a request that is still being served during a shutdown does not restart it.
 
 **Connections on Heroku:**
 

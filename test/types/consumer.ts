@@ -4,7 +4,6 @@ import errors = require("../../types/errors")
 
 const configuration = HireFire.configure((config) => {
   config.token = "token"
-  config.forceStart = false
   config.logger = { info() {}, warn() {}, error() {} }
   config.dyno("worker", async () => 1)
 })

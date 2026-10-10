@@ -2,7 +2,6 @@ export = Configuration
 declare class Configuration {
   static MAX_NAME_BYTES: number
   logger: Logger | null
-  forceStart: boolean
   set token(value: string | null | undefined)
   get token(): string | null
   dyno(name: string): void

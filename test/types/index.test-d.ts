@@ -14,9 +14,6 @@ import errors = require("../../types/errors")
 const configuration = HireFire.configuration
 
 expectType<string | null>(configuration.token)
-expectType<boolean>(configuration.forceStart)
-configuration.forceStart = true
-expectError((configuration.forceStart = "yes"))
 expectType<number>(Configuration.MAX_NAME_BYTES)
 configuration.token = "token"
 configuration.token = null
