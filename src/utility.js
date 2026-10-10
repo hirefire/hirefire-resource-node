@@ -21,10 +21,16 @@ function unpack(args) {
   return { queues, options }
 }
 
+function presence(value) {
+  if (value == null) return null
+  const stripped = String(value).trim()
+  return stripped.length > 0 ? stripped : null
+}
+
 function normalizeQueues(queues, { allowEmpty }) {
   const names = new Set()
   for (const queue of queues) {
-    const name = queue == null ? "" : String(queue).trim()
+    const name = presence(queue)
     if (name) names.add(name)
   }
   if (names.size > 0) {
@@ -38,4 +44,4 @@ function normalizeQueues(queues, { allowEmpty }) {
   )
 }
 
-module.exports = { unpack, normalizeQueues }
+module.exports = { unpack, presence, normalizeQueues }

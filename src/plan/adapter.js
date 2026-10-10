@@ -1,5 +1,6 @@
 const { installed } = require("../optional")
 const { JQS } = require("../strategy")
+const { presence } = require("../utility")
 
 class Adapter {
   constructor({ macro, packages, strategies, environment = {} }) {
@@ -31,7 +32,7 @@ class Adapter {
   connectionOptions() {
     const options = {}
     for (const [option, variable] of Object.entries(this.environment)) {
-      const value = String(process.env[variable] ?? "").trim()
+      const value = presence(process.env[variable])
       if (value) options[option] = value
     }
     return options

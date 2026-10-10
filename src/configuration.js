@@ -3,6 +3,7 @@ const JobQueue = require("./source/jobQueue")
 const JobQueues = require("./source/jobQueues")
 const CPU = require("./source/cpu")
 const MetricsBuffer = require("./buffer")
+const { presence } = require("./utility")
 const Dispatcher = require("./dispatcher")
 const Identity = require("./identity")
 const Once = require("./once")
@@ -26,10 +27,7 @@ class Configuration {
   }
 
   get token() {
-    const value = this.#token ?? process.env.HIREFIRE_TOKEN
-    if (value == null) return null
-    const stripped = String(value).trim()
-    return stripped.length > 0 ? stripped : null
+    return presence(this.#token ?? process.env.HIREFIRE_TOKEN)
   }
 
   set token(value) {
@@ -215,8 +213,7 @@ class Configuration {
 }
 
 function coerceName(name) {
-  const raw = name === undefined || name === null ? "" : String(name)
-  const stripped = raw.trim()
+  const stripped = presence(name) ?? ""
 
   if (stripped.length === 0) {
     throw new TypeError(

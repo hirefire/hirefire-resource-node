@@ -1,13 +1,13 @@
 const { freezeTime } = require("./support")
 const CPU = require("../src/source/cpu")
 const Usage = require("../src/source/cpu/usage")
-const Buffer = require("../src/buffer")
+const MetricsBuffer = require("../src/buffer")
 
 describe("CPU", () => {
   let configuration
 
   beforeEach(() => {
-    configuration = { buffer: new Buffer() }
+    configuration = { buffer: new MetricsBuffer() }
   })
 
   function cpu(name = "clock") {

@@ -1,6 +1,6 @@
 const Configuration = require("../src/configuration")
 const Dispatcher = require("../src/dispatcher")
-const Buffer = require("../src/buffer")
+const MetricsBuffer = require("../src/buffer")
 
 describe("Configuration", () => {
   test("warns once about a data url that sends the token in clear text", () => {
@@ -199,7 +199,7 @@ describe("Configuration", () => {
   })
 
   test("buffer returns instance", () => {
-    expect(config.buffer).toBeInstanceOf(Buffer)
+    expect(config.buffer).toBeInstanceOf(MetricsBuffer)
   })
 
   test("buffer is memoized", () => {

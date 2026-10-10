@@ -1,3 +1,5 @@
+const { presence } = require("./utility")
+
 const ONE_OFF_DYNOS = ["run", "release"]
 
 const Identity = {
@@ -54,12 +56,6 @@ const Identity = {
     const type = presence(process.env.RENDER_SERVICE_TYPE)
     return type != null && type.toLowerCase() === "web"
   },
-}
-
-function presence(value) {
-  if (value == null) return null
-  const stripped = String(value).trim()
-  return stripped.length > 0 ? stripped : null
 }
 
 module.exports = Identity

@@ -1,7 +1,17 @@
-const { normalizeQueues, unpack } = require("../src/utility")
+const { normalizeQueues, presence, unpack } = require("../src/utility")
 const { MissingQueueError } = require("../src/errors")
 
 describe("utility", () => {
+  test("presence trims a value and answers null for a missing or blank one", () => {
+    expect(presence(" web ")).toBe("web")
+    expect(presence(7)).toBe("7")
+    expect(presence(0)).toBe("0")
+    expect(presence("")).toBeNull()
+    expect(presence(" \t\n")).toBeNull()
+    expect(presence(null)).toBeNull()
+    expect(presence(undefined)).toBeNull()
+  })
+
   test("strips surrounding whitespace", () => {
     expect(
       normalizeQueues([" default ", "default", "mailer"], { allowEmpty: true }),

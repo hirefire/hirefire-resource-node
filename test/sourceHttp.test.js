@@ -1,12 +1,12 @@
 const { freezeTime } = require("./support")
 const HTTP = require("../src/source/http")
-const Buffer = require("../src/buffer")
+const MetricsBuffer = require("../src/buffer")
 
 describe("HTTP", () => {
   let configuration
 
   beforeEach(() => {
-    configuration = { buffer: new Buffer() }
+    configuration = { buffer: new MetricsBuffer() }
   })
 
   test("name", () => {

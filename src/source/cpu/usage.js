@@ -38,7 +38,7 @@ const Usage = {
     const line = content.split("\n").find((l) => l.startsWith("usage_usec"))
     if (!line) return null
 
-    const usec = parseInt(line.trim().split(/\s+/).pop())
+    const usec = parseInt(line.trim().split(/\s+/).pop(), 10)
     return Number.isFinite(usec) ? usec / 1000000.0 : null
   },
 
@@ -87,8 +87,8 @@ const Usage = {
       .split(/\s+/)
     if (fields.length < 13) return null
 
-    const utime = parseInt(fields[11])
-    const stime = parseInt(fields[12])
+    const utime = parseInt(fields[11], 10)
+    const stime = parseInt(fields[12], 10)
     return Number.isFinite(utime) && Number.isFinite(stime)
       ? utime + stime
       : null
@@ -137,7 +137,7 @@ const Usage = {
     const limit = this.read(this.CEDAR_MEMORY_LIMIT)
     if (!limit) return null
 
-    return this.CEDAR_SHARED_ENTITLEMENTS[parseInt(limit)] ?? null
+    return this.CEDAR_SHARED_ENTITLEMENTS[parseInt(limit, 10)] ?? null
   },
 
   renderEntitlement() {

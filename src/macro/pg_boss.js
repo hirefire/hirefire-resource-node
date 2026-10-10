@@ -1,5 +1,5 @@
 const { load } = require("../optional")
-const { unpack, normalizeQueues } = require("../utility")
+const { unpack, presence, normalizeQueues } = require("../utility")
 
 const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://postgres:postgres@127.0.0.1:5432/postgres"
@@ -114,31 +114,22 @@ async function withConnection(args, fn) {
 }
 
 function resolveSchema(options) {
-  if (options.schema != null) {
-    const s = String(options.schema).trim()
-    if (s) return s
-  }
-  const env = process.env.HIREFIRE_PG_BOSS_SCHEMA
-  if (env != null) {
-    const s = String(env).trim()
-    if (s) return s
-  }
-  return DEFAULT_SCHEMA
+  return (
+    presence(options.schema) ??
+    presence(process.env.HIREFIRE_PG_BOSS_SCHEMA) ??
+    DEFAULT_SCHEMA
+  )
 }
 
 function resolveConnection(options) {
   if (options.connection != null && options.connection !== "") {
     return options.connection
   }
-  const hirefireUrl = process.env.HIREFIRE_PG_BOSS_URL
-  if (hirefireUrl != null && String(hirefireUrl).trim()) {
-    return String(hirefireUrl).trim()
-  }
-  const databaseUrl = process.env.DATABASE_URL
-  if (databaseUrl != null && String(databaseUrl).trim()) {
-    return String(databaseUrl).trim()
-  }
-  return DEFAULT_URL
+  return (
+    presence(process.env.HIREFIRE_PG_BOSS_URL) ??
+    presence(process.env.DATABASE_URL) ??
+    DEFAULT_URL
+  )
 }
 
 function herokuSslDefault(connectionString, userOpts) {

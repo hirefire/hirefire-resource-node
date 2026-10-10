@@ -1,6 +1,6 @@
 const { rqt } = require("./strategy")
 
-class Buffer {
+class MetricsBuffer {
   static SAMPLE_COUNT_LIMIT = 1_000_000
 
   constructor(ttl = 60) {
@@ -21,7 +21,7 @@ class Buffer {
         bucket = { sum: 0, count: 0 }
         series[timestamp] = bucket
       }
-      if (bucket.count >= Buffer.SAMPLE_COUNT_LIMIT) return
+      if (bucket.count >= MetricsBuffer.SAMPLE_COUNT_LIMIT) return
       bucket.sum += value
       bucket.count += 1
     } else {
@@ -74,11 +74,11 @@ class Buffer {
 }
 
 function clampRqt(sum, count) {
-  if (count > Buffer.SAMPLE_COUNT_LIMIT) {
+  if (count > MetricsBuffer.SAMPLE_COUNT_LIMIT) {
     const mean = sum / count
     return {
-      sum: mean * Buffer.SAMPLE_COUNT_LIMIT,
-      count: Buffer.SAMPLE_COUNT_LIMIT,
+      sum: mean * MetricsBuffer.SAMPLE_COUNT_LIMIT,
+      count: MetricsBuffer.SAMPLE_COUNT_LIMIT,
     }
   }
   return { sum, count }
@@ -110,5 +110,5 @@ function prune(buckets, now, ttl) {
   })
 }
 
-module.exports = Buffer
+module.exports = MetricsBuffer
 module.exports.rqtParts = rqtParts

@@ -1,17 +1,8 @@
 const HireFire = require(".")
 const safeLog = require("./log")
+const { presence } = require("./utility")
 
 const REQUEST_QUEUE_TIME_LIMIT = 60000
-
-function presentHeader(value) {
-  if (value == null) return null
-  const stripped = String(value).trim()
-  return stripped.length > 0 ? stripped : null
-}
-
-function resolveRequestStart(requestStart, queueStart) {
-  return presentHeader(requestStart) || presentHeader(queueStart)
-}
 
 function processRequestQueueTime(requestStart, queueStart) {
   try {
@@ -19,10 +10,7 @@ function processRequestQueueTime(requestStart, queueStart) {
       typeof requestStart === "function" ? requestStart() : requestStart
     const rawQueue =
       typeof queueStart === "function" ? queueStart() : queueStart
-    const header =
-      arguments.length >= 2
-        ? resolveRequestStart(rawStart, rawQueue)
-        : presentHeader(rawStart)
+    const header = presence(rawStart) || presence(rawQueue)
     if (!header) return
 
     const requestQueueTime = calculateRequestQueueTime(header)

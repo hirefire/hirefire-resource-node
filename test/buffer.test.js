@@ -1,11 +1,11 @@
 const { freezeTime } = require("./support")
-const Buffer = require("../src/buffer")
+const MetricsBuffer = require("../src/buffer")
 
-describe("Buffer", () => {
+describe("MetricsBuffer", () => {
   let buffer
 
   beforeEach(() => {
-    buffer = new Buffer()
+    buffer = new MetricsBuffer()
   })
 
   test("sample rqt accumulates sum and count", () => {
@@ -28,10 +28,10 @@ describe("Buffer", () => {
   test("rqt caps count at sample count limit", () => {
     freezeTime(100)
     const series = buffer._seriesFor("web", "rqt")
-    series[100] = { sum: 0, count: Buffer.SAMPLE_COUNT_LIMIT }
+    series[100] = { sum: 0, count: MetricsBuffer.SAMPLE_COUNT_LIMIT }
     buffer.sample("web", "rqt", 1)
     const bucket = buffer.flush().web.rqt[100]
-    expect(bucket.count).toBe(Buffer.SAMPLE_COUNT_LIMIT)
+    expect(bucket.count).toBe(MetricsBuffer.SAMPLE_COUNT_LIMIT)
     expect(bucket.sum).toBeCloseTo(0, 4)
   })
 
@@ -130,7 +130,7 @@ describe("Buffer", () => {
 
   test("repopulate clamps to sample count limit", () => {
     freezeTime(100)
-    const limit = Buffer.SAMPLE_COUNT_LIMIT
+    const limit = MetricsBuffer.SAMPLE_COUNT_LIMIT
     buffer.repopulate("web", "rqt", { 100: { sum: limit, count: limit } })
     buffer.repopulate("web", "rqt", { 100: { sum: 100, count: 100 } })
     const bucket = buffer.flush().web.rqt[100]
@@ -145,7 +145,7 @@ describe("Buffer", () => {
   })
 
   test("custom ttl is honored by repopulate", () => {
-    const custom = new Buffer(10)
+    const custom = new MetricsBuffer(10)
     freezeTime(100)
     custom.repopulate("web", "rqt", {
       95: { sum: 1, count: 1 },
