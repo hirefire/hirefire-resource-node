@@ -120,3 +120,13 @@ rule(
   "equivalent",
   "the character after the closing parenthesis of a stat line is a space, which the trim removes",
 )
+rule(
+  {
+    file: "src/host.js",
+    mutator: "string",
+    original: '"hirefire-resource"',
+    on: /^const KEY = /,
+  },
+  "equivalent",
+  "the name only keeps the entry of the client apart from what other code keeps in the environment data of a thread, and every name does that",
+)
