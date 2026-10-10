@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+"use strict"
+
+const fs = require("fs")
+const { execFileSync } = require("child_process")
+const { root } = require("../lib/paths")
+
+const [plan, base = "next"] = process.argv.slice(2)
+if (!plan) {
+  console.error(
+    "usage: tools/bin/check-fixes <fixes.md of the canon> [base branch]",
+  )
+  process.exit(64)
+}
+
+const STATUSES = ["open", "fixed", "closed", "server", "blocked"]
+const TOTAL = 55
+const problems = []
+
+function git(args) {
+  return execFileSync("git", args, { cwd: root, encoding: "utf8" })
+}
+
+function message(hash) {
+  try {
+    return git(["log", "-1", "--format=%B", hash])
+  } catch {
+    return null
+  }
+}
+
+const rows = fs
+  .readFileSync(plan, "utf8")
+  .split("\n")
+  .filter((line) => /^\| N-\d\d /.test(line))
+  .map((line) => {
+    const [id, subject, step, status, commit, note] = line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim())
+    return { id, subject, step, status, commit, note }
+  })
+
+if (rows.length !== TOTAL) {
+  problems.push(`the status table has ${rows.length} rows, expected ${TOTAL}`)
+}
+const listed = new Map()
+rows.forEach((row, index) => {
+  const expected = `N-${String(index + 1).padStart(2, "0")}`
+  if (row.id !== expected) problems.push(`${row.id}: expected ${expected} here`)
+  if (!STATUSES.includes(row.status)) {
+    problems.push(`${row.id}: unknown status ${JSON.stringify(row.status)}`)
+  }
+  if (row.status === "open") problems.push(`${row.id}: open`)
+  if (["closed", "blocked"].includes(row.status) && !row.note) {
+    problems.push(`${row.id}: ${row.status} without a note`)
+  }
+  const hashes = [...row.commit.matchAll(/(canon )?`([0-9a-f]{7,40})`/g)]
+    .filter((match) => !match[1])
+    .map((match) => match[2])
+  if (["fixed", "server"].includes(row.status) && hashes.length === 0) {
+    problems.push(`${row.id}: ${row.status} without a commit`)
+  }
+  for (const hash of hashes) {
+    const body = message(hash)
+    if (body === null) {
+      problems.push(`${row.id}: commit ${hash} does not exist`)
+    } else if (!body.includes(row.id)) {
+      problems.push(`${row.id}: commit ${hash} does not name the finding`)
+    }
+  }
+  listed.set(row.id, hashes)
+})
+
+const log = git(["log", "--format=%h%x00%B%x01", `${base}..HEAD`])
+for (const entry of log.split("\x01")) {
+  const [hash, body] = entry.trim().split("\x00")
+  if (!body) continue
+  const named = body.match(/^Audit findings? (.+)\.$/m)
+  if (!named) continue
+  for (const id of named[1].match(/N-\d\d/g) || []) {
+    const hashes = listed.get(id) || []
+    if (!hashes.some((listedHash) => hash.startsWith(listedHash.slice(0, 7)))) {
+      problems.push(`${id}: commit ${hash} names it and the table does not`)
+    }
+  }
+}
+
+const counts = {}
+for (const row of rows) counts[row.status] = (counts[row.status] || 0) + 1
+console.log(
+  `findings: ${rows.length}, ` +
+    STATUSES.map((status) => `${status} ${counts[status] || 0}`).join(", "),
+)
+for (const problem of problems) console.log(`PROBLEM: ${problem}`)
+console.log(problems.length ? `${problems.length} problems` : "no problems")
+process.exit(problems.length ? 1 : 0)
