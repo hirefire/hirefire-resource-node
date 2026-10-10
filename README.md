@@ -22,7 +22,7 @@ This package integrates Node.js applications running on [Heroku] with [HireFire]
 - Bull 4+ (classic OptimalBits/bull, size only, no job queue latency, needs the `ioredis` package)
 - pg-boss 10 to 12 (job queue size and latency via read-only SQL, versions 11 and 12 require Node.js 22+, needs the `pg` package)
 
-The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
+The test suite runs against the newest release of each supported major version of each runtime and library. Older versions may still work, but are not officially supported.
 
 **Processes that report:**
 
@@ -43,7 +43,7 @@ On a Heroku dyno, BullMQ and Bull samples over `rediss://` and pg-boss samples c
 
 **Types:**
 
-The package ships `.d.ts` declarations for TypeScript consumers. Native ESM named imports of macros (for example `import { jobQueueSize } from "hirefire-resource/macro/bull"`) can type-check and fail at runtime. Use the default import under ESM.
+The package ships `.d.ts` declarations for TypeScript consumers. Under native ESM the default import is the client: `import HireFire from "hirefire-resource"`. A namespace import (`import * as HireFire from "hirefire-resource"`) is not the client and has no `configure`. The macros and the error classes can be imported by name.
 
 **Documentation:**
 
