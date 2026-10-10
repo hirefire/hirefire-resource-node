@@ -1,5 +1,6 @@
 const HireFire = require("../src")
 const nock = require("nock")
+const Plan = require("../src/plan")
 
 nock.disableNetConnect()
 nock.enableNetConnect(/^127\.0\.0\.1(:|$)/)
@@ -12,6 +13,13 @@ const IDENTITY_ENV = [
   "RENDER",
   "RENDER_CPU_COUNT",
 ]
+
+const ADAPTERS = Object.getOwnPropertyDescriptors(Plan.ADAPTERS)
+
+function restoreAdapters() {
+  for (const key of Reflect.ownKeys(Plan.ADAPTERS)) delete Plan.ADAPTERS[key]
+  Object.defineProperties(Plan.ADAPTERS, ADAPTERS)
+}
 
 function silentLogger() {
   return { info() {}, warn() {}, error() {}, log() {} }
@@ -50,6 +58,7 @@ async function closeOpenHandles() {
     } catch {}
   }
   jest.restoreAllMocks()
+  restoreAdapters()
   nock.cleanAll()
   nock.abortPendingRequests()
 }
