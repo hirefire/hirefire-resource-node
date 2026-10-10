@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - CPU activity is sampled automatically on supported platforms when the process is identified.
 - `HireFire.boot()` starts metric collection when a token is set. A Heroku one-off dyno (`heroku run` and the release phase), a `cluster` primary that has forked workers, and a worker thread do not start it. `config.forceStart = true` starts it in such a primary or thread anyway. `HireFire.reset()` stops the dispatcher and clears configuration, and nothing starts again until `configure` or `boot` runs.
 - `config.token` can set the HireFire token in code. 1.x read only `HIREFIRE_TOKEN`.
-- `HIREFIRE_SERVICE_NAME` sets the process name only on platforms that do not detect it automatically. On Heroku, `DYNO` is used.
+- `HIREFIRE_SERVICE_NAME` sets the process name and overrides the name that the platform provides. On Heroku the name comes from `DYNO`, so the variable is not needed there. A Heroku config var applies to every dyno of the app, and a warning is logged when the variable and `DYNO` disagree.
 - `HIREFIRE_BULLMQ_URL` and `HIREFIRE_BULL_URL` set the Redis URL for BullMQ and classic Bull samples. `HIREFIRE_PG_BOSS_URL` and `HIREFIRE_PG_BOSS_SCHEMA` set the Postgres URL and schema for pg-boss samples.
 - `jobQueueWorking` reports how many jobs are currently in progress for BullMQ, classic Bull, and pg-boss. A job whose worker is gone counts as waiting, not as in progress: on BullMQ and classic Bull an active job without its lock, on pg-boss an active job past its expiry.
 - Classic Bull job queue size (latency is unsupported).
@@ -50,7 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The Fastify plugin works without the `fastify-plugin` package. 1.x required it and did not declare it as a dependency.
 - BullMQ `jobQueueSize` includes paused and prioritized jobs (1.x omitted both).
 - HTTP requests to HireFire time out within five seconds even when DNS never completes.
-- BullMQ samples fail within five seconds when Redis does not respond.
+- BullMQ samples fail within ten seconds when Redis does not respond.
 - BullMQ samples with no queue names use Redis `SCAN` instead of `KEYS`.
 - An ioredis client passed as `connection` to a BullMQ sample reads the Redis of that client. 1.x read `localhost:6379`.
 
