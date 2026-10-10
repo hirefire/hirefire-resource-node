@@ -66,9 +66,28 @@ function sh(command, args, options = {}) {
   return execFileSync(command, args, { encoding: "utf8", ...options })
 }
 
+function failedTests(report, cwd) {
+  if (!fs.existsSync(report)) return []
+  const failed = []
+  for (const suite of JSON.parse(fs.readFileSync(report, "utf8")).testResults) {
+    const file = path.relative(cwd, suite.name)
+    if (suite.status === "failed" && suite.assertionResults.length === 0) {
+      failed.push(`${file}: (suite did not run)`)
+    }
+    for (const assertion of suite.assertionResults) {
+      if (assertion.status === "failed") {
+        failed.push(`${file}: ${assertion.fullName}`)
+      }
+    }
+  }
+  return failed
+}
+
 function jest(cwd, args, { timeout, guard }) {
   return new Promise((resolve) => {
     const started = Date.now()
+    const report = path.join(cwd, "tools-jest-report.json")
+    fs.rmSync(report, { force: true })
     const env = {
       ...process.env,
       PATH: `${path.dirname(node)}:${process.env.PATH}`,
@@ -89,6 +108,8 @@ function jest(cwd, args, { timeout, guard }) {
         )}`,
         "--forceExit",
         "--ci",
+        "--json",
+        `--outputFile=${report}`,
         ...args,
       ],
       {
@@ -107,7 +128,12 @@ function jest(cwd, args, { timeout, guard }) {
     }, timeout)
     child.on("close", (code) => {
       clearTimeout(timer)
-      resolve({ code, timedOut, seconds: (Date.now() - started) / 1000 })
+      resolve({
+        code,
+        timedOut,
+        seconds: (Date.now() - started) / 1000,
+        failed: code === 0 || timedOut ? [] : failedTests(report, cwd),
+      })
     })
   })
 }
@@ -403,6 +429,7 @@ async function run() {
       if (result.code !== 0) {
         outcome.status = "killed"
         outcome.by = outcome.ran[outcome.ran.length - 1]
+        outcome.test = result.failed[0] || null
         break
       }
     }
