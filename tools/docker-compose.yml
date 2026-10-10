@@ -2,30 +2,6 @@ services:
   redis:
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
-  redis-tls:
-    profiles: ["tls"]
-    image: redis:7
-    command:
-      - redis-server
-      - --port
-      - "0"
-      - --tls-port
-      - "6379"
-      - --tls-cert-file
-      - /tls/redis.crt
-      - --tls-key-file
-      - /tls/redis.key
-      - --tls-ca-cert-file
-      - /tls/ca.crt
-      - --tls-auth-clients
-      - "no"
-      - --save
-      - ""
-    ports:
-      - "127.0.0.1::6379"
-    volumes:
-      - ./tools/results/tls:/tls:ro
-
   hosts:
     profiles: ["hosts"]
     build:

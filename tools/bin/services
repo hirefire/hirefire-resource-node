@@ -39,31 +39,13 @@ case "${1:-}" in
     bin/services up
     ;;
   env) slot_env "${2:?slot}" ;;
-  tls)
-    mkdir -p tools/results/tls
-    if [ ! -f tools/results/tls/redis.crt ]; then
-      (
-        cd tools/results/tls
-        openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=tools-ca" \
-          -keyout ca.key -out ca.crt 2>/dev/null
-        openssl req -newkey rsa:2048 -nodes -subj "/CN=127.0.0.1" \
-          -keyout redis.key -out redis.csr 2>/dev/null
-        printf 'subjectAltName=IP:127.0.0.1' > san.cnf
-        openssl x509 -req -in redis.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
-          -days 30 -extfile san.cnf -out redis.crt 2>/dev/null
-        chmod 644 redis.key
-      )
-    fi
-    compose --profile tls up -d redis-tls >&2
-    compose --profile tls port redis-tls 6379 | cut -d: -f2
-    ;;
   status) compose ps ;;
   down)
     compose down
     rm -f .env
     ;;
   *)
-    echo "usage: tools/bin/services {up|env <slot>|tls|status|down}" >&2
+    echo "usage: tools/bin/services {up|env <slot>|status|down}" >&2
     exit 1
     ;;
 esac

@@ -6,7 +6,7 @@ Run every script from the repository root with the first Node.js of `.tool-versi
 
 | Path                    | Holds                                                                                                                               |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `bin/services`          | Starts the test services with one Redis per slot, and a Redis with TLS for one evidence script                                      |
+| `bin/services`          | Starts the test services with one Redis per slot                                                                                    |
 | `bin/sandbox`           | Copies the tree to a throwaway directory. `bin/cell-sandbox` also installs the packages of a cell                                   |
 | `bin/matrix-run`        | Runs every cell through `bin/run-cell`, with coverage or in random order with a seed                                                |
 | `bin/matrix-repeat`     | Runs the matrix several times, each with its own seed                                                                               |
