@@ -2,6 +2,7 @@ const crypto = require("crypto")
 const { Client, RequestError } = require("./client")
 const FailureLog = require("./dispatcher/failure_log")
 const Identity = require("./identity")
+const { presence } = require("./utility")
 
 class Lease {
   static TTL_BOUNDS = [5, 3600]
@@ -59,7 +60,7 @@ class Lease {
 
     this._expiresAt = performance.now() + this._ttl * 1000
     const response = await this._fetch()
-    if (!response) return false
+    if (response.unauthorized) return false
 
     const granted = response.headers["hirefire-lease-granted"] === "true"
     const grant = granted ? this._parseGrantBody(response.body) : emptyGrant()
@@ -84,7 +85,7 @@ class Lease {
     if (response.ok) return response
 
     this._clearGrant()
-    if (response.unauthorized) return null
+    if (response.unauthorized) return response
     throw new RequestError(
       `Lease request failed with ${response.status} status.`,
     )
@@ -160,7 +161,7 @@ class Lease {
   }
 
   _planEntries(entries) {
-    const valid = entries.map(normalizeEntry).filter(Boolean)
+    const valid = entries.flatMap(planEntry)
     const invalid = entries.length - valid.length
 
     if (valid.length > Lease.MAX_JOB_QUEUES) {
@@ -186,20 +187,18 @@ class Lease {
   }
 }
 
-function normalizeEntry(entry) {
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null
-
-  const name = String(entry.name ?? "").trim()
-  const strategy = String(entry.strategy ?? "").trim()
+function planEntry(entry) {
+  const name = presence(entry?.name)
+  const strategy = presence(entry?.strategy)
   if (!name || !strategy || Buffer.byteLength(name) > Identity.MAX_NAME_BYTES) {
-    return null
+    return []
   }
 
   const normalized = { ...entry, name, strategy }
   if (Object.hasOwn(entry, "adapter")) {
     normalized.adapter = String(entry.adapter ?? "").trim()
   }
-  return normalized
+  return [normalized]
 }
 
 function emptyGrant(trace = false) {

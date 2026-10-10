@@ -42,14 +42,41 @@ describe("Lease", () => {
     expect(lease.processId).toBe(lease.processId)
   })
 
-  test("not granted by default", () => {
+  async function requested(second) {
+    freezeTime(second)
+    const scope = grant()
+    await lease.requestIfDue({ hold: holdTrue })
+    const sent = scope.isDone()
+    nock.cleanAll()
+    return sent
+  }
+
+  async function sampled(second) {
+    if (second !== undefined) freezeTime(second)
+    let ran = false
+    await lease.sampleIfDue(() => {
+      ran = true
+    })
+    return ran
+  }
+
+  test("holds no grant, no plan, and no trace before its first request", () => {
     expect(lease.granted()).toBe(false)
+    expect(lease.jobQueues).toEqual([])
+    expect(lease.trace()).toBe(false)
   })
 
   test("granted after successful poll", async () => {
     grant()
     await lease.requestIfDue({ hold: holdTrue })
     expect(lease.granted()).toBe(true)
+    expect(lease.jobQueues).toEqual([])
+    expect(lease.trace()).toBe(false)
+  })
+
+  test("its bounds are 5 seconds to an hour for the ttl and 1 second to an hour for a sample", () => {
+    expect(Lease.TTL_BOUNDS).toEqual([5, 3600])
+    expect(Lease.SAMPLE_FREQUENCY_BOUNDS).toEqual([1, 3600])
   })
 
   test("denied after poll", async () => {
@@ -70,10 +97,20 @@ describe("Lease", () => {
     expect(lease.sampleFrequency).toBe(30)
   })
 
-  test("updates ttl from response", async () => {
+  test("asks again after the ttl of the response, not before", async () => {
     grant({ "HireFire-Lease-Granted": "false", "HireFire-Lease-TTL": "30" })
     await lease.requestIfDue({ hold: holdTrue })
-    expect(lease._ttl).toBe(30)
+
+    expect(await requested(1029.999)).toBe(false)
+    expect(await requested(1030)).toBe(true)
+  })
+
+  test("asks again 15 seconds after its first request when no ttl was sent", async () => {
+    grant({ "HireFire-Lease-Granted": "false" })
+    await lease.requestIfDue({ hold: holdTrue })
+
+    expect(await requested(1014.999)).toBe(false)
+    expect(await requested(1015)).toBe(true)
   })
 
   test("not polled before interval elapsed", async () => {
@@ -100,8 +137,98 @@ describe("Lease", () => {
 
   test("silently denied on unauthorized", async () => {
     nock(BASE).post("/metrics/lease").reply(401)
-    await lease.requestIfDue({ hold: holdTrue })
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(false)
     expect(lease.granted()).toBe(false)
+  })
+
+  test("answers true for a request the server answered, granted or not, and false while none is due", async () => {
+    grant({ "HireFire-Lease-Granted": "false" })
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(true)
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(false)
+
+    freezeTime(1015)
+    grant()
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(true)
+  })
+
+  test("a denied lease has no plan and no trace, whatever its body says", async () => {
+    grant(
+      { "HireFire-Lease-Granted": "false" },
+      JSON.stringify({
+        trace: true,
+        job_queues: [{ name: "worker", strategy: "jqs" }],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+
+    expect(lease.jobQueues).toEqual([])
+    expect(lease.trace()).toBe(false)
+  })
+
+  test("a plan entry that is not an object with a name and a strategy is skipped", async () => {
+    grant(
+      { "HireFire-Lease-Granted": "true" },
+      JSON.stringify({
+        job_queues: [
+          null,
+          7,
+          "worker",
+          ["worker", "jqs"],
+          { name: "worker", strategy: "jqs" },
+        ],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+
+    expect(lease.jobQueues).toEqual([{ name: "worker", strategy: "jqs" }])
+  })
+
+  test("a name of 128 bytes is kept and one of 129 bytes is skipped", async () => {
+    grant(
+      { "HireFire-Lease-Granted": "true" },
+      JSON.stringify({
+        job_queues: [
+          { name: "a".repeat(128), strategy: "jqs" },
+          { name: "a".repeat(129), strategy: "jqs" },
+          { name: "é".repeat(64), strategy: "jqs" },
+          { name: "é".repeat(64) + "a", strategy: "jqs" },
+        ],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+
+    expect(lease.jobQueues.map((entry) => entry.name)).toEqual([
+      "a".repeat(128),
+      "é".repeat(64),
+    ])
+  })
+
+  test("a plan entry keeps its fields, with its name, strategy, and adapter trimmed", async () => {
+    grant(
+      { "HireFire-Lease-Granted": "true" },
+      JSON.stringify({
+        job_queues: [
+          {
+            name: " worker ",
+            strategy: " jqs ",
+            adapter: " bullmq ",
+            queues: ["default"],
+          },
+          { name: 7, strategy: "jql" },
+        ],
+      }),
+    )
+    await lease.requestIfDue({ hold: holdTrue })
+
+    expect(lease.jobQueues).toEqual([
+      {
+        name: "worker",
+        strategy: "jqs",
+        adapter: "bullmq",
+        queues: ["default"],
+      },
+      { name: "7", strategy: "jql" },
+    ])
   })
 
   test("revokes granted lease on unauthorized", async () => {
@@ -123,10 +250,9 @@ describe("Lease", () => {
       RequestError,
     )
     expect(lease.granted()).toBe(false)
-    expect(lease._expiresAt).toBe(1015000)
 
-    await lease.requestIfDue({ hold: holdTrue })
-    expect(nock.isDone()).toBe(true)
+    expect(await requested(1014.999)).toBe(false)
+    expect(await requested(1015)).toBe(true)
   })
 
   test("raises on server error", async () => {
@@ -155,17 +281,39 @@ describe("Lease", () => {
     expect(lease.granted()).toBe(false)
     expect(lease.jobQueues).toEqual([])
     expect(lease.processId).not.toBe(before)
-    expect(lease._expiresAt).toBe(1030000)
+
+    expect(await requested(1029.999)).toBe(false)
+    expect(await requested(1030)).toBe(true)
   })
 
-  test("sample frequency decrease pulls next sample forward", async () => {
+  test("a grant the process can no longer sample is given up with its plan and its trace", async () => {
+    const body = JSON.stringify({
+      trace: true,
+      job_queues: [{ name: "default", strategy: "jqs", adapter: "bullmq" }],
+    })
+    grant({ "HireFire-Lease-Granted": "true" }, body)
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(lease.granted()).toBe(true)
+    expect(lease.trace()).toBe(true)
+    const before = lease.processId
+
+    freezeTime(1015)
+    grant({ "HireFire-Lease-Granted": "true" }, body)
+    await lease.requestIfDue({ hold: () => false })
+
+    expect(lease.granted()).toBe(false)
+    expect(lease.jobQueues).toEqual([])
+    expect(lease.trace()).toBe(false)
+    expect(lease.processId).not.toBe(before)
+  })
+
+  test("a lower sample frequency pulls the next sample forward to exactly that many seconds", async () => {
     grant({
       "HireFire-Lease-Granted": "true",
       "HireFire-Sample-Frequency": "30",
     })
     await lease.requestIfDue({ hold: holdTrue })
-    await lease.sampleIfDue(() => {})
-    const late = lease._nextSampleAt
+    expect(await sampled()).toBe(true)
 
     freezeTime(1015)
     grant({
@@ -173,8 +321,29 @@ describe("Lease", () => {
       "HireFire-Sample-Frequency": "5",
     })
     await lease.requestIfDue({ hold: holdTrue })
-    expect(lease._nextSampleAt).toBeLessThan(late)
+
     expect(lease.sampleFrequency).toBe(5)
+    expect(await sampled(1019.999)).toBe(false)
+    expect(await sampled(1020)).toBe(true)
+  })
+
+  test("a higher sample frequency does not push the next sample back", async () => {
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "30",
+    })
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(await sampled()).toBe(true)
+
+    freezeTime(1015)
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "60",
+    })
+    await lease.requestIfDue({ hold: holdTrue })
+
+    expect(await sampled(1029.999)).toBe(false)
+    expect(await sampled(1030)).toBe(true)
   })
 
   test("demote clears the grant, keeps the identity, and makes the next request due", async () => {
@@ -291,23 +460,42 @@ describe("Lease", () => {
     })
   })
 
-  test("regrant rearms next sample immediately", async () => {
+  test("a grant after a time without one samples at once", async () => {
     grant({
       "HireFire-Lease-Granted": "true",
       "HireFire-Sample-Frequency": "30",
     })
     await lease.requestIfDue({ hold: holdTrue })
-    await lease.sampleIfDue(() => {})
-    expect(lease._nextSampleAt).toBeGreaterThan(performance.now())
+    expect(await sampled()).toBe(true)
+    expect(await sampled(1010)).toBe(false)
 
-    freezeTime(1030)
+    lease.demote()
     grant({
       "HireFire-Lease-Granted": "true",
       "HireFire-Sample-Frequency": "30",
     })
-    lease.demote()
     await lease.requestIfDue({ hold: holdTrue })
-    expect(lease._nextSampleAt).toBe(performance.now())
+
+    expect(await sampled()).toBe(true)
+  })
+
+  test("a renewed grant keeps its sample window", async () => {
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "30",
+    })
+    await lease.requestIfDue({ hold: holdTrue })
+    expect(await sampled()).toBe(true)
+
+    freezeTime(1015)
+    grant({
+      "HireFire-Lease-Granted": "true",
+      "HireFire-Sample-Frequency": "30",
+    })
+    await lease.requestIfDue({ hold: holdTrue })
+
+    expect(await sampled()).toBe(false)
+    expect(await sampled(1030)).toBe(true)
   })
 
   test("parses hyphenated job queue name", async () => {
@@ -537,6 +725,12 @@ describe("Lease", () => {
       expect(lease.jobQueues).toHaveLength(256)
     })
 
+    test("names one invalid entry beside the cut", async () => {
+      expect(await request(257, 1)).toEqual([
+        "[HireFire] Lease plan truncated to 256 job queue entries (1 invalid also skipped).",
+      ])
+    })
+
     test("cuts nothing when the valid entries fit, however many were sent", async () => {
       expect(await request(250, 10)).toEqual([
         "[HireFire] Lease plan skipped 10 invalid job queue entries.",
@@ -592,6 +786,7 @@ describe("Lease", () => {
     await lease.requestIfDue({ hold: holdTrue })
     expect(lease.granted()).toBe(true)
     expect(lease.jobQueues).toEqual([])
+    expect(lease.trace()).toBe(false)
   })
 
   test("sample if due yields when granted and due", async () => {
@@ -705,7 +900,7 @@ describe("Lease", () => {
       "HireFire-Sample-Frequency": "99999",
     })
     await lease.requestIfDue({ hold: holdTrue })
-    expect(lease.sampleFrequency).toBe(Lease.SAMPLE_FREQUENCY_BOUNDS[1])
+    expect(lease.sampleFrequency).toBe(3600)
   })
 
   test.each(["0", "abc", "15abc", "1.5", "-5"])(
@@ -741,7 +936,9 @@ describe("Lease", () => {
       "HireFire-Lease-TTL": "99999",
     })
     await lease.requestIfDue({ hold: holdTrue })
-    expect(lease._ttl).toBe(Lease.TTL_BOUNDS[1])
+
+    expect(await requested(4599.999)).toBe(false)
+    expect(await requested(4600)).toBe(true)
   })
 
   test("close ends the connections of its client", async () => {
@@ -764,6 +961,8 @@ describe("Lease", () => {
     await lease.requestIfDue({ hold: holdTrue })
     expect(lease.granted()).toBe(false)
     expect(lease.sampleFrequency).toBe(15)
+    expect(await requested(1014.999)).toBe(false)
+    expect(await requested(1015)).toBe(true)
   })
 
   test("unauthorized clears prior job queues", async () => {
