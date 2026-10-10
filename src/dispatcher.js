@@ -4,6 +4,7 @@ const Once = require("./once")
 const Plan = require("./plan")
 const Sampler = require("./sampler")
 const Payload = require("./dispatcher/payload")
+const FailureLog = require("./dispatcher/failure_log")
 const safeLog = require("./log")
 const { formatError, verbose } = safeLog
 const { RQT } = require("./strategy")
@@ -12,6 +13,7 @@ class Dispatcher {
   static PAYLOAD_SIZE_LIMIT = 131072
   static DEFAULT_DISPATCH_FREQUENCY = 1
   static MAX_DISPATCH_FREQUENCY = 30
+  static BACKOFF_DOUBLINGS = 5
   static JOIN_TIMEOUT = 5
 
   constructor(configuration) {
@@ -31,8 +33,7 @@ class Dispatcher {
     this._jobLoopPromise = null
     this._retiredLoops = new Set()
     this._stopJoinTimeoutMs = Dispatcher.JOIN_TIMEOUT * 1000
-    this._once = new Once(configuration)
-    this._sampler = new Sampler(configuration)
+    this._resetSessionState()
   }
 
   start() {
@@ -285,11 +286,14 @@ class Dispatcher {
     const live = this._loopLive(generation)
     if (!live()) return
 
-    await this._guard(() =>
-      this._lease.requestIfDue({
-        hold: (plan) => this._sampler.canSample(plan),
-      }),
-    )
+    try {
+      const hold = (plan) => this._sampler.canSample(plan)
+      if (await this._lease.requestIfDue({ hold })) {
+        this._leaseFailures.recovered()
+      }
+    } catch (error) {
+      this._leaseFailures.failed(error)
+    }
     if (!live()) return
 
     await this._guard(() =>
@@ -302,8 +306,16 @@ class Dispatcher {
     this._lastRqtSecond = null
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
     this._pendingSampleTrace = null
-    this._once = new Once(this._configuration)
-    this._sampler = new Sampler(this._configuration)
+    this._resetSessionState()
+  }
+
+  _resetSessionState() {
+    const configuration = this._configuration
+    this._once = new Once(configuration)
+    this._sampler = new Sampler(configuration)
+    this._dispatchFailures = new FailureLog("Dispatch", configuration)
+    this._leaseFailures = new FailureLog("Lease request", configuration)
+    this._payloadDrops = new FailureLog("Metrics payload", configuration)
   }
 
   _enterRace() {
@@ -328,8 +340,19 @@ class Dispatcher {
 
     await this._dispatch(generation)
     if (generation == null || this._loopActive(generation)) {
-      this._nextDispatchAt = performance.now() + this._dispatchFrequency * 1000
+      this._nextDispatchAt = performance.now() + this._dispatchInterval() * 1000
     }
+  }
+
+  _dispatchInterval() {
+    const doublings = Math.min(
+      this._dispatchFailures.count,
+      Dispatcher.BACKOFF_DOUBLINGS,
+    )
+    return Math.min(
+      this._dispatchFrequency * 2 ** doublings,
+      Dispatcher.MAX_DISPATCH_FREQUENCY,
+    )
   }
 
   async _guard(fn) {
@@ -387,10 +410,13 @@ class Dispatcher {
 
       this._applyDispatchFrequency(response)
       if (response.tooLarge) {
-        return this._dropOversizedPayload(body, watermark, true)
+        this._dropOversizedPayload(body, watermark, true)
+      } else {
+        if (watermark !== null) this._lastRqtSecond = watermark
+        this._pendingSampleTrace = null
+        this._payloadDrops.recovered()
       }
-      if (watermark !== null) this._lastRqtSecond = watermark
-      this._pendingSampleTrace = null
+      this._dispatchFailures.recovered()
     } catch (error) {
       if (
         data &&
@@ -400,7 +426,7 @@ class Dispatcher {
       ) {
         this._repopulateRqt(data)
       }
-      this._logger().error(`[HireFire] Dispatch error: ${formatError(error)}`)
+      this._dispatchFailures.failed(error)
     }
   }
 
@@ -433,10 +459,9 @@ class Dispatcher {
     const source = server
       ? "server rejected (413)"
       : `exceeds the ${Dispatcher.PAYLOAD_SIZE_LIMIT}-byte limit`
-    this._logger().error(
-      `[HireFire] Dropped metrics payload: ${Buffer.byteLength(
-        body,
-      )} bytes ${source}. ` + `Resuming from the current second.`,
+    this._payloadDrops.record(
+      `Dropped metrics payload: ${Buffer.byteLength(body)} bytes ${source}. ` +
+        "Resuming from the current second.",
     )
   }
 

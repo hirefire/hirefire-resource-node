@@ -169,21 +169,27 @@ describe("the client at its boundary", () => {
     })
 
     test("sends the seconds of a failed dispatch again with the next one", async () => {
-      let fail = true
+      let fail = false
       answers.ingest = () => (fail ? [500] : [200])
       configure()
-      HireFire.configuration.buffer.sample("web", "rqt", 80)
       await pass(0)
-      fail = false
+      fail = true
+      HireFire.configuration.buffer.sample("web", "rqt", 80)
       await pass(1)
+      fail = false
+      await pass(2)
 
-      expect(requests[1].body[0].metrics.rqt).toEqual({
+      expect(at("ingest")).toEqual([0, 1, 3])
+      expect(requests[2].body[0].metrics.rqt).toEqual({
         [START]: [80, 1],
         [START + 1]: [],
+        [START + 2]: [],
+        [START + 3]: [],
       })
       expect(logged("E")).toEqual([
         "E [HireFire] Dispatch error: RequestError: Ingest request failed with 500 status.",
       ])
+      expect(logged("I")).toEqual(["I [HireFire] Starting dispatcher."])
     })
 
     test("a stop sends what is buffered and nothing after it", async () => {
@@ -257,27 +263,58 @@ describe("the client at its boundary", () => {
       ])
     })
 
-    test("a dispatch that cannot reach the server is logged and tried again a second later", async () => {
+    test("a dispatch that fails waits twice as long before each next try, up to 30 seconds, and logs one line a minute", async () => {
       let down = true
       answers.ingest = () =>
         down
           ? Object.assign(new Error("refused"), { code: "ECONNREFUSED" })
           : [200]
       configure()
-      HireFire.configuration.buffer.sample("web", "rqt", 80)
-      await pass(1)
-      down = false
-      await pass(1)
+      await pass(60)
 
-      expect(at("ingest")).toEqual([0, 1, 2])
-      expect(requests[2].body[0].metrics.rqt).toEqual({
-        [START]: [80, 1],
-        [START + 2]: [],
-      })
-      expect(logged("E")).toHaveLength(2)
-      expect(logged("E")[0]).toBe(
+      expect(at("ingest")).toEqual([0, 2, 6, 14, 30, 60])
+      expect(logged("E")).toEqual([
         "E [HireFire] Dispatch error: RequestError: Network error (ECONNREFUSED: refused).",
-      )
+        "E [HireFire] Dispatch error: RequestError: Network error (ECONNREFUSED: refused). (6 failed attempts in a row)",
+      ])
+
+      down = false
+      await pass(32)
+
+      expect(at("ingest")).toEqual([0, 2, 6, 14, 30, 60, 90, 91, 92])
+      expect(logged("E")).toHaveLength(2)
+      expect(logged("I")).toEqual([
+        "I [HireFire] Starting dispatcher.",
+        "I [HireFire] Dispatch recovered after 6 failed attempts.",
+      ])
+    })
+
+    test("a dispatch that fails once is tried again two seconds later and its recovery is not logged", async () => {
+      let down = true
+      answers.ingest = () => (down ? [503] : [200])
+      configure()
+      await pass(0)
+      down = false
+      await pass(4)
+
+      expect(at("ingest")).toEqual([0, 2, 3, 4])
+      expect(logged("I")).toEqual(["I [HireFire] Starting dispatcher."])
+    })
+
+    test("a server that keeps calling the payload too large is logged once a minute with a count", async () => {
+      answers.ingest = () => [413]
+      configure()
+      await pass(60)
+
+      expect(at("ingest")).toHaveLength(61)
+      expect(logged("E")).toEqual([
+        `E [HireFire] Dropped metrics payload: ${
+          JSON.stringify(requests[0].body).length
+        } bytes server rejected (413). Resuming from the current second.`,
+        `E [HireFire] Dropped metrics payload: ${
+          JSON.stringify(requests[60].body).length
+        } bytes server rejected (413). Resuming from the current second. (61 failed attempts in a row)`,
+      ])
     })
 
     test("keeps at most the last 60 seconds for a server that was away", async () => {
@@ -388,12 +425,10 @@ describe("the client at its boundary", () => {
       configure((config) => config.dyno("worker", () => 1))
       await pass(1)
 
-      expect(new Set(logged("E"))).toEqual(
-        new Set([
-          "E [HireFire] RequestError: HIREFIRE_DATA_URL must be an http or https URL with a host.",
-          "E [HireFire] Dispatch error: RequestError: HIREFIRE_DATA_URL must be an http or https URL with a host.",
-        ]),
-      )
+      expect(logged("E").sort()).toEqual([
+        "E [HireFire] Dispatch error: RequestError: HIREFIRE_DATA_URL must be an http or https URL with a host.",
+        "E [HireFire] Lease request error: RequestError: HIREFIRE_DATA_URL must be an http or https URL with a host.",
+      ])
       expect(requests).toEqual([])
     })
   })
@@ -500,7 +535,7 @@ describe("the client at its boundary", () => {
 
       expect(sampler).not.toHaveBeenCalled()
       expect(logged("E")).toEqual([
-        "E [HireFire] RequestError: Response body exceeded 131072 bytes (status 200).",
+        "E [HireFire] Lease request error: RequestError: Response body exceeded 131072 bytes (status 200).",
       ])
     })
 
@@ -686,15 +721,24 @@ describe("the client at its boundary", () => {
       expect(logged("E")).toEqual([])
     })
 
-    test("a lease request that fails is logged and asked again when the lease would run out", async () => {
-      answers.lease = () => [500]
+    test("a lease request that fails is asked again when the lease would run out and logged once a minute", async () => {
+      let down = true
+      answers.lease = () => (down ? [500] : [200, "", denied()])
       configure((config) => config.dyno("worker", () => 7))
-      await pass(16)
+      await pass(61)
 
-      expect(at("lease")).toEqual([0, 15])
+      expect(at("lease")).toEqual([0, 15, 30, 45, 60])
       expect(logged("E")).toEqual([
-        "E [HireFire] RequestError: Lease request failed with 500 status.",
-        "E [HireFire] RequestError: Lease request failed with 500 status.",
+        "E [HireFire] Lease request error: RequestError: Lease request failed with 500 status.",
+        "E [HireFire] Lease request error: RequestError: Lease request failed with 500 status. (5 failed attempts in a row)",
+      ])
+
+      down = false
+      await pass(15)
+
+      expect(logged("I")).toEqual([
+        "I [HireFire] Starting dispatcher.",
+        "I [HireFire] Lease request recovered after 5 failed attempts.",
       ])
     })
 

@@ -176,7 +176,7 @@ describe("Lease", () => {
     expect(lease.sampleFrequency).toBe(5)
   })
 
-  test("demote clears grant and invalidates inflight epoch", async () => {
+  test("demote clears the grant, keeps the identity, and makes the next request due", async () => {
     grant()
     await lease.requestIfDue({ hold: holdTrue })
     const id = lease.processId
@@ -184,40 +184,110 @@ describe("Lease", () => {
     expect(lease.processId).toBe(id)
     expect(lease.granted()).toBe(false)
     expect(lease.jobQueues).toEqual([])
+
+    grant()
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(true)
+    expect(lease.granted()).toBe(true)
   })
 
-  test("demote during inflight request discards late grant", async () => {
-    let release
-    const gate = new Promise((resolve) => {
-      release = resolve
-    })
-    nock(BASE)
-      .post("/metrics/lease")
-      .reply(async () => {
-        await gate
-        return [
-          200,
-          JSON.stringify({
-            version: 1,
-            job_queues: [{ name: "q", strategy: "jqs" }],
-          }),
-          {
-            "HireFire-Lease-Granted": "true",
-            "HireFire-Sample-Frequency": "30",
-            "HireFire-Lease-TTL": "120",
-          },
-        ]
-      })
+  test("a request tells whether a response was applied", async () => {
+    grant()
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(true)
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(false)
 
-    const pending = lease.requestIfDue({ hold: holdTrue })
-    await Promise.resolve()
-    lease.demote()
-    release()
-    await pending
-    expect(lease.granted()).toBe(false)
-    expect(lease.jobQueues).toEqual([])
-    expect(lease.sampleFrequency).toBe(15)
-    expect(lease._ttl).toBe(15)
+    freezeTime(1015)
+    grant({ "HireFire-Lease-Granted": "false" })
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(true)
+
+    freezeTime(1030)
+    grant()
+    expect(await lease.requestIfDue({ hold: () => false })).toBe(true)
+
+    freezeTime(1045)
+    nock(BASE).post("/metrics/lease").reply(401)
+    expect(await lease.requestIfDue({ hold: holdTrue })).toBe(false)
+  })
+
+  describe("a plan that the client cannot read", () => {
+    let lines
+
+    beforeEach(() => {
+      lines = []
+      lease = new Lease(
+        configuration({
+          info: (message) => lines.push(`I ${message}`),
+          error: (message) => lines.push(`E ${message}`),
+        }),
+      )
+    })
+
+    async function requestAt(seconds, body) {
+      freezeTime(seconds)
+      grant(
+        { "HireFire-Lease-Granted": "true", "HireFire-Lease-TTL": "5" },
+        body,
+      )
+      await lease.requestIfDue({ hold: holdTrue })
+    }
+
+    test.each([
+      ["not-json", "was not valid JSON"],
+      ["[]", "was not a JSON object"],
+      ["null", "was not a JSON object"],
+      ["7", "was not a JSON object"],
+      ['{"job_queues":{}}', "job_queues was not an array"],
+      ["{}", "job_queues was not an array"],
+    ])(
+      "the body %s is ignored with one line that says it %s",
+      async (body, reason) => {
+        await requestAt(1000, body)
+
+        expect(lease.granted()).toBe(true)
+        expect(lease.jobQueues).toEqual([])
+        expect(lines).toEqual([
+          `E [HireFire] Lease grant body ${reason}. Plan ignored.`,
+        ])
+      },
+    )
+
+    test("is logged at once, then once a minute with a count, and a plan it can read is logged as the recovery", async () => {
+      for (let second = 1000; second <= 1060; second += 5) {
+        await requestAt(second, "not-json")
+      }
+      expect(lines).toEqual([
+        "E [HireFire] Lease grant body was not valid JSON. Plan ignored.",
+        "E [HireFire] Lease grant body was not valid JSON. Plan ignored. (13 failed attempts in a row)",
+      ])
+
+      await requestAt(1065, JSON.stringify({ job_queues: [] }))
+      expect(lines[2]).toBe(
+        "I [HireFire] Lease plan recovered after 13 failed attempts.",
+      )
+
+      await requestAt(1070, "not-json")
+      expect(lines).toHaveLength(4)
+    })
+
+    test("an empty body ends a run of problems, and the body of a denied lease is not read", async () => {
+      await requestAt(1000, "not-json")
+      await requestAt(1005, "not-json")
+      await requestAt(1010, "")
+      expect(lines[1]).toBe(
+        "I [HireFire] Lease plan recovered after 2 failed attempts.",
+      )
+
+      freezeTime(1015)
+      grant({ "HireFire-Lease-Granted": "false" }, "not-json")
+      await lease.requestIfDue({ hold: holdTrue })
+      expect(lines).toHaveLength(2)
+    })
+
+    test("keeps the trace flag of a body whose plan it ignores", async () => {
+      await requestAt(1000, '{"trace":true,"job_queues":"all"}')
+
+      expect(lease.trace()).toBe(true)
+      expect(lease.jobQueues).toEqual([])
+    })
   })
 
   test("regrant rearms next sample immediately", async () => {
@@ -836,25 +906,6 @@ describe("Lease", () => {
     )
   })
 
-  test("ignores transport error from demoted request", async () => {
-    let rejectRequest
-    lease._client.requestLease = jest.fn(
-      () =>
-        new Promise((_resolve, reject) => {
-          rejectRequest = reject
-        }),
-    )
-
-    const pending = lease.requestIfDue({ hold: holdTrue })
-    await Promise.resolve()
-    lease.demote()
-    rejectRequest(new RequestError("late transport failure"))
-
-    await expect(pending).resolves.toBeUndefined()
-    expect(lease.granted()).toBe(false)
-    expect(lease.jobQueues).toEqual([])
-  })
-
   test("hold false does not re request before ttl", async () => {
     grant(
       {
@@ -867,73 +918,6 @@ describe("Lease", () => {
     await lease.requestIfDue({ hold: () => false })
     await lease.requestIfDue({ hold: () => false })
     expect(nock.isDone()).toBe(true)
-  })
-
-  test("demote during inflight discards grant", async () => {
-    let release
-    const gate = new Promise((resolve) => {
-      release = resolve
-    })
-    nock(BASE)
-      .post("/metrics/lease")
-      .reply(async () => {
-        await gate
-        return [
-          200,
-          JSON.stringify({
-            version: 1,
-            job_queues: [{ name: "q", strategy: "jqs" }],
-          }),
-          {
-            "HireFire-Lease-Granted": "true",
-            "HireFire-Sample-Frequency": "15",
-          },
-        ]
-      })
-
-    const pending = lease.requestIfDue({ hold: holdTrue })
-    await Promise.resolve()
-    lease.demote()
-    release()
-    await pending
-    expect(lease.granted()).toBe(false)
-    expect(lease.jobQueues).toEqual([])
-  })
-
-  test("demote during parsing or hold discards grant", async () => {
-    lease._client.requestLease = jest
-      .fn()
-      .mockResolvedValue(
-        new Response(200, { "hirefire-lease-granted": "true" }, ""),
-      )
-    jest.spyOn(lease, "_parseGrantBody").mockImplementation(() => {
-      lease.demote()
-      return { job_queues: [{ name: "q", strategy: "jqs" }], trace: true }
-    })
-
-    await lease.requestIfDue({ hold: holdTrue })
-    expect(lease.granted()).toBe(false)
-    expect(lease.jobQueues).toEqual([])
-
-    const heldLease = new Lease(configuration())
-    heldLease._client.requestLease = jest
-      .fn()
-      .mockResolvedValue(
-        new Response(200, { "hirefire-lease-granted": "true" }, ""),
-      )
-    jest.spyOn(heldLease, "_parseGrantBody").mockReturnValue({
-      job_queues: [{ name: "q", strategy: "jqs" }],
-      trace: false,
-    })
-
-    await heldLease.requestIfDue({
-      hold: () => {
-        heldLease.demote()
-        return true
-      },
-    })
-    expect(heldLease.granted()).toBe(false)
-    expect(heldLease.jobQueues).toEqual([])
   })
 
   test("parse preserves queues and options", async () => {

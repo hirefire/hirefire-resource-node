@@ -1,17 +1,17 @@
 const crypto = require("crypto")
 const { Client, RequestError } = require("./client")
+const FailureLog = require("./dispatcher/failure_log")
 const Identity = require("./identity")
-const safeLog = require("./log")
 
 class Lease {
-  static SAMPLE_FREQUENCY_BOUNDS = [1, 3600]
   static TTL_BOUNDS = [5, 3600]
+  static SAMPLE_FREQUENCY_BOUNDS = [1, 3600]
   static MAX_JOB_QUEUES = 256
 
   constructor(configuration) {
     this._configuration = configuration
-    this._processId = crypto.randomUUID()
     this._client = new Client(configuration)
+    this._processId = crypto.randomUUID()
     this._ttl = 15
     this._granted = false
     this._trace = false
@@ -19,7 +19,7 @@ class Lease {
     this._nextSampleAt = performance.now()
     this._sampleFrequency = 15
     this._jobQueues = []
-    this._epoch = 0
+    this._planFailures = new FailureLog("Lease plan", configuration)
   }
 
   get processId() {
@@ -43,10 +43,8 @@ class Lease {
   }
 
   demote() {
-    this._epoch += 1
     this._clearGrant()
     this._expiresAt = performance.now()
-    this._nextSampleAt = performance.now()
   }
 
   async sampleIfDue(fn) {
@@ -57,153 +55,128 @@ class Lease {
   }
 
   async requestIfDue({ hold }) {
-    if (performance.now() < this._expiresAt) return
+    if (performance.now() < this._expiresAt) return false
 
-    const epoch = this._epoch
     this._expiresAt = performance.now() + this._ttl * 1000
+    const response = await this._fetch()
+    if (!response) return false
 
-    let response
-    try {
-      response = await this._client.requestLease(this._processId)
-    } catch (error) {
-      if (this._epoch !== epoch) return
-      this._clearGrant()
-      throw error
-    }
-
-    if (this._epoch !== epoch) return
-
-    if (response.unauthorized) {
-      this._clearGrant()
-      return
-    }
-
-    if (!response.ok) {
-      this._clearGrant()
-      throw new RequestError(
-        `Lease request failed with ${response.status} status.`,
-      )
-    }
-
-    const headers = response.headers
-    let nextSampleFrequency = this._sampleFrequency
-    let nextSampleAt = this._nextSampleAt
-
-    const frequency = response.integer("HireFire-Sample-Frequency")
-    if (frequency !== null) {
-      const previousFrequency = this._sampleFrequency
-      nextSampleFrequency = clamp(frequency, Lease.SAMPLE_FREQUENCY_BOUNDS)
-      if (nextSampleFrequency < previousFrequency) {
-        const sooner = performance.now() + nextSampleFrequency * 1000
-        if (nextSampleAt > sooner) nextSampleAt = sooner
-      }
-    }
-
-    let nextTtl = this._ttl
-    let nextExpiresAt = this._expiresAt
-    const ttl = response.integer("HireFire-Lease-TTL")
-    if (ttl !== null) {
-      nextTtl = clamp(ttl, Lease.TTL_BOUNDS)
-      nextExpiresAt = performance.now() + nextTtl * 1000
-    }
-
-    const granted = headers["hirefire-lease-granted"] === "true"
-    const grantBody = granted
-      ? this._parseGrantBody(response.body)
-      : emptyGrantBody()
-
-    if (this._epoch !== epoch) return
-
-    const holdOk = !granted || hold(grantBody.job_queues)
-
-    if (this._epoch !== epoch) return
-
-    this._sampleFrequency = nextSampleFrequency
-    this._nextSampleAt = nextSampleAt
-    this._ttl = nextTtl
-    this._expiresAt = nextExpiresAt
-
-    if (granted && !holdOk) {
-      this._clearGrant()
-      this._processId = crypto.randomUUID()
-      this._configuration._once.log(
-        "info",
-        "lease_grant_dropped",
-        null,
-        "[HireFire] Lease grant dropped: this process cannot sample the plan " +
-          "(no local job-queue samplers and no executable plan adapter).",
-      )
-    } else {
-      const wasGranted = this._granted
-      this._granted = granted
-      this._trace = granted && grantBody.trace
-      this._jobQueues = grantBody.job_queues
-      if (granted && !wasGranted) {
-        this._nextSampleAt = performance.now()
-      }
-    }
+    const granted = response.headers["hirefire-lease-granted"] === "true"
+    const grant = granted ? this._parseGrantBody(response.body) : emptyGrant()
+    this._applyCadence(response)
+    if (!granted || hold(grant.jobQueues)) this._applyGrant(granted, grant)
+    else this._dropGrant()
+    return true
   }
 
   close() {
     return this._client.close()
   }
 
+  async _fetch() {
+    let response
+    try {
+      response = await this._client.requestLease(this._processId)
+    } catch (error) {
+      this._clearGrant()
+      throw error
+    }
+    if (response.ok) return response
+
+    this._clearGrant()
+    if (response.unauthorized) return null
+    throw new RequestError(
+      `Lease request failed with ${response.status} status.`,
+    )
+  }
+
+  _applyCadence(response) {
+    const frequency = response.integer("HireFire-Sample-Frequency")
+    if (frequency !== null) {
+      this._sampleFrequency = clamp(frequency, Lease.SAMPLE_FREQUENCY_BOUNDS)
+      this._nextSampleAt = Math.min(
+        this._nextSampleAt,
+        performance.now() + this._sampleFrequency * 1000,
+      )
+    }
+
+    const ttl = response.integer("HireFire-Lease-TTL")
+    if (ttl !== null) {
+      this._ttl = clamp(ttl, Lease.TTL_BOUNDS)
+      this._expiresAt = performance.now() + this._ttl * 1000
+    }
+  }
+
+  _applyGrant(granted, grant) {
+    if (!this._granted) this._nextSampleAt = performance.now()
+    this._granted = granted
+    this._trace = grant.trace
+    this._jobQueues = grant.jobQueues
+  }
+
+  _dropGrant() {
+    this._clearGrant()
+    this._processId = crypto.randomUUID()
+    this._configuration._once.log(
+      "info",
+      "lease_grant_dropped",
+      null,
+      "[HireFire] Lease grant dropped: this process cannot sample the plan " +
+        "(no local job-queue samplers and no executable plan adapter).",
+    )
+  }
+
   _parseGrantBody(body) {
-    if (body == null || body === "") return emptyGrantBody()
+    const failures = this._planFailures.count
+    const grant = this._readGrantBody(body)
+    if (this._planFailures.count === failures) this._planFailures.recovered()
+    return grant
+  }
+
+  _readGrantBody(body) {
+    if (body === "") return emptyGrant()
 
     let payload
     try {
       payload = JSON.parse(body)
     } catch {
-      safeLog(
-        this._configuration.logger,
-        "error",
-        "[HireFire] Lease grant body was not valid JSON. Plan ignored.",
-      )
-      return emptyGrantBody()
+      return this._ignorePlan("was not valid JSON")
     }
-
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      safeLog(
-        this._configuration.logger,
-        "error",
-        "[HireFire] Lease grant body was not a JSON object. Plan ignored.",
-      )
-      return emptyGrantBody()
+      return this._ignorePlan("was not a JSON object")
     }
 
     const trace = payload.trace === true
     const entries = payload.job_queues
     if (!Array.isArray(entries)) {
-      safeLog(
-        this._configuration.logger,
-        "error",
-        "[HireFire] Lease grant body job_queues was not an array. Plan ignored.",
-      )
-      return emptyGrantBody(trace)
+      return this._ignorePlan("job_queues was not an array", trace)
     }
+    return { jobQueues: this._planEntries(entries), trace }
+  }
 
+  _ignorePlan(reason, trace = false) {
+    this._planFailures.record(`Lease grant body ${reason}. Plan ignored.`)
+    return emptyGrant(trace)
+  }
+
+  _planEntries(entries) {
     const valid = entries.map(normalizeEntry).filter(Boolean)
     const invalid = entries.length - valid.length
 
     if (valid.length > Lease.MAX_JOB_QUEUES) {
-      safeLog(
-        this._configuration.logger,
-        "error",
-        `[HireFire] Lease plan truncated to ${Lease.MAX_JOB_QUEUES} job queue entries` +
+      this._planFailures.record(
+        `Lease plan truncated to ${Lease.MAX_JOB_QUEUES} job queue entries` +
           (invalid > 0 ? ` (${invalid} invalid also skipped)` : "") +
           ".",
       )
     } else if (invalid > 0) {
       const label = invalid === 1 ? "entry" : "entries"
-      safeLog(
-        this._configuration.logger,
-        "error",
-        `[HireFire] Lease plan skipped ${invalid} invalid job queue ${label}.`,
+      this._planFailures.record(
+        `Lease plan skipped ${invalid} invalid job queue ${label}.`,
       )
     }
 
-    return { job_queues: valid.slice(0, Lease.MAX_JOB_QUEUES), trace }
+    return valid.slice(0, Lease.MAX_JOB_QUEUES)
   }
 
   _clearGrant() {
@@ -223,14 +196,14 @@ function normalizeEntry(entry) {
   }
 
   const normalized = { ...entry, name, strategy }
-  if (Object.prototype.hasOwnProperty.call(entry, "adapter")) {
+  if (Object.hasOwn(entry, "adapter")) {
     normalized.adapter = String(entry.adapter ?? "").trim()
   }
   return normalized
 }
 
-function emptyGrantBody(trace = false) {
-  return { job_queues: [], trace }
+function emptyGrant(trace = false) {
+  return { jobQueues: [], trace }
 }
 
 function clamp(value, [min, max]) {
