@@ -30,6 +30,7 @@ class Configuration {
     this.http = null
     this.jobQueues = new JobQueues()
     this.logger = console
+    this.forceStart = false
     this._sourcesByName = new Map()
     this._buffer = null
     this._dispatcher = null

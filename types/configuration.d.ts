@@ -2,6 +2,7 @@ export = Configuration
 declare class Configuration {
   static MAX_NAME_BYTES: number
   logger: Logger | null
+  forceStart: boolean
   http: HTTP | null
   jobQueues: JobQueues
   set token(value: string | null | undefined)

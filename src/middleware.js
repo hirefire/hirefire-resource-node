@@ -1,5 +1,4 @@
 const HireFire = require(".")
-const Identity = require("./identity")
 const safeLog = require("./log")
 
 const REQUEST_QUEUE_TIME_LIMIT = 60000
@@ -31,7 +30,7 @@ function processRequestQueueTime(requestStart, queueStart) {
 
     const configuration = HireFire.configuration
 
-    if (configuration.token && !Identity.oneOff()) {
+    if (HireFire._reports()) {
       configuration.markHttpActive()
       const source = configuration.httpSource
       if (source) source.sample(requestQueueTime)

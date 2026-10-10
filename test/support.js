@@ -1,4 +1,5 @@
 const http = require("http")
+const cluster = require("cluster")
 const HireFire = require("../src")
 const nock = require("nock")
 const Plan = require("../src/plan")
@@ -81,6 +82,7 @@ async function resetState() {
   delete process.env.HIREFIRE_VERBOSE
   IDENTITY_ENV.forEach((key) => delete process.env[key])
   await HireFire.reset()
+  HireFire.boot()
 }
 
 const testPath = expect.getState().testPath ?? ""
@@ -106,6 +108,10 @@ if (!skipGlobalReset) {
     await resetState()
   })
 }
+
+afterAll(() => {
+  cluster.removeAllListeners("fork")
+})
 
 afterEach(async () => {
   await closeServers()

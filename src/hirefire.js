@@ -1,9 +1,11 @@
 const Configuration = require("./configuration")
+const Host = require("./host")
 const Identity = require("./identity")
 
 class HireFire {
   constructor() {
     this.configuration = new Configuration()
+    this._stopped = false
   }
 
   configure(fn) {
@@ -11,7 +13,8 @@ class HireFire {
     if (result != null && typeof result.then === "function") {
       throw new TypeError("HireFire.configure callbacks must be synchronous.")
     }
-    this._startIfToken()
+    this._stopped = false
+    if (this._reports()) this.configuration.dispatcher.start()
     return this.configuration
   }
 
@@ -20,15 +23,27 @@ class HireFire {
   }
 
   reset() {
-    const old = this.configuration
-    const dispatcher = old._dispatcher
+    const dispatcher = this.configuration._dispatcher
     this.configuration = new Configuration()
+    this._stopped = true
     return dispatcher ? dispatcher.stop() : Promise.resolve(false)
   }
 
-  _startIfToken() {
-    if (!this.configuration.token || Identity.oneOff()) return
-    this.configuration.dispatcher.start()
+  _reports() {
+    const configuration = this.configuration
+    return (
+      Boolean(configuration.token) &&
+      !this._stopped &&
+      !Identity.oneOff() &&
+      (configuration.forceStart || Host.reports())
+    )
+  }
+
+  _handOver() {
+    const configuration = this.configuration
+    if (configuration.forceStart || !configuration._dispatcher) return
+
+    configuration._dispatcher.stop({ flush: false }).catch(() => {})
   }
 }
 

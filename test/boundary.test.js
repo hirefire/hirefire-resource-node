@@ -1,3 +1,4 @@
+const cluster = require("cluster")
 const https = require("https")
 const nock = require("nock")
 const HireFire = require("../src")
@@ -803,6 +804,135 @@ describe("the client at its boundary", () => {
       await pass(1)
 
       expect(at("lease")).toEqual([0, 2])
+    })
+  })
+
+  describe("a client that the host reset", () => {
+    const { processRequestQueueTime } = require("../src/middleware")
+
+    beforeEach(() => {
+      process.env.DYNO = "web.1"
+    })
+
+    test("is not started again by a request, and starts again with configure", async () => {
+      configure()
+      await pass(1)
+      await HireFire.reset()
+      const sent = requests.length
+
+      processRequestQueueTime(() => `t=${START + 1 - 0.25}`)
+      await pass(3)
+
+      expect(requests).toHaveLength(sent)
+      expect(HireFire.configuration.buffer.flush()).toEqual({})
+      expect(logged("I")).toEqual([
+        "I [HireFire] Starting dispatcher.",
+        "I [HireFire] Dispatcher stopped.",
+      ])
+
+      configure()
+      processRequestQueueTime(() => `t=${START + 4 - 0.25}`)
+      await pass(1)
+
+      expect(requests.length).toBeGreaterThan(sent)
+      expect(ingested("web", "rqt")).toMatchObject({ 4: [250, 1] })
+      expect(logged("I")).toHaveLength(3)
+    })
+
+    test("starts again with boot", async () => {
+      configure()
+      await pass(0)
+      await HireFire.reset()
+      const sent = requests.length
+
+      HireFire.boot()
+      HireFire.configuration.logger = null
+      await pass(1)
+
+      expect(requests.length).toBeGreaterThan(sent)
+    })
+
+    test("that never ran is not started by a request either", async () => {
+      await HireFire.reset()
+
+      processRequestQueueTime(() => `t=${START - 0.25}`)
+      await pass(2)
+
+      expect(requests).toEqual([])
+    })
+  })
+
+  describe("a cluster primary", () => {
+    const { processRequestQueueTime } = require("../src/middleware")
+
+    beforeEach(() => {
+      process.env.DYNO = "web.1"
+    })
+
+    afterEach(() => {
+      delete cluster.workers.test
+    })
+
+    test("with workers starts nothing and samples no request", async () => {
+      cluster.workers.test = {}
+
+      configure()
+      processRequestQueueTime(() => `t=${START - 0.25}`)
+      await pass(3)
+
+      expect(requests).toEqual([])
+      expect(log).toEqual([])
+      expect(HireFire.configuration.buffer.flush()).toEqual({})
+    })
+
+    test("with workers reports when the host asks for it", async () => {
+      cluster.workers.test = {}
+
+      configure((config) => (config.forceStart = true))
+      processRequestQueueTime(() => `t=${START - 0.25}`)
+      await pass(1)
+
+      expect(at("ingest")).toEqual([0, 1])
+      expect(ingested("web", "rqt")).toMatchObject({ 0: [250, 1] })
+    })
+
+    test("stops at its first fork without a last request", async () => {
+      configure()
+      await pass(1)
+      processRequestQueueTime(() => `t=${START + 1 - 0.25}`)
+      const sent = requests.length
+
+      cluster.workers.test = {}
+      cluster.emit("fork", {})
+      await pass(3)
+
+      expect(requests).toHaveLength(sent)
+      expect(dispatcher().running()).toBe(false)
+      expect(HireFire.configuration.buffer.flush()).toEqual({})
+      expect(logged("I")).toEqual([
+        "I [HireFire] Starting dispatcher.",
+        "I [HireFire] Dispatcher stopped.",
+      ])
+    })
+
+    test("that the host asked to report keeps running when it forks", async () => {
+      configure((config) => (config.forceStart = true))
+      await pass(1)
+
+      cluster.workers.test = {}
+      cluster.emit("fork", {})
+      await pass(2)
+
+      expect(dispatcher().running()).toBe(true)
+      expect(at("ingest")).toEqual([0, 1, 2, 3])
+    })
+
+    test("that never started stays quiet when it forks", async () => {
+      cluster.emit("fork", {})
+      await pass(1)
+
+      expect(requests).toEqual([])
+      expect(HireFire.configuration._dispatcher).toBeNull()
     })
   })
 

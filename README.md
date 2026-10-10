@@ -24,6 +24,16 @@ This package integrates Node.js applications running on [Heroku] with [HireFire]
 
 The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
 
+**Processes that report:**
+
+Metric collection starts with `HireFire.configure()`, `HireFire.boot()`, or the first request through the middleware, in every process that has a token. Three kinds of process start nothing:
+
+- A Heroku one-off dyno (`heroku run` and the release phase).
+- A `cluster` primary that has forked workers. It stops at its first fork, and its workers report.
+- A worker thread. The main thread reports.
+
+Set `config.forceStart = true` in a `cluster` primary or a worker thread that should report anyway. After `await HireFire.reset()`, nothing starts again until `configure` or `boot` runs, so a request that is still being served during a shutdown does not restart it.
+
 **Connections on Heroku:**
 
 On a Heroku dyno, BullMQ and Bull samples over `rediss://` and pg-boss samples connect without certificate verification, because Heroku Key-Value Store and Heroku Postgres use certificates that no trust store knows. This holds for every Redis and every database that a sample reaches from a dyno. An explicit setting always wins:
