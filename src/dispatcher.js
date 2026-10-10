@@ -1,5 +1,6 @@
 const { Client } = require("./client")
 const Lease = require("./lease")
+const Once = require("./once")
 const MetricsBuffer = require("./buffer")
 const Plan = require("./plan")
 const Probe = require("./probe")
@@ -11,7 +12,6 @@ const { RQT, rqt } = require("./strategy")
 class Dispatcher {
   static RQT_BACKFILL_LIMIT = 60
   static PAYLOAD_SIZE_LIMIT = 131072
-  static WARN_MAP_LIMIT = 256
   static SAMPLE_COUNT_LIMIT = MetricsBuffer.SAMPLE_COUNT_LIMIT
   static METRIC_VALUE_LIMIT = 1e15
   static DEFAULT_DISPATCH_FREQUENCY = 1
@@ -35,12 +35,7 @@ class Dispatcher {
     this._jobLoopPromise = null
     this._retiredLoops = new Set()
     this._stopJoinTimeoutMs = Dispatcher.JOIN_TIMEOUT * 1000
-    this._unloadedAdapterWarned = Object.create(null)
-    this._planOverrideWarned = Object.create(null)
-    this._unknownAdapterWarned = Object.create(null)
-    this._unsupportedStrategyWarned = Object.create(null)
-    this._unknownStrategyWarned = Object.create(null)
-    this._emptyQueuesWarned = Object.create(null)
+    this._once = new Once(configuration)
   }
 
   start() {
@@ -308,12 +303,7 @@ class Dispatcher {
     this._lastRqtSecond = null
     this._dispatchFrequency = Dispatcher.DEFAULT_DISPATCH_FREQUENCY
     this._pendingSampleTrace = null
-    this._unloadedAdapterWarned = Object.create(null)
-    this._planOverrideWarned = Object.create(null)
-    this._unknownAdapterWarned = Object.create(null)
-    this._unsupportedStrategyWarned = Object.create(null)
-    this._unknownStrategyWarned = Object.create(null)
-    this._emptyQueuesWarned = Object.create(null)
+    this._once = new Once(this._configuration)
   }
 
   _enterRace() {
@@ -410,17 +400,11 @@ class Dispatcher {
     }
   }
 
-  _rememberWarn(map, key) {
-    if (map[key]) return true
-    const keys = Object.keys(map)
-    if (keys.length >= Dispatcher.WARN_MAP_LIMIT) delete map[keys[0]]
-    map[key] = true
-    return false
-  }
-
   _warnUnloadedAdapterOnce(name, adapter) {
-    if (this._rememberWarn(this._unloadedAdapterWarned, name)) return
-    this._logger().error(
+    this._once.log(
+      "error",
+      "unloaded_adapter",
+      name,
       `[HireFire] Plan adapter ${JSON.stringify(adapter)} for ${JSON.stringify(
         name,
       )} ` + `is not loaded in this process. Entry skipped.`,
@@ -428,8 +412,10 @@ class Dispatcher {
   }
 
   _warnPlanOverrideOnce(name) {
-    if (this._rememberWarn(this._planOverrideWarned, name)) return
-    this._logger().warn(
+    this._once.log(
+      "warn",
+      "plan_override",
+      name,
       `[HireFire] A HireFire UI adapter is configured for ` +
         `${JSON.stringify(name)}, so config.dyno(${JSON.stringify(
           name,
@@ -439,8 +425,10 @@ class Dispatcher {
   }
 
   _warnUnknownAdapterOnce(name, adapter) {
-    if (this._rememberWarn(this._unknownAdapterWarned, name)) return
-    this._logger().error(
+    this._once.log(
+      "error",
+      "unknown_adapter",
+      name,
       `[HireFire] Unknown plan adapter ` +
         `${JSON.stringify(adapter)} for ${JSON.stringify(
           name,
@@ -449,9 +437,10 @@ class Dispatcher {
   }
 
   _warnUnsupportedStrategyOnce(name, adapter, strategy) {
-    const key = `${name}\0${adapter}\0${strategy}`
-    if (this._rememberWarn(this._unsupportedStrategyWarned, key)) return
-    this._logger().error(
+    this._once.log(
+      "error",
+      "unsupported_strategy",
+      `${name}\0${adapter}\0${strategy}`,
       `[HireFire] Plan adapter ${JSON.stringify(adapter)} does not support ` +
         `strategy ${JSON.stringify(strategy)} for ${JSON.stringify(
           name,
@@ -460,18 +449,20 @@ class Dispatcher {
   }
 
   _warnUnknownStrategyOnce(name, strategy) {
-    const key = `${name}\0${strategy}`
-    if (this._rememberWarn(this._unknownStrategyWarned, key)) return
-    this._logger().error(
+    this._once.log(
+      "error",
+      "unknown_strategy",
+      `${name}\0${strategy}`,
       `[HireFire] Unknown plan strategy ${JSON.stringify(strategy)} for ` +
         `${JSON.stringify(name)}. Entry skipped.`,
     )
   }
 
   _warnEmptyQueuesOnce(name, adapter) {
-    const key = `${name}\0${adapter}`
-    if (this._rememberWarn(this._emptyQueuesWarned, key)) return
-    this._logger().error(
+    this._once.log(
+      "error",
+      "queues_required",
+      `${name}\0${adapter}`,
       `[HireFire] Plan adapter ${JSON.stringify(adapter)} for ` +
         `${JSON.stringify(name)} requires named queues. Entry skipped.`,
     )

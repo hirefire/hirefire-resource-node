@@ -126,9 +126,10 @@ class Lease {
     if (granted && !holdOk) {
       this._clearGrant()
       this._processId = crypto.randomUUID()
-      safeLog(
-        this._configuration.logger,
+      this._configuration._once.log(
         "info",
+        "lease_grant_dropped",
+        null,
         "[HireFire] Lease grant dropped: this process cannot sample the plan " +
           "(no local job-queue samplers and no executable plan adapter).",
       )

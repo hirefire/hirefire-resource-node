@@ -5,7 +5,7 @@ const CPU = require("./source/cpu")
 const MetricsBuffer = require("./buffer")
 const Dispatcher = require("./dispatcher")
 const Identity = require("./identity")
-const safeLog = require("./log")
+const Once = require("./once")
 
 class MissingSamplerError extends Error {
   constructor(message) {
@@ -36,12 +36,7 @@ class Configuration {
     this._alwaysOnCpu = null
     this._alwaysOnHttp = null
     this._httpActive = false
-    this._herokuConflictWarned = false
-    this._cpuUnresolvedWarned = false
-    this._rqtUnresolvedWarned = false
-    this._identityNameTooLongWarned = false
-    this._bareWebDynoWarned = false
-    this._plainHttpDataUrlWarned = false
+    this._once = new Once(this)
   }
 
   get token() {
@@ -152,11 +147,10 @@ class Configuration {
   }
 
   _warnPlainHttpDataUrlOnce(host) {
-    if (this._plainHttpDataUrlWarned) return
-    this._plainHttpDataUrlWarned = true
-    safeLog(
-      this.logger,
+    this._once.log(
       "warn",
+      "plain_http_data_url",
+      null,
       "[HireFire] HIREFIRE_DATA_URL uses http, so the HireFire token " +
         `is sent to ${host} in clear text. Use an https URL.`,
     )
@@ -190,11 +184,10 @@ class Configuration {
   }
 
   _warnIdentityNameTooLongOnce(name) {
-    if (this._identityNameTooLongWarned) return
-    this._identityNameTooLongWarned = true
-    safeLog(
-      this.logger,
+    this._once.log(
       "error",
+      "identity_name_too_long",
+      null,
       `[HireFire] Process identity exceeds ${MAX_NAME_BYTES} bytes ` +
         `(${Buffer.byteLength(
           name,
@@ -203,11 +196,10 @@ class Configuration {
   }
 
   _warnBareWebDynoOnce() {
-    if (this._bareWebDynoWarned) return
-    this._bareWebDynoWarned = true
-    safeLog(
-      this.logger,
+    this._once.log(
       "warn",
+      "bare_web_dyno",
+      null,
       '[HireFire] config.dyno("web") is deprecated. It does nothing. ' +
         "Request queue time is sampled automatically from HTTP traffic. You can remove this " +
         "line. Leaving it does not break anything.",
@@ -215,23 +207,21 @@ class Configuration {
   }
 
   _warnRqtUnresolvedOnce() {
-    if (this._rqtUnresolvedWarned) return
-    this._rqtUnresolvedWarned = true
-    safeLog(
-      this.logger,
+    this._once.log(
       "warn",
+      "rqt_unresolved",
+      null,
       "[HireFire] Request queue time samples dropped: process identity " +
         "is unresolved. Set HIREFIRE_SERVICE_NAME or DYNO.",
     )
   }
 
   _warnHerokuConflictOnce() {
-    if (this._herokuConflictWarned) return
     if (!Identity.herokuConflict()) return
-    this._herokuConflictWarned = true
-    safeLog(
-      this.logger,
+    this._once.log(
       "warn",
+      "heroku_conflict",
+      null,
       `[HireFire] HIREFIRE_SERVICE_NAME (${Identity.explicit()}) does not ` +
         `match the Heroku DYNO prefix (${Identity.herokuDyno()}). Heroku config vars ` +
         `are app-wide, so this makes every dyno identify as the same name. Set it inline per ` +
@@ -240,11 +230,10 @@ class Configuration {
   }
 
   _warnCpuUnresolvedOnce() {
-    if (this._cpuUnresolvedWarned) return
-    this._cpuUnresolvedWarned = true
-    safeLog(
-      this.logger,
+    this._once.log(
       "warn",
+      "cpu_unresolved",
+      null,
       "[HireFire] CPU metrics disabled: process identity is unresolved. " +
         "Set HIREFIRE_SERVICE_NAME or DYNO.",
     )

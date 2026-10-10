@@ -4,6 +4,7 @@ const HireFire = require("../src")
 const Dispatcher = require("../src/dispatcher")
 const { Response } = require("../src/client")
 const Lease = require("../src/lease")
+const Once = require("../src/once")
 const MetricsBuffer = require("../src/buffer")
 const Usage = require("../src/source/cpu/usage")
 const Plan = require("../src/plan")
@@ -681,11 +682,14 @@ describe("Dispatcher", () => {
     config().buffer.sample("web", "rqt", 3)
     await dispatcher._jobQueueTick()
     await dispatcher._dispatchTick()
+    freezeTime(1020)
+    await dispatcher._jobQueueTick()
     expect(
-      logger.info.mock.calls.some((c) =>
+      logger.info.mock.calls.filter((c) =>
         String(c[0]).includes("Lease grant dropped"),
       ),
-    ).toBe(true)
+    ).toHaveLength(1)
+    expect(nock.isDone()).toBe(true)
     expect(bodies.length).toBeGreaterThan(0)
   })
 
@@ -1194,10 +1198,17 @@ describe("Dispatcher", () => {
 
     const msgs = logger.error.mock.calls.map((c) => String(c[0]))
     expect(msgs.filter((m) => m.includes("does not support")).length).toBe(3)
-    const warned = dispatcher._unsupportedStrategyWarned
-    expect(warned["worker\0bunny\0jql"]).toBe(true)
-    expect(warned["mailer\0bunny\0jql"]).toBe(true)
-    expect(warned["worker\0resque\0jql"]).toBe(true)
+    expect(msgs.filter((m) => m.includes("does not support"))).toEqual([
+      expect.stringContaining(
+        'adapter "bunny" does not support strategy "jql" for "worker"',
+      ),
+      expect.stringContaining(
+        'adapter "bunny" does not support strategy "jql" for "mailer"',
+      ),
+      expect.stringContaining(
+        'adapter "resque" does not support strategy "jql" for "worker"',
+      ),
+    ])
   })
 
   test("stop closes transports even when final dispatch raises", async () => {
@@ -1438,7 +1449,7 @@ describe("Dispatcher", () => {
   })
 
   test("a full plan of unknown adapters warns once per entry", async () => {
-    expect(Dispatcher.WARN_MAP_LIMIT).toBe(Lease.MAX_JOB_QUEUES)
+    expect(Once.LIMIT).toBe(Lease.MAX_JOB_QUEUES)
     stubLease(
       true,
       JSON.stringify({

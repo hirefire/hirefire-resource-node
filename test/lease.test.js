@@ -1,12 +1,15 @@
 const { freezeTime } = require("./support")
 const nock = require("nock")
+const Configuration = require("../src/configuration")
 const Lease = require("../src/lease")
 const { Client, RequestError, Response } = require("../src/client")
 
 const BASE = "https://data.hirefire.io"
-const CONFIG = {
-  token: "test-token-value",
-  logger: { info() {}, warn() {}, error() {} },
+function configuration(logger = {}) {
+  const config = new Configuration()
+  config.token = "test-token-value"
+  config.logger = { info() {}, warn() {}, error() {}, ...logger }
+  return config
 }
 
 function grant(
@@ -28,7 +31,7 @@ describe("Lease", () => {
 
   beforeEach(() => {
     freezeTime(1000)
-    lease = new Lease(CONFIG)
+    lease = new Lease(configuration())
   })
 
   test("process id is stable uuid", () => {
@@ -295,7 +298,7 @@ describe("Lease", () => {
   test("accepts grant body of exactly max body bytes", async () => {
     expect(Client.MAX_BODY_BYTES).toBe(131072)
     const error = jest.fn()
-    lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
+    lease = new Lease(configuration({ error }))
     let body = JSON.stringify({
       version: 1,
       job_queues: [
@@ -324,7 +327,7 @@ describe("Lease", () => {
   test("accepts a plan of max job queues with three queues each", async () => {
     expect(Lease.MAX_JOB_QUEUES).toBe(256)
     const error = jest.fn()
-    lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
+    lease = new Lease(configuration({ error }))
     const entries = Array.from({ length: Lease.MAX_JOB_QUEUES }, (_, i) => ({
       name: `background_worker_${i}`,
       strategy: "jqs",
@@ -425,7 +428,7 @@ describe("Lease", () => {
 
     beforeEach(() => {
       error = jest.fn()
-      lease = new Lease({ ...CONFIG, logger: { ...CONFIG.logger, error } })
+      lease = new Lease(configuration({ error }))
     })
 
     async function request(valid, invalid) {
@@ -776,7 +779,7 @@ describe("Lease", () => {
       JSON.stringify("string"),
       JSON.stringify({ version: 1, job_queues: {} }),
     ]) {
-      lease = new Lease(CONFIG)
+      lease = new Lease(configuration())
       grant(
         {
           "HireFire-Lease-Granted": "true",
@@ -814,7 +817,7 @@ describe("Lease", () => {
 
   test("skips single invalid entry log uses singular", async () => {
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-    lease = new Lease({ ...CONFIG, logger })
+    lease = new Lease(configuration(logger))
     grant(
       {
         "HireFire-Lease-Granted": "true",
@@ -912,7 +915,7 @@ describe("Lease", () => {
     expect(lease.granted()).toBe(false)
     expect(lease.jobQueues).toEqual([])
 
-    const heldLease = new Lease(CONFIG)
+    const heldLease = new Lease(configuration())
     heldLease._client.requestLease = jest
       .fn()
       .mockResolvedValue(
