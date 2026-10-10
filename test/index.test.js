@@ -3,6 +3,11 @@ const HireFire = require("../src")
 const Configuration = require("../src/configuration")
 
 describe("HireFire singleton", () => {
+  afterEach(() => {
+    jest.dontMock("../src/version")
+    jest.resetModules()
+  })
+
   test("default configuration", () => {
     expect(HireFire.configuration).toBeInstanceOf(Configuration)
   })
