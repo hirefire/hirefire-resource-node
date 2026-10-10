@@ -2,142 +2,121 @@
 
 const { rule } = require("./verdicts")
 
-const DISPATCHER = "src/dispatcher.js"
-const UNREF = /\.unref/
+const SESSION = "src/dispatcher/session.js"
+const LEASE = "src/lease.js"
+const PG_BOSS = "src/macro/pg_boss.js"
 
 rule(
-  { mutator: "condition", original: UNREF, replacement: "true" },
+  {
+    mutator: "statement",
+    original: /^this\._\w+ = (null|false)$/,
+    replacement: ";",
+  },
   "equivalent",
-  "a timer of every supported Node has unref, so the check is always true",
+  "a field that is never set reads as null or false in every check of its class",
 )
 rule(
-  { file: "src/source/cpu/usage.js", lines: [152], replacement: "true" },
+  {
+    file: LEASE,
+    mutator: "statement",
+    original: /^this\._(expiresAt|nextSampleAt) = performance\.now\(\)$/,
+    on: /^ {4}this\._(expiresAt|nextSampleAt) = performance\.now\(\)$/,
+  },
   "equivalent",
-  "os.availableParallelism exists on every supported Node",
+  "a lease without a time for its first request asks at once, and its first grant sets the time of the first sample",
 )
 rule(
-  { original: UNREF },
-  "finding",
-  "N:mut-lifecycle: no test checks that a timer of the library is unref'd",
+  {
+    mutator: "string",
+    replacement: '""',
+    on: /^\s+"[a-z]+(_[a-z]+)+",$/,
+    files:
+      /^src\/(sampler|lease|middleware|configuration|dispatcher\/session)\.js$/,
+  },
+  "equivalent",
+  "the kind of a once-only line only keeps its keys apart from those of another kind, and an empty kind still differs from every other",
 )
 rule(
-  { file: "src/source/cpu/usage.js", from: 152, to: 158 },
-  "finding",
-  "N:below-floor: the fallback for a Node without os.availableParallelism cannot run",
+  { file: SESSION, mutator: "number", original: "5", replacement: "6" },
+  "equivalent",
+  "five doublings of the lowest dispatch frequency already pass the limit of 30 seconds, so a sixth changes no interval",
 )
 rule(
-  { file: DISPATCHER, from: 526, to: 540 },
-  "finding",
-  "N:dead-code: the second loop checks of _dispatch cannot be reached without an await",
+  {
+    file: SESSION,
+    mutator: "condition",
+    original: "this._lease.granted()",
+    replacement: "true",
+  },
+  "equivalent",
+  "a sample loop that starts without the lease ends before its first round, because the loop checks the lease itself",
 )
 rule(
-  { file: DISPATCHER, from: 705, to: 713 },
-  "finding",
-  "N:dead-code: _mergeMetrics never meets an existing bucket",
+  {
+    file: SESSION,
+    mutator: "statement",
+    original: "this._sleepers.delete(sleeper)",
+  },
+  "accepted",
+  "a sleeper that stays in the set costs memory and changes no result, which only the soak run can see",
 )
 rule(
-  { file: DISPATCHER, from: 682, to: 692 },
-  "finding",
-  "N:dead-code: the doubled liveness condition and the branch behind it",
+  {
+    files: /^src\/macro\/bull(mq)?\.js$/,
+    mutator: "string",
+    original: '"-inf"',
+  },
+  "equivalent",
+  "Redis reads an empty minimum as zero, and no score of the delayed set is below zero",
 )
 rule(
-  { file: "src/sample.js", from: 5, to: 7 },
-  "finding",
-  "N:dead-code: coerceSample runs on a value that is already a number",
+  { file: PG_BOSS, on: /connectionIdSeq/ },
+  "equivalent",
+  "the number only has to differ from one borrowed connection to the next",
 )
 rule(
-  { file: "src/plan.js", from: 140, to: 157 },
-  "finding",
-  "N:dead-code: reinitMacrosAfterFork has no caller",
+  { file: PG_BOSS, mutator: "string", on: /opts\.database \|\| ""/ },
+  "equivalent",
+  "the text stands in for a missing database name in a cache key, and every text does that",
 )
 rule(
-  { file: "src/plan.js", lines: [295, 299, 307] },
-  "finding",
-  "N:dead-code: the return values of sampleJobStrategy are not read",
+  {
+    file: "src/dispatcher/payload.js",
+    mutator: "number",
+    on: /EMPTY_BUCKET = /,
+    original: "0",
+    replacement: "1",
+  },
+  "equivalent",
+  "a bucket without a request is sent as an empty leaf, whatever its sum",
 )
 rule(
-  { file: "src/plan.js", from: 166, to: 214 },
-  "finding",
-  "N:plan-twice: these checks of Plan.execute repeat what the dispatcher checked",
+  {
+    file: "src/middleware.js",
+    mutator: "number",
+    original: "1e17",
+    replacement: "100000000000000000",
+  },
+  "equivalent",
+  "both texts are the same number",
 )
 rule(
-  { files: /^src\/macro\/(bull|bullmq)\.js$/, from: 27, to: 29 },
-  "finding",
-  "N:dead-code: reinitAfterFork has no caller",
+  {
+    file: "src/buffer.js",
+    mutator: "boundary",
+    on: /count > MetricsBuffer\.SAMPLE_COUNT_LIMIT/,
+  },
+  "equivalent",
+  "a bucket of exactly the limit keeps its mean and its count when it is clamped to the limit",
 )
 rule(
-  { file: "src/plan/hooks.js", from: 2, to: 24 },
-  "finding",
-  "N:dead-code: hook defaults that every macro replaces or that do nothing",
-)
-rule(
-  { file: "src/configuration.js", lines: [166] },
-  "finding",
-  "N:dead-code: _register has one source kind",
-)
-rule(
-  { file: "src/buffer.js", lines: [38, 39] },
-  "finding",
-  "N:dead-code: discardInherited is flush without a return value",
-)
-rule({ unrun: true }, "finding", "N:unrun-lines: the line runs in no cell")
-rule(
-  { mutator: "string", original: /\[HireFire\]|\s\S+\s|^`/ },
-  "finding",
-  "N:mut-logs: the text of a log line or an error message is not asserted",
-)
-rule(
-  { mutator: ["string", "statement"], original: /Error"|this\.name = / },
-  "finding",
-  "N:mut-logs: the name of an error class is not asserted",
-)
-rule(
-  { file: DISPATCHER, from: 413, to: 478 },
-  "finding",
-  "N:mut-logs: a once-only warning can repeat or vanish without a failing test",
-)
-rule(
-  { file: "src/configuration.js", from: 182, to: 241 },
-  "finding",
-  "N:mut-logs: a once-only warning can repeat or vanish without a failing test",
-)
-rule(
-  { file: "src/probe.js", from: 55, to: 72 },
-  "finding",
-  "N:mut-logs: the verbose lines of a sample round are not asserted",
-)
-rule(
-  { mutator: "number" },
-  "finding",
-  "N:mut-limits: a limit or default can change by one without a failing test",
-)
-rule(
-  { mutator: "boundary" },
-  "finding",
-  "N:mut-limits: no test sits on the boundary of this comparison",
-)
-rule(
-  { file: DISPATCHER, from: 46, to: 272 },
-  "finding",
-  "N:mut-lifecycle: a state change of start, stop, or a loop is not pinned",
-)
-rule(
-  { file: DISPATCHER, from: 485, to: 771 },
-  "finding",
-  "N:mut-dispatch: a rule of the dispatch or of the payload is not pinned",
-)
-rule(
-  { file: "src/lease.js" },
-  "finding",
-  "N:mut-lease: a rule of the lease is not pinned",
-)
-rule(
-  { files: /^src\/macro\// },
-  "finding",
-  "N:mut-adapters: a branch of a macro is not pinned",
-)
-rule(
-  {},
-  "finding",
-  "N:mut-guards: a guard or fallback that no test contradicts",
+  {
+    file: "src/source/cpu/usage.js",
+    mutator: "number",
+    original: "1",
+    replacement: "2",
+    on: /\.slice\(close \+ 1\)/,
+  },
+  "equivalent",
+  "the character after the closing parenthesis of a stat line is a space, which the trim removes",
 )

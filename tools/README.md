@@ -14,7 +14,7 @@ Run every script from the repository root with the first Node.js of `.tool-versi
 | `bin/rerun-failed`      | Runs every test that failed in a seeded matrix run again alone, and its cell again with the seed                                    |
 | `bin/coverage-report`   | Merges line and branch coverage of all cells per file                                                                               |
 | `bin/mutate`            | Changes `src/` one small step at a time and runs the cells that cover the changed line                                              |
-| `bin/mutation-verdicts` | Reports the score per file and fails on a surviving change without a verdict (`lib/mutation/rules.js`)                              |
+| `bin/mutation-verdicts` | Reports the score per file. Fails on a surviving change without a verdict (`lib/mutation/rules.js`) and on a score under 90 percent |
 | `bin/fault-run`         | Runs the client against a local server that misbehaves in 21 ways. `bin/fault-compare` prints two results side by side              |
 | `bin/soak`              | Runs a `cluster` app for a long time with faults and worker restarts                                                                |
 | `bin/host-run`          | Boots the packed tarball in a Linux container under each framework, `cluster`, PM2, `worker_threads`, and Next.js                   |
