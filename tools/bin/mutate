@@ -69,6 +69,13 @@ function sh(command, args, options = {}) {
 function jest(cwd, args, { timeout, guard }) {
   return new Promise((resolve) => {
     const started = Date.now()
+    const env = {
+      ...process.env,
+      PATH: `${path.dirname(node)}:${process.env.PATH}`,
+      TOOLS_NET_GUARD: guard,
+    }
+    delete env.DATABASE_URL
+    delete env.REDIS_URL
     const child = spawn(
       node,
       [
@@ -86,13 +93,7 @@ function jest(cwd, args, { timeout, guard }) {
       ],
       {
         cwd,
-        env: {
-          ...process.env,
-          PATH: `${path.dirname(node)}:${process.env.PATH}`,
-          TOOLS_NET_GUARD: guard,
-          DATABASE_URL: "",
-          REDIS_URL: "",
-        },
+        env,
         detached: true,
         stdio: ["ignore", "ignore", "ignore"],
       },
