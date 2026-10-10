@@ -31,6 +31,10 @@ Run every script from the repository root with the first Node.js of `.tool-versi
 | `bin/net-guard-summary` | Counts what the guard recorded in the matrix runs and in the mutation run, by test and request                                      |
 | `results/`              | Where every script writes. Ignored by git                                                                                           |
 
+## Coverage
+
+`npm run coverage` runs every cell with coverage and prints lines and branches per file, merged over all cells. The Nest 12 cells add nothing to it, because their runner does not instrument.
+
 ## Results
 
 No result is committed to this repository. Results worth keeping are stored in the canon, under `hirefire-resource/node-audit/results/`, through `bin/keep-results`, which removes the paths of the machine.

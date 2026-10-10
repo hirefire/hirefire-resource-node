@@ -114,7 +114,8 @@
     "test:core": "bin/run-cell core",
     "check": "prettier --check . && tsc -p test/types/tsconfig.json && tsd && attw --pack . --ignore-rules named-exports",
     "types:test": "tsd",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "coverage": "tools/bin/matrix-run coverage --coverage && tools/bin/coverage-report coverage"
   },
   "jest": {
     "setupFiles": [
