@@ -282,6 +282,35 @@ describe("middleware", () => {
       expect(queueTime("t=0.05")).toBeNull()
     })
 
+    test.each(["100000000000", "100000000000000", "100000000000000000"])(
+      "reads %s as the smaller unit, which is too long ago to count",
+      (header) => {
+        freezeTime(1700000001)
+        expect(queueTime(header)).toBeNull()
+      },
+    )
+
+    test.each(["99999999999", "99999999999999", "99999999999999984"])(
+      "reads %s as the larger unit, which lies in the future and counts as zero",
+      (header) => {
+        freezeTime(1700000001)
+        expect(queueTime(header)).toBe(0)
+      },
+    )
+
+    test.each([undefined, "garbage", "NaN", "5", "t=0.05"])(
+      "a header of %p starts nothing and marks no web traffic",
+      (header) => {
+        process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+        process.env.DYNO = "worker.1"
+
+        processRequestQueueTime(header)
+
+        expect(start).not.toHaveBeenCalled()
+        expect(HireFire.configuration.rqtEnabled).toBe(false)
+      },
+    )
+
     test("clamps a future request start to zero", () => {
       freezeTime(1700000001)
       expect(queueTime("1700000005000")).toBe(0)

@@ -11,8 +11,6 @@ function processRequestQueueTime(requestStart, queueStart) {
     const rawQueue =
       typeof queueStart === "function" ? queueStart() : queueStart
     const header = presence(rawStart) || presence(rawQueue)
-    if (!header) return
-
     const requestQueueTime = calculateRequestQueueTime(header)
     if (requestQueueTime === null) return
 
