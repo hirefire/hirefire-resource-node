@@ -9,7 +9,7 @@ function build(data, { liveness, since, trace }, omitted) {
   let watermark = null
 
   if (liveness) {
-    const claimed = claim(data[liveness]?.[RQT] ?? {}, since)
+    const claimed = claim(data[liveness]?.[RQT], since)
     series.set(liveness, { [RQT]: claimed })
     watermark = Math.max(...Object.keys(claimed).map(Number))
   }

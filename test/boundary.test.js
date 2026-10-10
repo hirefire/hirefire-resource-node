@@ -337,6 +337,12 @@ describe("the client at its boundary", () => {
           JSON.stringify(requests[60].body).length
         } bytes server rejected (413). Resuming from the current second. (61 failed attempts in a row)`,
       ])
+
+      answers.ingest = () => [200]
+      await pass(1)
+      expect(logged("I")).toContain(
+        "I [HireFire] Metrics payload recovered after 61 failed attempts.",
+      )
     })
 
     test("keeps at most the last 60 seconds for a server that was away", async () => {

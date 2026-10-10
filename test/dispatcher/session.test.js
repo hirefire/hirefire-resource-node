@@ -372,6 +372,20 @@ describe("Session", () => {
     ])
   })
 
+  test("a pass goes on when the CPU cannot be read, and logs it", async () => {
+    const bodies = captureIngestBodies()
+    jest.spyOn(Usage, "reading").mockImplementation(() => {
+      throw new Error("boom")
+    })
+    const session = configureWebOnly()
+
+    freezeTime(1000)
+    await session.report()
+
+    expect(logger.error.mock.calls).toEqual([["[HireFire] Error: boom"]])
+    expect(bodies).toHaveLength(1)
+  })
+
   test("a payload that cannot be built keeps its request queue time and logs it", async () => {
     captureIngestBodies()
     const session = configureWebOnly()
@@ -539,6 +553,43 @@ describe("Session", () => {
     await session.flush()
     expect(bodies[1][0].metrics.rqt).toEqual({ 1001: [] })
     expect(bodies[1][0].sample_trace).toBeUndefined()
+  })
+
+  test("a payload of exactly 131072 bytes keeps its trace, and one byte more is sent without it", async () => {
+    const limit = Session.PAYLOAD_SIZE_LIMIT
+    stubLease(
+      true,
+      JSON.stringify({
+        trace: true,
+        job_queues: [{ name: "worker", strategy: "jqs" }],
+      }),
+    )
+    const bodies = captureIngestBodies()
+    config().dyno("worker", () => 3)
+    const session = new Session(config())
+    const size = (body) => Buffer.byteLength(JSON.stringify(body))
+    const traced = (body) => body.some((entry) => entry.sample_trace)
+
+    async function send(second, name) {
+      freezeTime(second)
+      config().buffer.sample(name, "jqs", 1)
+      await jobQueuePass(session)
+      await session.flush()
+      return bodies[bodies.length - 1]
+    }
+
+    const short = await send(1000, "n")
+    expect(traced(short)).toBe(true)
+    const name = "n".repeat(1 + limit - size(short))
+
+    const exact = await send(1015, name)
+    expect(size(exact)).toBe(limit)
+    expect(traced(exact)).toBe(true)
+
+    const over = await send(1030, `${name}n`)
+    expect(traced(over)).toBe(false)
+    expect(over.map((entry) => entry.name)).toContain(`${name}n`)
+    expect(logger.error).not.toHaveBeenCalled()
   })
 
   test("sample trace absent without grant trace", async () => {
@@ -1417,7 +1468,7 @@ describe("Session", () => {
 
       test("a round that runs past its limit gives up the lease and its samples, and no lease is asked for until it returns", async () => {
         bodies = captureIngestBodies()
-        freezeTime(1060.1)
+        freezeTime(1060.001)
         await session.renew()
         freezeTime(1075)
         await session.renew()
