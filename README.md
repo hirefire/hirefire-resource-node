@@ -24,6 +24,13 @@ This package integrates Node.js applications running on [Heroku] with [HireFire]
 
 The test suite runs against these minimum versions and the current latest release of each runtime and library. Older versions may still work, but are not officially supported.
 
+**Connections on Heroku:**
+
+On a Heroku dyno, BullMQ and Bull samples over `rediss://` and pg-boss samples connect without certificate verification, because Heroku Key-Value Store and Heroku Postgres use certificates that no trust store knows. This holds for every Redis and every database that a sample reaches from a dyno. An explicit setting always wins:
+
+- BullMQ and Bull: `connectionOptions.tls` of the macro, for example `connectionOptions: { tls: {} }` to verify the certificate.
+- pg-boss: `connectionOptions.ssl` of the macro, the `PGSSLMODE` variable, or an SSL parameter in the database URL.
+
 **Types:**
 
 The package ships `.d.ts` declarations for TypeScript consumers. Native ESM named imports of macros (for example `import { jobQueueSize } from "hirefire-resource/macro/bull"`) can type-check and fail at runtime. Use the default import under ESM.

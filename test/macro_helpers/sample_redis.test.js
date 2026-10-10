@@ -5,7 +5,9 @@ const { sample } = require("../../src/macro/helpers/sample_redis")
 const sampleRound = require("../../src/sample_round")
 
 const URL = "redis://127.0.0.1:6379/0"
+const SECURE_URL = "rediss://127.0.0.1:6379/0"
 const LADDER = [
+  "DYNO",
   "REDIS_TLS_URL",
   "REDIS_URL",
   "REDISTOGO_URL",
@@ -138,7 +140,7 @@ describe("the Redis sample helper", () => {
     await waiting(["default"])
     expect(IORedis.mock.calls[0][0]).toBe("redis://localhost:6379/0")
 
-    for (const name of [...LADDER].reverse()) {
+    for (const name of LADDER.slice(1).reverse()) {
       process.env[name] = `redis://${name.toLowerCase()}:6379/0`
       await waiting(["default"])
       expect(IORedis.mock.calls.at(-1)[0]).toBe(process.env[name])
@@ -148,11 +150,97 @@ describe("the Redis sample helper", () => {
     expect(IORedis.mock.calls.at(-1)[0]).toBe(URL)
   })
 
-  test("an error event of the client has a listener", async () => {
-    await waiting(["default", { connection: URL }])
+  describe("on a dyno", () => {
+    beforeEach(() => {
+      process.env.DYNO = "worker.1"
+    })
 
-    expect(clients[0].on).toHaveBeenCalledWith("error", expect.any(Function))
-    expect(() => clients[0].on.mock.calls[0][1](new Error("x"))).not.toThrow()
+    test("a rediss URL connects without certificate verification", async () => {
+      await waiting(["default", { connection: SECURE_URL }])
+      process.env.REDIS_URL = SECURE_URL
+      await waiting(["default"])
+
+      for (const [url, options] of IORedis.mock.calls) {
+        expect(url).toBe(SECURE_URL)
+        expect(options.tls).toEqual({ rejectUnauthorized: false })
+      }
+      expect(IORedis).toHaveBeenCalledTimes(2)
+    })
+
+    test.each([[{}], [{ rejectUnauthorized: true }], [{ ca: "certificate" }]])(
+      "connectionOptions.tls %j is used as given",
+      async (tls) => {
+        await waiting([
+          "default",
+          { connection: SECURE_URL, connectionOptions: { tls } },
+        ])
+
+        expect(IORedis.mock.calls[0][1].tls).toBe(tls)
+      },
+    )
+
+    test("a redis URL and an options object get no TLS option", async () => {
+      await waiting(["default", { connection: URL }])
+      await waiting(["default", { connection: "REDISS://127.0.0.1:6379/0" }])
+      await waiting(["default", { connection: { host: "127.0.0.1" } }])
+
+      expect(IORedis.mock.calls[0][1]).not.toHaveProperty("tls")
+      expect(IORedis.mock.calls[1][1]).not.toHaveProperty("tls")
+      expect(IORedis.mock.calls[2][0]).not.toHaveProperty("tls")
+    })
+  })
+
+  test("off a dyno a rediss URL gets no TLS option", async () => {
+    await waiting(["default", { connection: SECURE_URL }])
+    process.env.DYNO = ""
+    await waiting(["default", { connection: SECURE_URL }])
+
+    expect(IORedis.mock.calls[0][1]).not.toHaveProperty("tls")
+    expect(IORedis.mock.calls[1][1]).not.toHaveProperty("tls")
+  })
+
+  test("the first error event of the client is added to the error of a failed sample", async () => {
+    IORedis.mockImplementation(() => {
+      const made = client()
+      made.pipeline = () => ({
+        llen() {},
+        exec: async () => {
+          const listener = made.on.mock.calls[0][1]
+          listener(new Error("self-signed certificate"))
+          listener(new Error("second error"))
+          throw new Error("Reached the max retries per request limit")
+        },
+      })
+      return made
+    })
+
+    await expect(waiting(["default", { connection: URL }])).rejects.toThrow(
+      /^Reached the max retries per request limit \(self-signed certificate\)$/,
+    )
+  })
+
+  test("an error that is itself the error event is left as it is, and so is a failure without an error event", async () => {
+    const refused = new Error("connect ECONNREFUSED")
+    IORedis.mockImplementationOnce(() => {
+      const made = client()
+      made.pipeline = () => ({
+        llen() {},
+        exec: async () => {
+          made.on.mock.calls[0][1](refused)
+          throw refused
+        },
+      })
+      return made
+    })
+
+    await expect(waiting(["default", { connection: URL }])).rejects.toThrow(
+      /^connect ECONNREFUSED$/,
+    )
+
+    replies = new Error("pipeline failed")
+    await expect(waiting(["default", { connection: URL }])).rejects.toThrow(
+      /^pipeline failed$/,
+    )
   })
 
   test("queue names are trimmed and counted once, and the replies of each queue are counted apart", async () => {

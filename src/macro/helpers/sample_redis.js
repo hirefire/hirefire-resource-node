@@ -16,7 +16,10 @@ async function sample(args, states, commands, count) {
   const { queues: given, options } = unpack(args)
   const named = normalizeQueues(given, { allowEmpty: true })
   const redis = connect(options)
-  redis.on("error", () => {})
+  let refused = null
+  redis.on("error", (error) => {
+    refused ??= error
+  })
 
   try {
     const queues = named.length > 0 ? named : await discover(redis, states)
@@ -30,6 +33,11 @@ async function sample(args, states, commands, count) {
       total += count(replies.slice(index * width, (index + 1) * width))
     })
     return Math.max(0, total)
+  } catch (error) {
+    if (refused && refused !== error) {
+      error.message = `${error.message} (${refused.message})`
+    }
+    throw error
   } finally {
     try {
       await redis.quit()
@@ -52,7 +60,17 @@ function connect({ connection, connectionOptions }) {
 
   return typeof target === "object"
     ? new IORedis({ ...SAMPLE_REDIS_OPTIONS, ...target, ...connectionOptions })
-    : new IORedis(target, { ...SAMPLE_REDIS_OPTIONS, ...connectionOptions })
+    : new IORedis(target, {
+        ...SAMPLE_REDIS_OPTIONS,
+        ...herokuTls(target),
+        ...connectionOptions,
+      })
+}
+
+function herokuTls(url) {
+  return process.env.DYNO && url.startsWith("rediss://")
+    ? { tls: { rejectUnauthorized: false } }
+    : {}
 }
 
 function discover(redis, states) {
