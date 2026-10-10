@@ -65,8 +65,4 @@ function calculateRequestQueueTime(requestStart) {
   return requestQueueTime <= REQUEST_QUEUE_TIME_LIMIT ? requestQueueTime : null
 }
 
-module.exports = {
-  processRequestQueueTime,
-  calculateRequestQueueTime,
-  presentHeader,
-}
+module.exports = { processRequestQueueTime }

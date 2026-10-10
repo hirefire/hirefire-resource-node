@@ -1,11 +1,7 @@
 const { freezeTime } = require("./support")
 const HireFire = require("../src")
 const Dispatcher = require("../src/dispatcher")
-const {
-  processRequestQueueTime,
-  calculateRequestQueueTime,
-  presentHeader,
-} = require("../src/middleware")
+const { processRequestQueueTime } = require("../src/middleware")
 
 describe("middleware", () => {
   let start
@@ -13,6 +9,14 @@ describe("middleware", () => {
   beforeEach(() => {
     start = jest.spyOn(Dispatcher.prototype, "start").mockReturnValue(true)
   })
+
+  function queueTime(...headers) {
+    process.env.HIREFIRE_TOKEN = "SOME_TOKEN"
+    process.env.DYNO = "web.1"
+    processRequestQueueTime(...headers)
+    const series = HireFire.configuration.buffer.flush().web?.rqt
+    return series ? Object.values(series)[0].sum : null
+  }
 
   describe("processRequestQueueTime", () => {
     test("collects web sample", () => {
@@ -206,92 +210,95 @@ describe("middleware", () => {
     })
   })
 
-  describe("presentHeader", () => {
-    test("strips and treats whitespace as absent", () => {
-      expect(presentHeader("  x  ")).toBe("x")
-      expect(presentHeader("   ")).toBeNull()
-      expect(presentHeader(null)).toBeNull()
+  describe("a header value", () => {
+    test("is trimmed, and a blank or missing one is absent", () => {
+      freezeTime(1700000001)
+
+      expect(queueTime("  1700000000250  ")).toBe(750)
+      expect(queueTime("   ")).toBeNull()
+      expect(queueTime(null)).toBeNull()
+      expect(queueTime(undefined)).toBeNull()
+      expect(queueTime("   ", "  1700000000250  ")).toBe(750)
+      expect(queueTime(null, "   ")).toBeNull()
     })
   })
 
-  describe("calculateRequestQueueTime", () => {
+  describe("the queue time of a request start header", () => {
     test("normalizes every precision variant to the same queue time", () => {
       freezeTime(1700000001)
-      expect(calculateRequestQueueTime("t=1700000000.250")).toBe(750)
-      expect(calculateRequestQueueTime("1700000000250")).toBe(750)
-      expect(calculateRequestQueueTime("1700000000250000")).toBe(750)
-      expect(calculateRequestQueueTime("1700000000250000000")).toBe(750)
+      expect(queueTime("t=1700000000.250")).toBe(750)
+      expect(queueTime("1700000000250")).toBe(750)
+      expect(queueTime("1700000000250000")).toBe(750)
+      expect(queueTime("1700000000250000000")).toBe(750)
     })
 
     test("ignores non finite request start headers", () => {
-      expect(calculateRequestQueueTime("Infinity")).toBeNull()
-      expect(calculateRequestQueueTime("NaN")).toBeNull()
+      expect(queueTime("Infinity")).toBeNull()
+      expect(queueTime("NaN")).toBeNull()
     })
 
     test("ignores unparseable request start", () => {
-      expect(calculateRequestQueueTime("garbage")).toBeNull()
+      expect(queueTime("garbage")).toBeNull()
     })
 
     test("ignores implausible value", () => {
-      expect(calculateRequestQueueTime("t=0.05")).toBeNull()
+      expect(queueTime("t=0.05")).toBeNull()
     })
 
     test("clamps a future request start to zero", () => {
       freezeTime(1700000001)
-      expect(calculateRequestQueueTime("1700000005000")).toBe(0)
+      expect(queueTime("1700000005000")).toBe(0)
     })
 
     test("clamps a future microsecond start to zero", () => {
       freezeTime(1700000001)
-      expect(calculateRequestQueueTime("1700000005000000")).toBe(0)
+      expect(queueTime("1700000005000000")).toBe(0)
     })
 
     test("drops an over the limit nanosecond start", () => {
       freezeTime(1700000000)
-      expect(calculateRequestQueueTime("1699999000000000000")).toBeNull()
+      expect(queueTime("1699999000000000000")).toBeNull()
     })
 
     test("lower guard boundary accepts 1e9 and rejects below", () => {
       freezeTime(1000000001)
-      expect(calculateRequestQueueTime("1000000000")).toBe(1000)
-      expect(calculateRequestQueueTime("999999999")).toBeNull()
+      expect(queueTime("1000000000")).toBe(1000)
+      expect(queueTime("999999999")).toBeNull()
     })
 
     test("cap boundary keeps exactly the limit and drops one over", () => {
       freezeTime(1700000000)
-      expect(calculateRequestQueueTime("1699999940000")).toBe(60000)
-      expect(calculateRequestQueueTime("1699999939999")).toBeNull()
+      expect(queueTime("1699999940000")).toBe(60000)
+      expect(queueTime("1699999939999")).toBeNull()
     })
 
     test("rounds exact half up", () => {
       freezeTime(1700000001)
-      expect(calculateRequestQueueTime("1700000000000.5")).toBe(999)
+      expect(queueTime("1700000000000.5")).toBe(999)
     })
 
     test("rounds a fractional millisecond remainder", () => {
       freezeTime(1700000001)
-      expect(calculateRequestQueueTime("t=1700000000.2506")).toBe(749)
+      expect(queueTime("t=1700000000.2506")).toBe(749)
     })
 
     test("rounds a fractional nanosecond remainder", () => {
       freezeTime(1700000001)
-      expect(calculateRequestQueueTime("1700000000250600000")).toBe(749)
+      expect(queueTime("1700000000250600000")).toBe(749)
     })
 
     test("drops a negative request start", () => {
-      expect(calculateRequestQueueTime("-1700000000250")).toBeNull()
+      expect(queueTime("-1700000000250")).toBeNull()
     })
 
     test("t prefix milliseconds normalizes", () => {
       freezeTime(1700000001)
-      expect(calculateRequestQueueTime("t=1700000000250")).toBe(750)
+      expect(queueTime("t=1700000000250")).toBe(750)
     })
 
     test("proxy folded request start uses the leading timestamp", () => {
       freezeTime(1700000001)
-      expect(calculateRequestQueueTime("1700000000000, 1700000000500")).toBe(
-        1000,
-      )
+      expect(queueTime("1700000000000, 1700000000500")).toBe(1000)
     })
   })
 
