@@ -9,13 +9,9 @@ const {
 
 describe("middleware", () => {
   let start
-  let ensure
 
   beforeEach(() => {
     start = jest.spyOn(Dispatcher.prototype, "start").mockReturnValue(true)
-    ensure = jest
-      .spyOn(Dispatcher.prototype, "ensureJobQueueLoop")
-      .mockImplementation(() => {})
   })
 
   describe("processRequestQueueTime", () => {
@@ -38,7 +34,6 @@ describe("middleware", () => {
         1700000001: { sum: 1000, count: 1 },
       })
       expect(start).toHaveBeenCalled()
-      expect(ensure).toHaveBeenCalled()
     })
 
     test("traffic arm with service name", () => {
@@ -97,7 +92,6 @@ describe("middleware", () => {
       freezeTime(1700000001)
       processRequestQueueTime("1700000000000")
       expect(start).toHaveBeenCalled()
-      expect(ensure).toHaveBeenCalled()
     })
 
     test("swallows throwing header extraction", () => {
@@ -188,7 +182,6 @@ describe("middleware", () => {
       freezeTime(1700000001)
       expect(() => processRequestQueueTime("1700000000000")).not.toThrow()
       expect(start).not.toHaveBeenCalled()
-      expect(ensure).not.toHaveBeenCalled()
       expect(HireFire.configuration.dispatcher.running()).toBe(false)
     })
 

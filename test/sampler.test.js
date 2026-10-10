@@ -105,7 +105,7 @@ describe("Sampler", () => {
   })
 
   test("a value that is not a number from zero up is dropped and named in the log", async () => {
-    const values = ["10", null, -1, Infinity, NaN, true, undefined]
+    const values = ["10", null, -1, Infinity, NaN, true, undefined, 5n]
     const count = values.length
     config().dyno("worker", () => values.shift())
 
@@ -121,6 +121,7 @@ describe("Sampler", () => {
         'number("NaN")',
         'boolean("true")',
         'undefined("undefined")',
+        'bigint("5")',
       ].map(
         (value) =>
           `[HireFire] The sampler for "worker" returned ${value}, expected a non-negative number. Sample dropped.`,

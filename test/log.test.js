@@ -59,4 +59,47 @@ describe("safeLog", () => {
     expect(safeLog.formatError("redis://a:b@c down")).toBe("redis://***@c down")
     expect(safeLog.formatError(undefined)).toBe("undefined")
   })
+
+  test("formatError does not throw for a value that cannot be shown", () => {
+    const unreadable = {
+      toString() {
+        throw new Error("no text")
+      },
+    }
+    const error = new Error("hidden")
+    Object.defineProperty(error, "message", {
+      get() {
+        throw new Error("no message")
+      },
+    })
+
+    expect(safeLog.formatError(unreadable)).toBe(
+      "an error that cannot be shown (object)",
+    )
+    expect(safeLog.formatError(Object.create(null))).toBe(
+      "an error that cannot be shown (object)",
+    )
+    expect(safeLog.formatError(error)).toBe(
+      "an error that cannot be shown (object)",
+    )
+  })
+
+  test.each([
+    [undefined, false],
+    ["", false],
+    ["0", false],
+    ["false", false],
+    ["FALSE", false],
+    ["no", false],
+    ["No", false],
+    ["1", true],
+    ["true", true],
+    ["yes", true],
+    ["anything", true],
+  ])("verbose with HIREFIRE_VERBOSE set to %j is %j", (value, expected) => {
+    if (value === undefined) delete process.env.HIREFIRE_VERBOSE
+    else process.env.HIREFIRE_VERBOSE = value
+
+    expect(safeLog.verbose()).toBe(expected)
+  })
 })

@@ -36,7 +36,6 @@ function processRequestQueueTime(requestStart, queueStart) {
       const source = configuration.httpSource
       if (source) source.sample(requestQueueTime)
       configuration.dispatcher.start()
-      configuration.dispatcher.ensureJobQueueLoop()
     }
   } catch (error) {
     safeLog(

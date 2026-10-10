@@ -40,7 +40,6 @@ expectError(HireFire.Worker)
 expectError(HireFire.Workers)
 
 expectType<boolean>(configuration.dispatcher.start())
-expectType<void>(configuration.dispatcher.ensureJobQueueLoop())
 expectType<boolean>(configuration.dispatcher.running())
 expectType<Promise<boolean>>(configuration.dispatcher.stop())
 expectType<Promise<boolean>>(configuration.dispatcher.stop({ flush: false }))
@@ -56,7 +55,7 @@ expectType<{
     }
   }
 }>(configuration.buffer.flush())
-expectType<void>(configuration.buffer.discardInherited())
+expectType<void>(configuration.buffer.discard())
 expectType<void>(
   configuration.buffer.repopulate("web", "rqt", {
     "1": { sum: 1, count: 1 },

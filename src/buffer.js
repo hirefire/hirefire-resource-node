@@ -35,7 +35,7 @@ class Buffer {
     return metrics
   }
 
-  discardInherited() {
+  discard() {
     this._metrics = Object.create(null)
   }
 

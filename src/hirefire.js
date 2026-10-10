@@ -29,7 +29,6 @@ class HireFire {
   _startIfToken() {
     if (!this.configuration.token || Identity.oneOff()) return
     this.configuration.dispatcher.start()
-    this.configuration.dispatcher.ensureJobQueueLoop()
   }
 }
 

@@ -17,11 +17,11 @@ describe("Buffer", () => {
     expect(data.web.rqt[100]).toEqual({ sum: 60, count: 3 })
   })
 
-  test("discard inherited clears all strategies", () => {
+  test("discard clears every series", () => {
     freezeTime(100)
     buffer.sample("web", "rqt", 7)
     buffer.sample("worker", "jql", 5)
-    buffer.discardInherited()
+    buffer.discard()
     expect(Object.keys(buffer.flush())).toHaveLength(0)
   })
 

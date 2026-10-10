@@ -1,7 +1,11 @@
 function formatError(error) {
-  const text =
-    error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-  return text.replace(/(:\/\/)[^\s]*@/g, "$1***@")
+  try {
+    const text =
+      error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    return text.replace(/(:\/\/)[^\s]*@/g, "$1***@")
+  } catch {
+    return `an error that cannot be shown (${typeof error})`
+  }
 }
 
 function verbose() {

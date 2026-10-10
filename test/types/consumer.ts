@@ -15,12 +15,11 @@ void configuration.dispatcher.start()
 void configuration.dispatcher.stop({ flush: false })
 void configuration.dispatcher.stop()
 void configuration.dispatcher.running()
-void configuration.dispatcher.ensureJobQueueLoop()
 
 void configuration.buffer.sample("web", "rqt", 1)
 const snapshot = configuration.buffer.flush()
 void snapshot
-void configuration.buffer.discardInherited()
+void configuration.buffer.discard()
 void configuration.buffer.repopulate("web", "rqt", {
   "1": { sum: 1, count: 1 },
 })

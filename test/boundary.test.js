@@ -12,6 +12,7 @@ describe("the client at its boundary", () => {
   let requests
   let answers
   let inFlight
+  let held
 
   beforeEach(() => {
     jest.useFakeTimers({
@@ -22,6 +23,7 @@ describe("the client at its boundary", () => {
     log = []
     requests = []
     inFlight = 0
+    held = 0
     answers = { ingest: () => [200], lease: () => [200, "", denied()] }
     const send = https.request
     jest.spyOn(https, "request").mockImplementation((options, callback) => {
@@ -51,15 +53,18 @@ describe("the client at its boundary", () => {
             body,
           }
           requests.push(request)
-          const answer = answers[path](request)
-          if (answer instanceof Error) callback(answer)
-          else callback(null, answer)
+          Promise.resolve(answers[path](request)).then((answer) => {
+            if (answer instanceof Error) callback(answer)
+            else callback(null, answer)
+          })
         })
     }
   })
 
   afterEach(async () => {
-    await HireFire.configuration.dispatcher.stop({ flush: false })
+    const stop = HireFire.configuration.dispatcher.stop({ flush: false })
+    await jest.advanceTimersByTimeAsync(10_000)
+    await stop
     jest.useRealTimers()
   })
 
@@ -77,7 +82,7 @@ describe("the client at its boundary", () => {
   async function settle() {
     for (let turn = 0, quiet = 0; quiet < 5 && turn < 5000; turn += 1) {
       await new Promise((resolve) => setImmediate(resolve))
-      quiet = inFlight === 0 ? quiet + 1 : 0
+      quiet = inFlight <= held ? quiet + 1 : 0
     }
   }
 
@@ -87,6 +92,20 @@ describe("the client at its boundary", () => {
       await jest.advanceTimersByTimeAsync(1000)
       await settle()
     }
+  }
+
+  function after(seconds, answer) {
+    held += 1
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        held -= 1
+        resolve(answer)
+      }, seconds * 1000),
+    )
+  }
+
+  function dispatcher() {
+    return HireFire.configuration.dispatcher
   }
 
   function denied(headers = {}) {
@@ -589,9 +608,9 @@ describe("the client at its boundary", () => {
       await pass(6)
 
       expect(Object.keys(ingested("worker", "jqs")).map(Number)).toEqual([
-        0, 1, 2, 3, 4,
+        0, 1, 2, 3, 4, 5,
       ])
-      expect(sampler).toHaveBeenCalledTimes(5)
+      expect(sampler).toHaveBeenCalledTimes(6)
     })
 
     test("a sampler that raises costs its sample and one log line, and the next round samples again", async () => {
@@ -757,7 +776,7 @@ describe("the client at its boundary", () => {
       fail = true
       await pass(5)
 
-      expect(sampler).toHaveBeenCalledTimes(5)
+      expect(sampler).toHaveBeenCalledTimes(6)
     })
 
     test("ignores a plan it cannot read and says why", async () => {
@@ -787,6 +806,255 @@ describe("the client at its boundary", () => {
     })
   })
 
+  describe("starting and stopping", () => {
+    beforeEach(() => {
+      process.env.DYNO = "web.1"
+    })
+
+    test("starts once, runs until it is stopped, and can be started again", async () => {
+      expect(dispatcher().running()).toBe(false)
+      configure()
+      expect(dispatcher().running()).toBe(true)
+      expect(dispatcher().start()).toBe(false)
+      await pass(1)
+
+      expect(await dispatcher().stop()).toBe(true)
+      expect(dispatcher().running()).toBe(false)
+      expect(await dispatcher().stop()).toBe(false)
+      expect(dispatcher().start()).toBe(true)
+      expect(dispatcher().running()).toBe(true)
+      await pass(1)
+
+      expect(logged("I")).toEqual([
+        "I [HireFire] Starting dispatcher.",
+        "I [HireFire] Dispatcher stopped.",
+        "I [HireFire] Starting dispatcher.",
+      ])
+      expect(at("ingest")).toEqual([0, 1, 1, 1, 2])
+    })
+
+    test("a stop of a client that never started does nothing and logs nothing", async () => {
+      configure((config) => (config.token = ""))
+
+      expect(await dispatcher().stop()).toBe(false)
+      expect(log).toEqual([])
+    })
+
+    test("a stop and a start during a stop do nothing, and a start after it starts", async () => {
+      answers.ingest = () => after(2, [200])
+      configure()
+      await pass(0)
+
+      const stop = dispatcher().stop()
+      expect(dispatcher().running()).toBe(false)
+      expect(await dispatcher().stop()).toBe(false)
+      expect(dispatcher().start()).toBe(false)
+      await pass(2)
+      await pass(2)
+      expect(await stop).toBe(true)
+
+      expect(dispatcher().start()).toBe(true)
+      expect(logged("I")).toEqual([
+        "I [HireFire] Starting dispatcher.",
+        "I [HireFire] Dispatcher stopped.",
+        "I [HireFire] Starting dispatcher.",
+      ])
+    })
+
+    test("a start after a stop begins at the current second and at the pace of a new client", async () => {
+      answers.ingest = () => [200, "", { "HireFire-Dispatch-Frequency": "10" }]
+      configure()
+      await pass(3)
+      await dispatcher().stop({ flush: false })
+      await pass(5)
+      dispatcher().start()
+      await pass(0)
+
+      expect(at("ingest")).toEqual([0, 8])
+      expect(Object.keys(requests[1].body[0].metrics.rqt)).toEqual([
+        String(START + 8),
+      ])
+    })
+
+    test("a stop wakes the loops, so it does not wait for the next second", async () => {
+      configure((config) => config.dyno("worker", () => 1))
+      await pass(0)
+
+      expect(await dispatcher().stop()).toBe(true)
+      expect(jest.getTimerCount()).toBe(0)
+    })
+
+    test("a stop under a server that does not answer waits for the request in flight, then skips the final flush", async () => {
+      answers.ingest = () =>
+        after(5, Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }))
+      configure()
+      await pass(1)
+      HireFire.configuration.buffer.sample("web", "rqt", 80)
+
+      let stopped = false
+      const stop = dispatcher()
+        .stop()
+        .then(() => (stopped = true))
+      await pass(3)
+      expect(stopped).toBe(false)
+      await pass(1)
+      await stop
+
+      expect(at("ingest")).toEqual([0])
+      expect(logged("W")).toEqual([
+        "W [HireFire] The last dispatch failed. The final flush is skipped.",
+      ])
+      expect(logged("E")).toEqual([
+        "E [HireFire] Dispatch error: RequestError: Request timed out.",
+      ])
+    })
+
+    test("a stop after a failed dispatch skips the final flush", async () => {
+      answers.ingest = () => [503]
+      configure()
+      await pass(0)
+
+      expect(await dispatcher().stop()).toBe(true)
+      expect(at("ingest")).toEqual([0])
+      expect(logged("W")).toEqual([
+        "W [HireFire] The last dispatch failed. The final flush is skipped.",
+      ])
+    })
+
+    test("a stop without a flush after a failed dispatch says nothing about a flush", async () => {
+      answers.ingest = () => [503]
+      configure()
+      await pass(0)
+
+      expect(await dispatcher().stop({ flush: false })).toBe(true)
+      expect(logged("W")).toEqual([])
+    })
+
+    test("a stop gives up on a dispatch loop that does not end within the join timeout, and sends nothing more", async () => {
+      const Dispatcher = require("../src/dispatcher")
+      const timeout = Dispatcher.JOIN_TIMEOUT
+      expect(timeout).toBe(5)
+      Dispatcher.JOIN_TIMEOUT = 2
+      try {
+        answers.ingest = () => after(4, [200])
+        configure()
+        await pass(0)
+        HireFire.configuration.buffer.sample("web", "rqt", 80)
+
+        let stopped = false
+        const stop = dispatcher()
+          .stop()
+          .then(() => (stopped = true))
+        await pass(1)
+        expect(stopped).toBe(false)
+        await pass(1)
+        await stop
+        await pass(5)
+
+        expect(at("ingest")).toEqual([0])
+        expect(logged("W")).toEqual([
+          "W [HireFire] The dispatch loop did not stop within 2 seconds. The final flush is skipped.",
+        ])
+        expect(logged("I")[1]).toBe("I [HireFire] Dispatcher stopped.")
+        expect(logged("E")).toEqual([])
+      } finally {
+        Dispatcher.JOIN_TIMEOUT = timeout
+      }
+    })
+
+    test("a stop does not wait for a sampler that does not return", async () => {
+      answers.lease = () => granted([{ name: "worker", strategy: "jqs" }])
+      configure((config) => config.dyno("worker", () => new Promise(() => {})))
+      await pass(2)
+
+      expect(await dispatcher().stop()).toBe(true)
+      expect(logged("W")).toEqual([])
+    })
+  })
+
+  describe("a process whose sampler is slow", () => {
+    test("renews the lease and reports while a sample is still running", async () => {
+      let release
+      process.env.DYNO = "web.1"
+      answers.lease = () =>
+        granted([{ name: "worker", strategy: "jqs" }], {
+          "HireFire-Lease-TTL": "5",
+        })
+      configure((config) =>
+        config.dyno(
+          "worker",
+          () => new Promise((resolve) => (release = resolve)),
+        ),
+      )
+      await pass(12)
+      release(9)
+      await pass(1)
+      await dispatcher().stop()
+
+      expect(at("lease")).toEqual([0, 5, 10])
+      expect(at("ingest").slice(0, 13)).toEqual([
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+      ])
+      expect(ingested("worker", "jqs")).toEqual({ 12: 9 })
+      expect(logged("W")).toEqual([])
+    })
+
+    test("gives the lease up when a sample runs for more than 60 seconds, and asks for it again when the sample returns", async () => {
+      let release
+      process.env.DYNO = "worker.1"
+      const sampler = jest.fn(
+        () => new Promise((resolve) => (release = resolve)),
+      )
+      answers.lease = () =>
+        granted([{ name: "worker", strategy: "jqs" }], {
+          "HireFire-Lease-TTL": "20",
+        })
+      configure((config) => config.dyno("worker", sampler))
+      await pass(90)
+
+      expect(at("lease")).toEqual([0, 20, 40, 60])
+      expect(logged("W")).toEqual([
+        "W [HireFire] A job queue sample round has run for more than 60 seconds. " +
+          "The lease is released so that another process can sample.",
+      ])
+
+      release(9)
+      await pass(2)
+      await dispatcher().stop()
+
+      expect(at("lease")).toEqual([0, 20, 40, 60, 91])
+      expect(sampler).toHaveBeenCalledTimes(2)
+      expect(ingested("worker", "jqs")).toEqual({})
+      expect(logged("W")).toHaveLength(1)
+    })
+
+    test("sends the trace of a sample that ends while a dispatch waits for its answer", async () => {
+      process.env.DYNO = "web.1"
+      answers.lease = () => [
+        200,
+        JSON.stringify({
+          trace: true,
+          job_queues: [{ name: "worker", strategy: "jqs" }],
+        }),
+        {
+          "HireFire-Lease-Granted": "true",
+          "HireFire-Sample-Frequency": "30",
+        },
+      ]
+      answers.ingest = (request) =>
+        request.at === 0 ? after(1.5, [200]) : [200]
+      configure((config) => config.dyno("worker", () => 7))
+      await pass(4)
+
+      const traced = requests.filter(
+        (request) => request.path === "ingest" && request.body[0].sample_trace,
+      )
+      expect(traced).toHaveLength(1)
+      expect(traced[0].body[0].sample_trace.ops).toHaveLength(1)
+      expect(ingested("worker", "jqs")).toEqual({ 0: 7 })
+    })
+  })
+
   describe("a process that the plan names by adapter", () => {
     function leaseIdentities() {
       return requests
@@ -809,6 +1077,22 @@ describe("the client at its boundary", () => {
 
       expect(at("lease")).toEqual([])
       expect(at("ingest").length).toBeGreaterThan(0)
+    })
+
+    test("a sampler that a later configure adds joins the race within a second", async () => {
+      answers.lease = () => granted([{ name: "worker", strategy: "jql" }])
+      configure()
+      await pass(3)
+      expect(at("lease")).toEqual([])
+
+      HireFire.configure((config) => config.dyno("worker", () => 42))
+      await pass(2)
+      await dispatcher().stop()
+
+      expect(at("lease")).toEqual([4])
+      expect(new Set(Object.values(ingested("worker", "jql")))).toEqual(
+        new Set([42]),
+      )
     })
 
     test("joins the race when a queue library is installed, and samples through its adapter", async () => {
