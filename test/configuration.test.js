@@ -3,6 +3,22 @@ const Dispatcher = require("../src/dispatcher")
 const Buffer = require("../src/buffer")
 
 describe("Configuration", () => {
+  test("a token set in code does not show when the client is inspected", () => {
+    const util = require("util")
+    const HireFire = require("../src")
+    HireFire.configuration.token = "code-secret-token"
+
+    expect(HireFire.configuration.token).toBe("code-secret-token")
+    expect(
+      util.inspect(HireFire, { depth: Infinity, showHidden: true }),
+    ).not.toContain("code-secret-token")
+    expect(
+      Object.values(HireFire.configuration).some(
+        (value) => value === "code-secret-token",
+      ),
+    ).toBe(false)
+  })
+
   let config
 
   beforeEach(() => {

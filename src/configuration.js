@@ -24,12 +24,13 @@ class DuplicateDynoError extends Error {
 const MAX_NAME_BYTES = 128
 
 class Configuration {
+  #token = null
+
   constructor() {
     this.http = null
     this.jobQueues = new JobQueues(this)
     this.logger = console
     this._sourcesByName = new Map()
-    this._token = null
     this._buffer = null
     this._dispatcher = null
     this._alwaysOnCpu = null
@@ -43,17 +44,14 @@ class Configuration {
   }
 
   get token() {
-    const value =
-      this._token === null || this._token === undefined
-        ? process.env.HIREFIRE_TOKEN
-        : this._token
+    const value = this.#token ?? process.env.HIREFIRE_TOKEN
     if (value == null) return null
     const stripped = String(value).trim()
     return stripped.length > 0 ? stripped : null
   }
 
   set token(value) {
-    this._token = value
+    this.#token = value
   }
 
   dyno(name, sampler) {
