@@ -104,6 +104,18 @@ describe("CPU.Usage", () => {
       expect(Usage.procNamespaceSeconds()).toBeNull()
     })
 
+    test("proc namespace seconds null when every entry is garbled", () => {
+      stubReads({
+        "/proc/1/stat": "garbled entry without fields",
+        "/proc/2/stat": "2 (puma) S 1 1",
+      })
+      jest
+        .spyOn(Usage, "procStatPaths")
+        .mockReturnValue(["/proc/1/stat", "/proc/2/stat"])
+
+      expect(Usage.procNamespaceSeconds()).toBeNull()
+    })
+
     test("a garbled proc stat entry is skipped and the rest counted", () => {
       stubReads({
         "/proc/1/stat":
@@ -153,6 +165,21 @@ describe("CPU.Usage", () => {
       expect(Usage.statTicks("123 ruby S 0 1 1 0")).toBeNull()
     })
 
+    test("stat ticks returns null for a long line without a comm paren", () => {
+      const line = "1 ruby S 0 1 1 0 -1 0 0 0 0 0 500 250 0 0 20 0 1 0 9 0 0"
+      expect(Usage.statTicks(line)).toBeNull()
+    })
+
+    test("stat ticks returns null for a line that ends before the system time", () => {
+      expect(Usage.statTicks("1 (ruby) S 0 0 0 0 0 0 0 0 0 0 500")).toBeNull()
+    })
+
+    test("stat ticks reads a line that ends with the system time", () => {
+      expect(Usage.statTicks("1 (ruby) S 0 0 0 0 0 0 0 0 0 0 500 250")).toBe(
+        750,
+      )
+    })
+
     test("stat ticks returns null for a truncated line", () => {
       expect(Usage.statTicks("123 (ruby) S 0 1")).toBeNull()
     })
@@ -182,6 +209,55 @@ describe("CPU.Usage", () => {
     test("available cpus ignores a non positive v2 quota", () => {
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "0 100000" })
       expect(Usage.availableCpus()).toBe(Usage.processorCount())
+    })
+
+    test.each([
+      ["a zero quota", "0 100000", null],
+      ["a zero period", "100000 0", null],
+      ["a negative period", "100000 -1", null],
+      ["an unlimited quota", "max 100000", null],
+      ["a quota without a period", "100000", null],
+      ["a quota and a period of one", "1 1", 1],
+      ["two cores", "200000 100000", 2],
+    ])("cgroup v2 quota with %s", (_name, content, expected) => {
+      stubReads({ [Usage.CGROUP_V2_QUOTA]: content })
+      expect(Usage.cgroupV2Quota()).toBe(expected)
+    })
+
+    test("cgroup v2 quota is null without the file", () => {
+      stubReads({})
+      expect(Usage.cgroupV2Quota()).toBeNull()
+    })
+
+    test.each([
+      ["a zero quota", "0", "100000", null],
+      ["a zero period", "100000", "0", null],
+      ["an unlimited quota", "-1", "100000", null],
+      ["a missing period", "100000", null, null],
+      ["a missing quota", null, "100000", null],
+      ["an empty quota", "", "100000", null],
+      ["a quota and a period of one", "1", "1", 1],
+      ["two cores", "200000", "100000", 2],
+    ])("cgroup v1 quota with %s", (_name, quota, period, expected) => {
+      stubReads({
+        [Usage.CGROUP_V1_QUOTA]: quota,
+        [Usage.CGROUP_V1_PERIOD]: period,
+      })
+      expect(Usage.cgroupV1Quota()).toBe(expected)
+    })
+
+    test("the entitlements answer null where they do not apply", () => {
+      stubReads({})
+      expect(Usage.herokuEntitlement()).toBeNull()
+      expect(Usage.renderEntitlement()).toBeNull()
+
+      process.env.DYNO = "web.1"
+      expect(Usage.herokuEntitlement()).toBeNull()
+      stubReads({ [Usage.CEDAR_MEMORY_LIMIT]: "8589934592" })
+      expect(Usage.herokuEntitlement()).toBeNull()
+
+      process.env.RENDER = "true"
+      expect(Usage.renderEntitlement()).toBeNull()
     })
 
     test("available cpus reads cgroup v1 quota", () => {
@@ -286,6 +362,38 @@ describe("CPU.Usage", () => {
       process.env.RENDER_CPU_COUNT = "8"
       stubReads({ [Usage.CGROUP_V2_QUOTA]: "50000 100000" })
       expect(Usage.availableCpus()).toBeCloseTo(0.5, 4)
+    })
+  })
+
+  describe("processSeconds", () => {
+    test("adds the user and the system time of the process, in seconds", () => {
+      jest
+        .spyOn(process, "cpuUsage")
+        .mockReturnValue({ user: 1_500_000, system: 500_000 })
+
+      expect(Usage.processSeconds()).toBe(2)
+    })
+  })
+
+  describe("the files it reads", () => {
+    test("are the cgroup, cpuacct, and memory files of the platform", () => {
+      expect({
+        v2Usage: Usage.CGROUP_V2_USAGE,
+        v1Usage: Usage.CGROUP_V1_USAGE,
+        v2Quota: Usage.CGROUP_V2_QUOTA,
+        v1Quota: Usage.CGROUP_V1_QUOTA,
+        v1Period: Usage.CGROUP_V1_PERIOD,
+        memory: Usage.CEDAR_MEMORY_LIMIT,
+        proc: Usage.PROC_DIR,
+      }).toEqual({
+        v2Usage: "/sys/fs/cgroup/cpu.stat",
+        v1Usage: "/sys/fs/cgroup/cpuacct/cpuacct.usage",
+        v2Quota: "/sys/fs/cgroup/cpu.max",
+        v1Quota: "/sys/fs/cgroup/cpu/cpu.cfs_quota_us",
+        v1Period: "/sys/fs/cgroup/cpu/cpu.cfs_period_us",
+        memory: "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+        proc: "/proc",
+      })
     })
   })
 

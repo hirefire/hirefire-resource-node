@@ -48,12 +48,9 @@ const Usage = {
   },
 
   procNamespaceSeconds() {
-    const paths = this.procStatPaths()
-    if (paths.length === 0) return null
-
     let ticks = 0
     let counted = false
-    paths.forEach((path) => {
+    this.procStatPaths().forEach((path) => {
       const content = this.read(path)
       if (!content) return
       const t = this.statTicks(content)
@@ -85,7 +82,6 @@ const Usage = {
       .slice(close + 1)
       .trim()
       .split(/\s+/)
-    if (fields.length < 13) return null
 
     const utime = parseInt(fields[11], 10)
     const stime = parseInt(fields[12], 10)
@@ -117,12 +113,8 @@ const Usage = {
     const value = this.read(this.CGROUP_V2_QUOTA)
     if (!value) return null
 
-    const [quota, period] = value.split(/\s+/)
-    if (quota === undefined || quota === "max") return null
-
-    const quotaValue = this.number(quota)
-    const periodValue = this.number(period)
-    return quotaValue > 0 && periodValue > 0 ? quotaValue / periodValue : null
+    const [quota, period] = value.split(/\s+/).map((part) => this.number(part))
+    return quota > 0 && period > 0 ? quota / period : null
   },
 
   cgroupV1Quota() {
@@ -152,7 +144,6 @@ const Usage = {
   },
 
   number(value) {
-    if (value == null || value === "") return null
     const parsed = Number.parseFloat(value)
     return Number.isFinite(parsed) ? parsed : null
   },

@@ -5,9 +5,7 @@ class CPU {
   constructor(name, configuration) {
     this._name = String(name)
     this._configuration = configuration
-    this._lastUsage = null
-    this._lastTime = null
-    this._lastSource = null
+    this._last = { source: null }
   }
 
   get name() {
@@ -18,18 +16,13 @@ class CPU {
     const time = performance.now() / 1000.0
     const { seconds: usage, source } = Usage.reading()
 
-    const previousUsage = this._lastUsage
-    const previousTime = this._lastTime
-    const previousSource = this._lastSource
-    this._lastUsage = usage
-    this._lastTime = time
-    this._lastSource = source
+    const last = this._last
+    this._last = { usage, time, source }
 
-    if (usage === null || previousUsage === null || source !== previousSource)
-      return null
+    if (usage === null || source !== last.source) return null
 
-    const elapsedDelta = time - previousTime
-    const usageDelta = usage - previousUsage
+    const elapsedDelta = time - last.time
+    const usageDelta = usage - last.usage
 
     if (elapsedDelta <= 0 || usageDelta < 0) return null
 

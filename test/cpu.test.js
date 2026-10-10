@@ -112,6 +112,32 @@ describe("CPU", () => {
     expect(configuration.buffer.flush().clock.cpu).toEqual({ 1001: 100.0 })
   })
 
+  test("a process that used no cpu between two samples reports zero", () => {
+    mockReadings(10.0, 10.0)
+    jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
+
+    const collector = cpu()
+    freezeTime(1000)
+    collector.sample()
+    freezeTime(1001)
+    collector.sample()
+
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1001: 0 })
+  })
+
+  test("divides the cpu time by the seconds between two samples", () => {
+    mockReadings(10.0, 11.0)
+    jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
+
+    const collector = cpu()
+    freezeTime(1000)
+    collector.sample()
+    freezeTime(1004)
+    collector.sample()
+
+    expect(configuration.buffer.flush().clock.cpu).toEqual({ 1004: 25.0 })
+  })
+
   test("negative usage delta skips and reseeds the baseline", () => {
     mockReadings(10.0, 5.0, 5.5)
     jest.spyOn(Usage, "availableCpus").mockReturnValue(1.0)
