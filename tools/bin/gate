@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -uo pipefail
+cd "$(dirname "$0")/../.."
+
+run="${1:-gate}"
+status=0
+
+tools/bin/matrix-run "$run" > "tools/results/${run}.log" 2>&1 || status=1
+cat "tools/results/${run}/summary.txt"
+
+if mise exec -- npm run check > "tools/results/${run}-check.log" 2>&1; then
+  echo "npm run check: exit 0"
+else
+  echo "npm run check: failed"
+  tail -30 "tools/results/${run}-check.log"
+  status=1
+fi
+
+exit "$status"

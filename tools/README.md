@@ -20,6 +20,8 @@ Run every script from the repository root with the first Node.js of `.tool-versi
 | `bin/host-run`          | Boots the packed tarball in a Linux container under each framework, `cluster`, PM2, `worker_threads`, and Next.js                   |
 | `bin/long-runs`         | Runs the matrix, the reruns, the mutation run, the faults, the soak, and the hosts in order, and writes each exit code to a file    |
 | `bin/compare-passes`    | Prints what differs between the results of two passes of the long runs                                                              |
+| `bin/gate`              | Runs the matrix and `npm run check`, the two checks that come before a commit                                                       |
+| `bin/check-fixes`       | Checks the status table of a fix pass in the canon against the commit log                                                           |
 | `bin/mutate-again`      | Runs the changes that ended differently in two passes again, one at a time. `bin/mutation-settle` applies the outcome to the record |
 | `bin/public-api`        | Writes the names the code exports and the type files declare, or checks them with `--check`                                         |
 | `bin/wire-goldens`      | Captures the ingest and lease requests, or checks them with `--check`. `bin/wire-compare` compares them with Ruby                   |
