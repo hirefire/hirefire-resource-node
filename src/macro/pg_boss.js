@@ -1,5 +1,6 @@
 const { unpack, normalizeQueues } = require("../utility")
 const Hooks = require("../plan/hooks")
+const { jobQueue } = require("../strategy")
 const blockedColumn = require("./pg_boss/blocked_column")
 
 const PLAN_OPTION_SCHEMA = { jqs: { skip_working: "boolean" } }
@@ -96,11 +97,6 @@ function planConnectionOptions() {
     if (schema) out.schema = schema
   }
   return out
-}
-
-function supportsPlanStrategy(strategy) {
-  const s = String(strategy)
-  return s === "jql" || s === "jqs"
 }
 
 async function withConnection(args, fn, { detectBlocked = true } = {}) {
@@ -276,7 +272,7 @@ module.exports = {
   jobQueueWorking,
   planOptions,
   planConnectionOptions,
-  supportsPlanStrategy,
+  supportsPlanStrategy: jobQueue,
   queuesRequired: Hooks.queuesRequired,
   beforeSampleJobQueues: Hooks.beforeSampleJobQueues,
   afterSampleJobQueues: Hooks.afterSampleJobQueues,

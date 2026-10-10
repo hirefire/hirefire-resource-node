@@ -1,6 +1,8 @@
 const ONE_OFF_DYNOS = ["run", "release"]
 
 const Identity = {
+  MAX_NAME_BYTES: 128,
+
   resolve() {
     return this.explicit() || this.herokuDyno() || this.renderService() || null
   },

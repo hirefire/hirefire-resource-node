@@ -369,7 +369,7 @@ describe("Lease", () => {
   })
 
   test("skips invalid plan entries", async () => {
-    const longName = "a".repeat(Lease.MAX_NAME_BYTES + 1)
+    const longName = "a".repeat(128 + 1)
     grant(
       {
         "HireFire-Lease-Granted": "true",

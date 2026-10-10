@@ -1,6 +1,11 @@
 const Identity = require("../src/identity")
 
 describe("Identity", () => {
+  test("a name holds at most 128 bytes, in the configuration as well", () => {
+    expect(Identity.MAX_NAME_BYTES).toBe(128)
+    expect(require("../src/configuration").MAX_NAME_BYTES).toBe(128)
+  })
+
   test.each([
     ["run.4821", true],
     ["release.1234", true],

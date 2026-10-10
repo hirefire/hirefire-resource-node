@@ -1,4 +1,5 @@
 const Usage = require("./cpu/usage")
+const Strategy = require("../strategy")
 
 class CPU {
   constructor(name, configuration) {
@@ -38,7 +39,11 @@ class CPU {
     const coresUsed = usageDelta / elapsedDelta
     const percentage = clamp((coresUsed / available) * 100.0, 0.0, 100.0)
 
-    this._configuration.buffer.sample(this._name, "cpu", round2(percentage))
+    this._configuration.buffer.sample(
+      this._name,
+      Strategy.CPU,
+      round2(percentage),
+    )
   }
 }
 

@@ -1,12 +1,12 @@
 const crypto = require("crypto")
 const { Client, RequestError } = require("./client")
+const Identity = require("./identity")
 const safeLog = require("./log")
 
 class Lease {
   static SAMPLE_FREQUENCY_BOUNDS = [1, 3600]
   static TTL_BOUNDS = [5, 3600]
   static MAX_JOB_QUEUES = 256
-  static MAX_NAME_BYTES = 128
 
   constructor(configuration) {
     this._configuration = configuration
@@ -217,7 +217,7 @@ function normalizeEntry(entry) {
 
   const name = String(entry.name ?? "").trim()
   const strategy = String(entry.strategy ?? "").trim()
-  if (!name || !strategy || Buffer.byteLength(name) > Lease.MAX_NAME_BYTES) {
+  if (!name || !strategy || Buffer.byteLength(name) > Identity.MAX_NAME_BYTES) {
     return null
   }
 

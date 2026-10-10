@@ -1,10 +1,11 @@
 const safeLog = require("./log")
 const { formatError } = safeLog
 const { validSample, coerceSample, formatSampleValue } = require("./sample")
+const { JQL, JQS, WRK } = require("./strategy")
 
 const STRATEGIES = {
-  jql: "jobQueueLatency",
-  jqs: "jobQueueSize",
+  [JQL]: "jobQueueLatency",
+  [JQS]: "jobQueueSize",
 }
 
 const MAX_QUEUES = 64
@@ -266,7 +267,7 @@ const Plan = {
 
 function samplesWorking(macro, strategy, options) {
   if (typeof macro.jobQueueWorking !== "function") return false
-  return strategy === "jql" || options.skipWorking === true
+  return strategy === JQL || options.skipWorking === true
 }
 
 async function sampleJobStrategy(
@@ -333,7 +334,7 @@ async function sampleWorking(
       )
       return
     }
-    configuration.buffer.sample(name, "wrk", coerceSample(wrk))
+    configuration.buffer.sample(name, WRK, coerceSample(wrk))
   } catch (error) {
     const reason = formatError(error)
     safeLog(

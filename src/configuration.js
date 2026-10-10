@@ -21,7 +21,7 @@ class DuplicateDynoError extends Error {
   }
 }
 
-const MAX_NAME_BYTES = 128
+const { MAX_NAME_BYTES } = Identity
 
 class Configuration {
   #token = null

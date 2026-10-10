@@ -308,7 +308,7 @@ describe("Dispatcher", () => {
       return new Response(200, {}, "")
     }
     const names = Array.from({ length: Lease.MAX_JOB_QUEUES }, (_, i) =>
-      `worker_${String(i).padStart(3, "0")}`.padEnd(Lease.MAX_NAME_BYTES, "x"),
+      `worker_${String(i).padStart(3, "0")}`.padEnd(128, "x"),
     )
 
     for (const second of [1000, 1005, 1010, 1015, 1020, 1025, 1030]) {

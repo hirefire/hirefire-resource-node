@@ -1,6 +1,7 @@
 const safeLog = require("../log")
 const { formatError } = safeLog
 const { validSample, coerceSample, formatSampleValue } = require("../sample")
+const { jobQueue: jobQueueStrategy } = require("../strategy")
 
 class JobQueues {
   constructor(configuration) {
@@ -39,7 +40,7 @@ class JobQueues {
         ? jobQueue.name
         : String(explicitName).trim()
     strategy = String(strategy)
-    if (strategy !== "jql" && strategy !== "jqs") {
+    if (!jobQueueStrategy(strategy)) {
       this._logger().error(
         `[HireFire] Unknown job-queue strategy ${JSON.stringify(
           strategy,
