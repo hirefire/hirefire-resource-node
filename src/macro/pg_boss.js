@@ -4,13 +4,11 @@ const DEFAULT_SCHEMA = "pgboss"
 const DEFAULT_URL = "postgres://postgres:postgres@127.0.0.1:5432/postgres"
 const SCHEMA_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 const URL_SSL_RE = /[?&]ssl[a-z]*=/i
-const SAMPLE_QUERY_TIMEOUT_MS = 5000
 const SAMPLE_POOL_OPTIONS = {
   max: 1,
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 1000,
-  query_timeout: SAMPLE_QUERY_TIMEOUT_MS,
-  statement_timeout: SAMPLE_QUERY_TIMEOUT_MS,
+  query_timeout: 5000,
 }
 
 const COLUMNS = ["blocked", "expire_in", "expire_seconds", "heartbeat_seconds"]

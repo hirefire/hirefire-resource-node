@@ -95,16 +95,17 @@ describeIfPg("pg-boss connection lifecycle", () => {
     expect(end).toHaveBeenCalledTimes(1)
     expect(on).toHaveBeenCalledWith("error", expect.any(Function))
     expect(poolSpy).toHaveBeenCalledTimes(1)
-    expect(poolSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        max: 1,
-        connectionTimeoutMillis: 5000,
-        idleTimeoutMillis: 1000,
-        query_timeout: 5000,
-        statement_timeout: 5000,
-        connectionString: "postgres://localhost/jobs",
-      }),
-    )
+    expect(poolSpy.mock.calls).toEqual([
+      [
+        {
+          max: 1,
+          connectionTimeoutMillis: 5000,
+          idleTimeoutMillis: 1000,
+          query_timeout: 5000,
+          connectionString: "postgres://localhost/jobs",
+        },
+      ],
+    ])
   })
 
   test("ends owned pool after a query error", async () => {
@@ -159,7 +160,6 @@ describeIfPg("pg-boss connection lifecycle", () => {
         connectionString: "postgres://resolved/jobs",
         max: 3,
         query_timeout: 5000,
-        statement_timeout: 5000,
       }),
     )
   })
