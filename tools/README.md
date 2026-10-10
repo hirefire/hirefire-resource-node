@@ -17,7 +17,7 @@ Run every script from the repository root with the first Node.js of `.tool-versi
 | `bin/mutation-verdicts` | Reports the score per file. Fails on a surviving change without a verdict (`lib/mutation/rules.js`) and on a score under 90 percent                                                  |
 | `bin/fault-run`         | Runs the client against a local server that misbehaves in 21 ways. `bin/fault-compare` prints kept results and runs side by side                                                     |
 | `bin/soak`              | Runs a `cluster` app for a long time with faults and worker restarts                                                                                                                 |
-| `bin/host-run`          | Boots the packed tarball in a Linux container under each framework, `cluster`, PM2, `worker_threads`, and Next.js                                                                    |
+| `bin/host-run`          | Boots the packed tarball in a Linux container under each framework, `cluster`, PM2, `worker_threads`, Watt, and Next.js                                                              |
 | `bin/long-runs`         | Runs the matrix, the reruns, the mutation run, the faults, the soak, and the hosts in order, and writes each exit code to a file. `TOOLS_MATRIX_RUNS` sets the number of matrix runs |
 | `bin/compare-passes`    | Prints what differs between the results of two passes of the long runs                                                                                                               |
 | `bin/gate`              | Runs the matrix and `npm run check`, the two checks that come before a commit                                                                                                        |

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://schemas.platformatic.dev/@platformatic/node/3.72.0.json",
+  "runtime": {
+    "logger": { "level": "info" },
+    "server": { "hostname": "127.0.0.1", "port": "{PORT}" }
+  }
+}

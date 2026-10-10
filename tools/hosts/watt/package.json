@@ -1,0 +1,5 @@
+{
+  "name": "hirefire-resource-watt-host",
+  "private": true,
+  "main": "index.js"
+}

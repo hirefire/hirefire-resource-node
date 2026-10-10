@@ -157,8 +157,8 @@ async function scenario(spec) {
     spawnSync("pkill", ["-9", "-f", "next"])
   }
   const text = output.join("")
-  result.processes = (text.match(/\[host\] pid=\d+[^\n]*/g) || []).map((line) =>
-    line.replace(/pid=\d+/, "pid=N"),
+  result.processes = (text.match(/\[host\] pid=\d+[^\n"]*/g) || []).map(
+    (line) => line.replace(/pid=\d+/, "pid=N"),
   )
   result.warnings = text
     .split("\n")
@@ -222,6 +222,14 @@ async function main() {
     env: { ...web, HOST_KIND: "express", PM2_HOME: "/tmp/pm2" },
     requests: true,
     boot: 7000,
+  })
+  specs.push({
+    name: "watt-express",
+    command: ["/app/node_modules/.bin/wattpm", "start"],
+    cwd: "/app/watt",
+    env: web,
+    requests: true,
+    boot: 8000,
   })
   specs.push({
     name: "worker-threads",
