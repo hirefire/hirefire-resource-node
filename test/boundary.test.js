@@ -881,16 +881,25 @@ describe("the client at its boundary", () => {
       delete cluster.workers.test
     })
 
-    test("with workers starts nothing and samples no request", async () => {
+    test("with workers starts nothing at boot", async () => {
       cluster.workers.test = {}
 
       configure()
-      processRequestQueueTime(() => `t=${START - 0.25}`)
       await pass(3)
 
       expect(requests).toEqual([])
       expect(log).toEqual([])
-      expect(HireFire.configuration.buffer.flush()).toEqual({})
+    })
+
+    test("with workers starts with the first request it serves", async () => {
+      cluster.workers.test = {}
+
+      configure()
+      processRequestQueueTime(() => `t=${START - 0.25}`)
+      await pass(1)
+
+      expect(at("ingest")).toEqual([0, 1])
+      expect(ingested("web", "rqt")).toMatchObject({ 0: [250, 1] })
     })
 
     test("with workers reports when the host asks for it", async () => {
@@ -907,7 +916,7 @@ describe("the client at its boundary", () => {
     test("stops at its first fork without a last request", async () => {
       configure()
       await pass(1)
-      processRequestQueueTime(() => `t=${START + 1 - 0.25}`)
+      HireFire.configuration.buffer.sample("web", "cpu", 50)
       const sent = requests.length
 
       cluster.workers.test = {}
@@ -921,6 +930,19 @@ describe("the client at its boundary", () => {
         "I [HireFire] Starting dispatcher.",
         "I [HireFire] Dispatcher stopped.",
       ])
+    })
+
+    test("that has served a request keeps running when it forks", async () => {
+      configure()
+      processRequestQueueTime(() => `t=${START - 0.25}`)
+      await pass(1)
+
+      cluster.workers.test = {}
+      cluster.emit("fork", {})
+      await pass(2)
+
+      expect(dispatcher().running()).toBe(true)
+      expect(at("ingest")).toEqual([0, 1, 2, 3])
     })
 
     test("that the host asked to report keeps running when it forks", async () => {

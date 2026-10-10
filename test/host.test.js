@@ -34,21 +34,21 @@ describe("Host", () => {
     delete cluster.workers.test
   })
 
-  test("the main thread of a process without cluster workers reports", () => {
-    expect(Host.reports()).toBe(true)
+  test("the main thread of a process without cluster workers starts at boot", () => {
+    expect(Host.startsAtBoot()).toBe(true)
   })
 
-  test("a cluster primary with a worker does not report", () => {
+  test("a cluster primary with a worker does not start at boot", () => {
     cluster.workers.test = {}
 
-    expect(Host.reports()).toBe(false)
+    expect(Host.startsAtBoot()).toBe(false)
   })
 
-  test("a worker thread does not report", async () => {
+  test("a worker thread does not start at boot", async () => {
     const source = `
       const { parentPort } = require("worker_threads")
       const Host = require(${JSON.stringify(require.resolve("../src/host"))})
-      parentPort.postMessage(Host.reports())
+      parentPort.postMessage(Host.startsAtBoot())
     `
     const answer = await new Promise((resolve, reject) => {
       const worker = new Worker(source, { eval: true })
@@ -78,10 +78,29 @@ describe("Host", () => {
       ])
     })
 
+    test("a cluster primary that has served a request keeps reporting beside its worker", async () => {
+      expect(await run("cluster", "serves")).toEqual([
+        "primary booted true",
+        "primary served true",
+        "worker booted true",
+        "primary forked true",
+        "primary alone true",
+      ])
+    })
+
     test("a worker thread starts nothing beside the main thread", async () => {
       expect(await run("thread")).toEqual([
         "main booted true",
         "thread booted false",
+        "main threaded true",
+      ])
+    })
+
+    test("a worker thread starts with the first request it serves", async () => {
+      expect(await run("thread", "serves")).toEqual([
+        "main booted true",
+        "thread booted false",
+        "thread served true",
         "main threaded true",
       ])
     })

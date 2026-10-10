@@ -26,13 +26,14 @@ The test suite runs against the newest release of each supported major version o
 
 **Processes that report:**
 
-Metric collection starts with `HireFire.configure()`, `HireFire.boot()`, or the first request through the middleware, in every process that has a token. Three kinds of process start nothing:
+Metric collection starts with `HireFire.configure()`, `HireFire.boot()`, or the first request through the middleware, in every process that has a token. A Heroku one-off dyno (`heroku run` and the release phase) starts nothing.
 
-- A Heroku one-off dyno (`heroku run` and the release phase).
-- A `cluster` primary that has forked workers. It stops at its first fork, and its workers report.
-- A worker thread. The main thread reports.
+Two places report only when they serve requests themselves. `configure` and `boot` start nothing there, and the first request through the middleware does:
 
-Set `config.forceStart = true` in a `cluster` primary or a worker thread that should report anyway. After `await HireFire.reset()`, nothing starts again until `configure` or `boot` runs, so a request that is still being served during a shutdown does not restart it.
+- A `cluster` primary that has forked workers. Its workers report. A primary stops at its first fork, unless it has served a request by then.
+- A worker thread. The main thread reports. An app that its server runs in a worker thread reports from its first request.
+
+Set `config.forceStart = true` in a `cluster` primary or a worker thread that should report without serving a request. After `await HireFire.reset()`, nothing starts again until `configure` or `boot` runs, so a request that is still being served during a shutdown does not restart it.
 
 **Connections on Heroku:**
 

@@ -14,8 +14,11 @@ class HireFire {
       throw new TypeError("HireFire.configure callbacks must be synchronous.")
     }
     this._stopped = false
-    if (this._reports()) this.configuration.dispatcher.start()
-    return this.configuration
+    const configuration = this.configuration
+    if (this._reports() && (configuration.forceStart || Host.startsAtBoot())) {
+      configuration.dispatcher.start()
+    }
+    return configuration
   }
 
   boot() {
@@ -30,18 +33,15 @@ class HireFire {
   }
 
   _reports() {
-    const configuration = this.configuration
     return (
-      Boolean(configuration.token) &&
-      !this._stopped &&
-      !Identity.oneOff() &&
-      (configuration.forceStart || Host.reports())
+      Boolean(this.configuration.token) && !this._stopped && !Identity.oneOff()
     )
   }
 
   _handOver() {
     const configuration = this.configuration
-    if (configuration.forceStart || !configuration._dispatcher) return
+    if (configuration.forceStart || configuration._httpActive) return
+    if (!configuration._dispatcher) return
 
     configuration._dispatcher.stop({ flush: false }).catch(() => {})
   }
