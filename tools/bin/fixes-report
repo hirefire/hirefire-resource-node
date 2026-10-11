@@ -5,7 +5,7 @@ const { spawnSync } = require("child_process")
 const os = require("os")
 const { root, sandboxes } = require("../lib/paths")
 
-const [canon, audited = "98f2a73", tools = "5eaaa51"] = process.argv.slice(2)
+const [canon, audited = "98f2a73", tools = "d48a0a3"] = process.argv.slice(2)
 if (!canon) {
   console.error(
     "usage: tools/bin/fixes-report <canon tree> [audited commit] [commit of the audit tools]",
