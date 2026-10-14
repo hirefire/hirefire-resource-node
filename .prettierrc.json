@@ -1,3 +1,6 @@
 {
-  "semi": false
+  "semi": false,
+  "overrides": [
+    { "files": "*.md", "options": { "proseWrap": "never", "printWidth": 1000 } }
+  ]
 }
